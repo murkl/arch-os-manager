@@ -18,7 +18,7 @@
 
 <big><b>
 
-AUR: [arch-os](https://aur.archlinux.org/packages/arch-os)
+AUR: [arch-os-app](https://aur.archlinux.org/packages/arch-os-app)
 
 </b></big>
 
