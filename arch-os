@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+set -Eeo pipefail
+
+VERSION=1.0.0
+
+# ///////////////////////////////////////////////////////////////////
+# ENVIRONMENT
+# ///////////////////////////////////////////////////////////////////
+
+CACHE_DIR="${HOME}/.cache/arch-os"
+
+COLOR_WHITE=251
+COLOR_GREEN=42
+COLOR_PURPLE=212
+COLOR_YELLOW=221
+COLOR_RED=9
+
+KITTY_CONF='
+hide_window_decorations yes
+remember_window_size false
+initial_window_width 800
+initial_window_height 600
+window_padding_width 32
+font_family Fira Code Nerd Font
+font_size 10.0
+active_tab_font_style bold
+inactive_tab_font_style normal
+foreground              #D8DEE9
+background              #2E3440
+selection_foreground    #3B4252
+selection_background    #EBCB8B
+active_tab_foreground   #2E3440
+active_tab_background   #A3BE8C
+inactive_tab_foreground #2E3440
+inactive_tab_background #4C566A
+cursor                  #D8DEE9
+url_color               #81A1C1
+color0                  #3B4252
+color8                  #4C566A
+color1                  #BF616A
+color9                  #BF616A
+color2                  #A3BE8C
+color10                 #A3BE8C
+color3                  #EBCB8B
+color11                 #EBCB8B
+color4                  #81A1C1
+color12                 #81A1C1
+color5                  #B48EAD
+color13                 #B48EAD
+color6                  #88C0D0
+color14                 #88C0D0
+color7                  #E5E9F0
+color15                 #E5E9F0
+'
+
+# ///////////////////////////////////////////////////////////////////
+# MAIN
+# ///////////////////////////////////////////////////////////////////
+
+main() {
+
+    # Check dependencies
+    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
+
+    # Create cache
+    mkdir -p "$CACHE_DIR"
+
+    # Check if executed in kitty, otherwise start with kitty
+    [ "$TERM" != "xterm-kitty" ] && kitty "$0" "$@" && exit 0
+
+    trap 'trap_exit $?' EXIT # Set exit trap
+    trap 'trap_error $?' ERR # Set error trap
+
+    # Print help
+    [ "$1" = "--help" ] || [ "$1" = "-h" ] && print_header && print_help && exit 0
+
+    # Handle arg action
+    if [ -n "$1" ]; then # Remove trailing dashes from arg
+        print_header
+        local user_arg=${1#"-"} && user_arg=${user_arg#"-"}
+        case "$user_arg" in # Execute action
+        f) action_fetch ;;
+        u) action_upgrade ;;
+        c) action_clean ;;
+        r) action_reset ;;
+        *) print_fail "Option not available" && exit 1 ;;
+        esac
+        exit # Exit
+    fi
+
+    while (true); do
+        print_header && local user_input
+        local options=("Fetch Updates" "Update System" "Clean Packages" "Reset Keyring" "Quit")
+        user_input=$(gum_choose "${options[@]}") || exit 130
+        case "$user_input" in # Execute action
+        'Fetch Updates') action_fetch ;;
+        'Update System') action_upgrade ;;
+        'Clean Packages') action_clean ;;
+        'Reset Keyring') action_reset ;;
+        'Quit') exit 130 ;;
+        *) print_fail "Option not available" && exit 1 ;;
+        esac
+        gum confirm --affirmative '<- Back' --negative '' ''
+    done
+}
+
+# ///////////////////////////////////////////////////////////////////
+# ACTIONS
+# ///////////////////////////////////////////////////////////////////
+
+action_fetch() { # List package updates
+    print_title "Fetch Package Updates"
+    gum spin --title 'Loading' -- bash -c "checkupdates; paru -Qua; exit 0" || return 0 # Preload and return if user press ctrl + c
+    local update_available="false"
+    checkupdates && update_available="true" # Print Arch pkgs
+    paru -Qua && update_available="true"    # Print AUR pkgs
+    [ "$update_available" = "false" ] && print_warn "No package updates available!"
+    [ "$update_available" = "true" ] && print_info "Done"
+    return 0
+}
+
+action_upgrade() { # Update packages
+    print_title "Upgrade System Packages"
+    paru -Syu
+    print_info "Upgrade successful"
+    return 0
+}
+
+action_clean() { # Remove orphaned packages
+    print_title "Remove Orphans"
+    # shellcheck disable=SC2046
+    paru -Qtdq &>/dev/null && paru -Rns $(paru -Qtdq)
+    # shellcheck disable=SC2046
+    paru -Rsu $(paru -Qqd)
+    print_info "Done" && echo
+    print_title "Remove unused flatpaks"
+    flatpak uninstall -y --unused
+    print_info "Done"
+    return 0
+}
+
+action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
+    gum confirm "Really reset Arch Keyring?" || return 0
+    print_title "Reset Arch Keyring"
+    # Keyring reset
+    sudo rm -rf /etc/pacman.d/gnupg
+    sudo pacman-key --init
+    sudo pacman-key --populate
+    print_info "Done" && echo && wait
+    # Update
+    print_title "Update Arch keyring"
+    sudo pacman -Sy archlinux-keyring --noconfirm && paru -Su
+    print_info "Done"
+    return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
+# TRAPS
+# ///////////////////////////////////////////////////////////////////
+
+trap_error() { print_fail "Execution failed"; }
+
+trap_exit() {
+    local return_code=$?
+    rm -rf "$CACHE_DIR"
+    [ $return_code != 130 ] && gum confirm --affirmative 'Exit' --negative '' ''
+}
+
+# ///////////////////////////////////////////////////////////////////
+# KITTY
+# ///////////////////////////////////////////////////////////////////
+
+kitty() { echo "$KITTY_CONF" >"$CACHE_DIR/kitty.conf" && /usr/bin/kitty --detach --class "arch-os" -c "$CACHE_DIR/kitty.conf" "$@"; }
+
+# ///////////////////////////////////////////////////////////////////
+# GUM
+# ///////////////////////////////////////////////////////////////////
+
+gum() { /usr/bin/gum "$@"; }
+gum_white() { gum style --foreground "$COLOR_WHITE" "${@}"; }
+gum_green() { gum style --foreground "$COLOR_GREEN" "${@}"; }
+gum_purple() { gum style --foreground "$COLOR_PURPLE" "${@}"; }
+gum_yellow() { gum style --foreground "$COLOR_YELLOW" "${@}"; }
+gum_red() { gum style --foreground "$COLOR_RED" "${@}"; }
+gum_choose() { gum choose --cursor "$(gum_space)• " --header.foreground "$COLOR_PURPLE" --cursor.foreground "$COLOR_PURPLE" "${@}"; }
+gum_space() { echo '                                    '; }
+
+# ///////////////////////////////////////////////////////////////////
+# PRINT
+# ///////////////////////////////////////////////////////////////////
+
+print_header() {
+    local header_logo header_title header_container
+    header_logo='
+ █████  ██████   ██████ ██   ██      ██████  ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
+███████ ██████  ██      ███████     ██    ██ ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
+██   ██ ██   ██  ██████ ██   ██      ██████  ███████
+    ' && header_logo=$(gum_purple --bold "$header_logo")
+    header_title="${VERSION}" && header_title=$(gum_white --bold "$header_title")
+    header_container=$(gum join --vertical "$header_logo" "$header_title")
+    clear && gum style --width 89 --align center --margin '0 0' "$header_container" && echo
+}
+
+print_title() { gum_purple --bold "•  ${*}"; }
+print_info() { gum_green --bold ">  ${*}"; }
+print_warn() { gum_yellow --bold ">  ${*}"; }
+print_fail() { gum_red --bold ">  ${*}"; }
+
+print_help() {
+    print_title "Open with arguments:" && echo
+    gum_white --bold ' --h  Open help page'
+    gum_white --bold ' --f  Fetch package updates'
+    gum_white --bold ' --u  Execute system upgrade'
+    gum_white --bold ' --c  Clean orphaned packages'
+    gum_white --bold ' --r  Reset keyring'
+}
+
+# ///////////////////////////////////////////////////////////////////
+# START SCRIPT
+# ///////////////////////////////////////////////////////////////////
+
+main "$@"
