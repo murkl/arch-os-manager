@@ -10,7 +10,7 @@
 
 <big><b>
 
-`kitty gum ttf-firacode-nerd`
+`paru kitty gum ttf-firacode-nerd`
 
 </b></big>
 
