@@ -33,6 +33,6 @@ AUR: [arch-os-app](https://aur.archlinux.org/packages/arch-os-app)
 <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
 </p>
 
-<p><b>Used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></p>
+<sub><b>used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub>
 
 </div>
