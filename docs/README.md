@@ -1,5 +1,9 @@
 <div align="center">
-<h1>Arch OS App</h1>
+<h1>
+  <img src="./logo.svg" width="150" height="150"/>
+  <p>Arch OS App</p>
+</h1>
+
 <p><img src="./screenshot.png" /></p>
 
 ### Dependencies
@@ -14,7 +18,7 @@
 
 <big><b>
 
-AUR: [arch-os-app](https://aur.archlinux.org/packages/arch-os-app)
+AUR: [arch-os](https://aur.archlinux.org/packages/arch-os)
 
 </b></big>
 
