@@ -123,7 +123,7 @@ action_fetch() { # List package updates
 
 action_upgrade() { # Update packages
     print_title "Upgrade System Packages"
-    paru -Syu
+    paru -Syu --skipreview
     print_info "Upgrade successful"
     return 0
 }
@@ -151,7 +151,7 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     print_info "Done" && echo && wait
     # Update
     print_title "Update Arch keyring"
-    sudo pacman -Sy archlinux-keyring --noconfirm && paru -Su
+    sudo pacman -Sy archlinux-keyring --noconfirm && paru -Su --skipreview
     print_info "Done"
     return 0
 }
