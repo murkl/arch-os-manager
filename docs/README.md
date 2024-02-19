@@ -2,7 +2,7 @@
 <h1>Arch OS App</h1>
 <p><img src="./screenshot.png" /></p>
 
-## Dependencies
+### Dependencies
 
 <big><b>
 
@@ -10,7 +10,7 @@
 
 </b></big>
 
-## Install
+### Install
 
 <big><b>
 
@@ -18,7 +18,7 @@ AUR: [arch-os-app](https://aur.archlinux.org/packages/arch-os-app)
 
 </b></big>
 
-## Run
+### Run
 
 <big><b>
 
