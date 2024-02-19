@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 
 # ///////////////////////////////////////////////////////////////////
 # ENVIRONMENT
@@ -121,14 +121,14 @@ action_list_updates() { # List package updates
     # Call again after spin (now it should cached)
     checkupdates && update_available="true" # Print Arch pkgs
     paru -Qua && update_available="true"    # Print AUR pkgs
-    [ "$update_available" = "false" ] && print_warn "No package updates available"
+    [ "$update_available" = "false" ] && print_info "Your system is up to date."
     return 0
 }
 
 action_upgrade_system() { # Update packages
     print_title "Upgrade System Packages"
     paru -Syu --skipreview
-    print_info "Upgrade successful"
+    echo && print_info "Upgrade successful."
     return 0
 }
 
@@ -138,25 +138,22 @@ action_remove_orphans() { # Remove orphaned packages
     paru -Qtdq &>/dev/null && paru -Rns $(paru -Qtdq)
     # shellcheck disable=SC2046
     paru -Rsu $(paru -Qqd)
-    print_info "Done" && echo
-    print_title "Remove unused flatpaks"
+    # Remove unused flatpaks
     flatpak uninstall -y --unused
-    print_info "Done"
+    echo && print_info "Done."
     return 0
 }
 
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    gum confirm "Really reset Arch Keyring?" || return 0
     print_title "Reset Arch Keyring"
+    ! gum confirm "Are you sure?" && print_warn "Canceled." && return 0
     # Keyring reset
     sudo rm -rf /etc/pacman.d/gnupg
     sudo pacman-key --init
     sudo pacman-key --populate
-    print_info "Done" && echo && wait
-    # Update
-    print_title "Update Arch keyring"
+    # Update Arch keyring & system
     sudo pacman -Sy archlinux-keyring --noconfirm && paru -Su --skipreview
-    print_info "Done"
+    echo && print_info "Done."
     return 0
 }
 
@@ -205,16 +202,16 @@ print_header() {
     clear && gum style --width 89 --align center --margin '0 0' "$header_container" && echo
 }
 
-print_title() { gum_purple --bold "•  ${*}"; }
-print_info() { gum_green --bold ">  ${*}"; }
-print_warn() { gum_yellow --bold ">  ${*}"; }
-print_fail() { gum_red --bold ">  ${*}"; }
+print_title() { gum_purple --bold "${*}" && echo; }
+print_info() { gum_green --bold "${*}"; }
+print_warn() { gum_yellow --bold "${*}"; }
+print_fail() { gum_red --bold "${*}"; }
 
 print_help() {
-    print_title "Help" && echo
+    print_title "Help"
     gum_white --bold 'arch-os     Open app'
     echo
-    print_title "Commands" && echo
+    print_title "Commands"
     gum_white --bold 'arch-os -h  Open help page'
     gum_white --bold 'arch-os -c  Check package updates'
     gum_white --bold 'arch-os -l  List package updates'
