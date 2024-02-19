@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-set -Eeuo pipefail
 
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 # ///////////////////////////////////////////////////////////////////
 # ENVIRONMENT
@@ -9,11 +8,123 @@ VERSION="1.0.4"
 
 CACHE_DIR="${HOME}/.cache/arch-os"
 
-COLOR_WHITE=251
-COLOR_GREEN=42
-COLOR_PURPLE=212
-COLOR_YELLOW=221
-COLOR_RED=9
+# ///////////////////////////////////////////////////////////////////
+# MAIN
+# ///////////////////////////////////////////////////////////////////
+
+main() {
+
+    set -Eeuo pipefail  # Set error handling
+    local user_arg="$*" # Get arguments
+
+    # Check dependencies
+    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
+
+    # Check updates (used from extension)
+    if [ -n "$user_arg" ] && [ "$user_arg" = "-c" ]; then
+        bash -c 'checkupdates; paru -Qua' # Check updates
+        exit $?                           # Exit with result from update check
+    fi
+
+    # Check if executed in kitty, otherwise start with kitty
+    [ "$TERM" != "xterm-kitty" ] && kitty "$0" "$@" && exit 0
+
+    trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
+    trap 'trap_exit $?' EXIT                    # Set exit trap
+
+    # Handle arg action
+    if [ -n "$user_arg" ]; then # Remove trailing dashes from arg
+        print_header
+        local user_arg=${1#"-"} && user_arg=${user_arg#"-"}
+        case "$user_arg" in # Execute action
+        l) action_list_updates ;;
+        u) action_upgrade_system ;;
+        o) action_remove_orphans ;;
+        r) action_reset ;;
+        h) print_help ;;
+        *) print_fail "Option '${user_arg}' not available" && exit 1 ;;
+        esac
+        exit # Exit !!!
+    fi
+
+    while (true); do
+        print_header && local user_input
+        local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
+        user_input=$(gum_choose "${options[@]}") || exit 130
+        case "$user_input" in # Execute action
+        'List Updates') action_list_updates ;;
+        'Upgrade System') action_upgrade_system ;;
+        'Remove Orphans') action_remove_orphans ;;
+        'Reset Keyring') action_reset ;;
+        'Open Help') print_help ;;
+        'Quit') exit 130 ;;
+        *) print_fail "Option '${user_input}' not available" && exit 1 ;;
+        esac
+        gum_confirm --affirmative "<-" --negative '' ''
+    done
+}
+
+# ///////////////////////////////////////////////////////////////////
+# ACTIONS
+# ///////////////////////////////////////////////////////////////////
+
+action_list_updates() { # List package updates
+    print_title "List Package Updates"
+    ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled." && return 0 # Preload and return if user press ctrl + c
+    local update_available="false"
+    # Call again after spin (now it should cached)
+    checkupdates && update_available="true" # Print Arch pkgs
+    paru -Qua && update_available="true"    # Print AUR pkgs
+    [ "$update_available" = "false" ] && print_info "Your system is up to date."
+    return 0
+}
+
+action_upgrade_system() { # Update packages
+    print_title "Upgrade System Packages"
+    paru -Syu --skipreview
+    echo && print_info "Upgrade successful."
+    return 0
+}
+
+action_remove_orphans() { # Remove orphaned packages
+    print_title "Remove Orphans"
+    # shellcheck disable=SC2046
+    paru -Qtdq &>/dev/null && paru -Rns $(paru -Qtdq)
+    # shellcheck disable=SC2046
+    paru -Rsu $(paru -Qqd)
+    # Remove unused flatpaks
+    flatpak uninstall -y --unused
+    echo && print_info "Done."
+    return 0
+}
+
+action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
+    print_title "Reset Arch Keyring"
+    ! gum_confirm "Are you sure?" && print_warn "Canceled." && return 0
+    # Keyring reset
+    sudo rm -rf /etc/pacman.d/gnupg
+    sudo pacman-key --init
+    sudo pacman-key --populate
+    # Update Arch keyring & system
+    sudo pacman -Sy archlinux-keyring --noconfirm && paru -Su --skipreview
+    echo && print_info "Done."
+    return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
+# TRAPS
+# ///////////////////////////////////////////////////////////////////
+
+trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'X' --negative '' ''; }
+trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line ${2})"; }
+
+# ///////////////////////////////////////////////////////////////////
+# KITTY
+# ///////////////////////////////////////////////////////////////////
+
+kitty() { mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf" && /usr/bin/kitty --detach --class "arch-os" -c "${CACHE_DIR}/kitty.conf" "$@"; }
 
 KITTY_CONF='
 hide_window_decorations yes
@@ -54,135 +165,29 @@ color15                 #E5E9F0
 '
 
 # ///////////////////////////////////////////////////////////////////
-# MAIN
-# ///////////////////////////////////////////////////////////////////
-
-main() {
-
-    local user_arg="$*"
-
-    # Check dependencies
-    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
-
-    # Check updates (used from extension)
-    if [ -n "$user_arg" ] && [ "$user_arg" = "-c" ]; then
-        bash -c 'checkupdates; paru -Qua' # Check updates
-        exit $?                           # Exit with result from update check
-    fi
-
-    # Check if executed in kitty, otherwise start with kitty
-    [ "$TERM" != "xterm-kitty" ] && kitty "$0" "$@" && exit 0
-
-    trap 'trap_exit $?' EXIT # Set exit trap
-    trap 'trap_error $?' ERR # Set error trap
-
-    # Handle arg action
-    if [ -n "$user_arg" ]; then # Remove trailing dashes from arg
-        print_header
-        local user_arg=${1#"-"} && user_arg=${user_arg#"-"}
-        case "$user_arg" in # Execute action
-        l) action_list_updates ;;
-        u) action_upgrade_system ;;
-        o) action_remove_orphans ;;
-        r) action_reset ;;
-        h) print_help ;;
-        *) print_fail "Option '${user_arg}' not available" && exit 1 ;;
-        esac
-        exit # Exit
-    fi
-
-    while (true); do
-        print_header && local user_input
-        local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
-        user_input=$(gum_choose "${options[@]}") || exit 130
-        case "$user_input" in # Execute action
-        'List Updates') action_list_updates ;;
-        'Upgrade System') action_upgrade_system ;;
-        'Remove Orphans') action_remove_orphans ;;
-        'Reset Keyring') action_reset ;;
-        'Open Help') print_help ;;
-        'Quit') exit 130 ;;
-        *) print_fail "Option '${user_input}' not available" && exit 1 ;;
-        esac
-        gum confirm --affirmative '<- Back' --negative '' ''
-    done
-}
-
-# ///////////////////////////////////////////////////////////////////
-# ACTIONS
-# ///////////////////////////////////////////////////////////////////
-
-action_list_updates() { # List package updates
-    print_title "List Package Updates"
-    gum spin --title 'Loading' -- bash -c "checkupdates; paru -Qua; exit 0" || return 0 # Preload and return if user press ctrl + c
-    local update_available="false"
-    # Call again after spin (now it should cached)
-    checkupdates && update_available="true" # Print Arch pkgs
-    paru -Qua && update_available="true"    # Print AUR pkgs
-    [ "$update_available" = "false" ] && print_info "Your system is up to date."
-    return 0
-}
-
-action_upgrade_system() { # Update packages
-    print_title "Upgrade System Packages"
-    paru -Syu --skipreview
-    echo && print_info "Upgrade successful."
-    return 0
-}
-
-action_remove_orphans() { # Remove orphaned packages
-    print_title "Remove Orphans"
-    # shellcheck disable=SC2046
-    paru -Qtdq &>/dev/null && paru -Rns $(paru -Qtdq)
-    # shellcheck disable=SC2046
-    paru -Rsu $(paru -Qqd)
-    # Remove unused flatpaks
-    flatpak uninstall -y --unused
-    echo && print_info "Done."
-    return 0
-}
-
-action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    print_title "Reset Arch Keyring"
-    ! gum confirm "Are you sure?" && print_warn "Canceled." && return 0
-    # Keyring reset
-    sudo rm -rf /etc/pacman.d/gnupg
-    sudo pacman-key --init
-    sudo pacman-key --populate
-    # Update Arch keyring & system
-    sudo pacman -Sy archlinux-keyring --noconfirm && paru -Su --skipreview
-    echo && print_info "Done."
-    return 0
-}
-
-# ///////////////////////////////////////////////////////////////////
-# TRAPS
-# ///////////////////////////////////////////////////////////////////
-
-trap_exit() { [ $? != 130 ] && gum confirm --affirmative 'Exit' --negative '' ''; }
-trap_error() { print_fail "Execution failed"; }
-
-# ///////////////////////////////////////////////////////////////////
-# KITTY
-# ///////////////////////////////////////////////////////////////////
-
-kitty() { mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf" && /usr/bin/kitty --detach --class "arch-os" -c "${CACHE_DIR}/kitty.conf" "$@"; }
-
-# ///////////////////////////////////////////////////////////////////
 # GUM
 # ///////////////////////////////////////////////////////////////////
 
+COLOR_WHITE=251
+COLOR_GREEN=42
+COLOR_PURPLE=212
+COLOR_YELLOW=221
+COLOR_RED=9
+
 gum() { /usr/bin/gum "$@"; }
-gum_white() { gum style --foreground "$COLOR_WHITE" "${@}"; }
-gum_green() { gum style --foreground "$COLOR_GREEN" "${@}"; }
-gum_purple() { gum style --foreground "$COLOR_PURPLE" "${@}"; }
-gum_yellow() { gum style --foreground "$COLOR_YELLOW" "${@}"; }
-gum_red() { gum style --foreground "$COLOR_RED" "${@}"; }
-gum_choose() { gum choose --cursor "$(gum_space)• " --header.foreground "$COLOR_PURPLE" --cursor.foreground "$COLOR_PURPLE" "${@}"; }
-#gum_space() { echo '                                    '; }
-gum_space() { echo '                '; }
+
+gum_space() { echo '                '; } # Spaces till header
+gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
+gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
+gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
+gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
+gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
+
+gum_choose() { gum choose --cursor "$(gum_space)• " "${@}"; }
+gum_confirm() { gum confirm "$@"; }
+gum_style() { gum style "${@}"; }
+gum_join() { gum join "${@}"; }
+gum_spin() { gum spin --spinner dot "${@}"; }
 
 # ///////////////////////////////////////////////////////////////////
 # PRINT
@@ -198,8 +203,8 @@ print_header() {
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
     ' && header_logo=$(gum_purple --bold "$header_logo")
     header_title="${VERSION}" && header_title=$(gum_white --bold "$header_title")
-    header_container=$(gum join --vertical "$header_logo" "$header_title")
-    clear && gum style --width 89 --align center --margin '0 0' "$header_container" && echo
+    header_container=$(gum_join --vertical "$header_logo" "$header_title")
+    clear && gum_style --width 89 --align center --margin '0 0' "$header_container" && echo
 }
 
 print_title() { gum_purple --bold "${*}" && echo; }
@@ -210,8 +215,7 @@ print_fail() { gum_red --bold "${*}"; }
 print_help() {
     print_title "Help"
     gum_white --bold 'arch-os     Open app'
-    echo
-    print_title "Commands"
+    echo && print_title "Commands"
     gum_white --bold 'arch-os -h  Open help page'
     gum_white --bold 'arch-os -c  Check package updates'
     gum_white --bold 'arch-os -l  List package updates'
