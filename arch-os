@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="1.0.2"
+VERSION="1.0.3"
 
 # ///////////////////////////////////////////////////////////////////
 # ENVIRONMENT
@@ -68,8 +68,8 @@ main() {
 
     # Check updates (used from extension)
     if [ -n "$user_arg" ] && [ "$user_arg" = "-c" ]; then
-        action_check_updates # Check updates
-        exit $?              # Exit with result from update check
+        bash -c 'checkupdates; paru -Qua' # Check updates
+        exit $?                           # Exit with result from update check
     fi
 
     # Check if executed in kitty, otherwise start with kitty
@@ -113,11 +113,6 @@ main() {
 # ///////////////////////////////////////////////////////////////////
 # ACTIONS
 # ///////////////////////////////////////////////////////////////////
-
-action_check_updates() {
-    checkupdates
-    paru -Qua
-}
 
 action_list_updates() { # List package updates
     print_title "List Package Updates"
