@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.0.7"
+VERSION="1.0.8"
 
 # ///////////////////////////////////////////////////////////////////
 # ENVIRONMENT
@@ -30,9 +30,8 @@ main() {
 
     # Download updates (used from service)
     if [ -n "$user_arg" ] && [ "$user_arg" = "--service" ]; then
-        #action_preload_updates
-        action_check_updates_available && notify "Updates available"
-        exit 0 # Exit
+        action_preload_updates 1>/dev/null || exit 0
+        action_check_updates_available && notify "Updates available" && exit 0
     fi
 
     # Check if executed in kitty, otherwise start with kitty
@@ -40,9 +39,6 @@ main() {
 
     trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                    # Set exit trap
-
-    # Check service
-    #check_service || exit 1
 
     # Handle arg action
     if [ -n "$user_arg" ]; then # Remove trailing dashes from arg
@@ -89,7 +85,8 @@ action_check_updates_available() {
 }
 
 action_preload_updates() {
-    checkupdates -d &>/dev/null
+    #checkupdates -d &>/dev/null
+    checkupdates -d
 }
 
 action_list_updates() { # List package updates
@@ -101,6 +98,7 @@ action_list_updates() { # List package updates
 
 action_upgrade_system() { # Update packages
     print_title "Upgrade System Packages"
+    #check_service || exit 1 # Check service
     paru -Syu --skipreview
     echo && print_info "Upgrade successful."
     return 0
@@ -245,6 +243,11 @@ gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 
+print_title() { gum_purple --bold "${*}" && echo; }
+print_info() { gum_green --bold "${*}"; }
+print_warn() { gum_yellow --bold "${*}"; }
+print_fail() { gum_red --bold "${*}"; }
+
 # ///////////////////////////////////////////////////////////////////
 # PRINT
 # ///////////////////////////////////////////////////////////////////
@@ -262,11 +265,6 @@ print_header() {
     header_container=$(gum_join --vertical "$header_logo" "$header_title")
     clear && gum_style --width 89 --align center --margin '0 0' "$header_container" && echo
 }
-
-print_title() { gum_purple --bold "${*}" && echo; }
-print_info() { gum_green --bold "${*}"; }
-print_warn() { gum_yellow --bold "${*}"; }
-print_fail() { gum_red --bold "${*}"; }
 
 print_help() {
     print_title "Help"
