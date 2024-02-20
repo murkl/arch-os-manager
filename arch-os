@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
 
-VERSION="1.0.9"
-
-# ///////////////////////////////////////////////////////////////////
-# ENVIRONMENT
-# ///////////////////////////////////////////////////////////////////
-
-CACHE_DIR="${HOME}/.cache/arch-os"
+VERSION="1.1.0"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
 # ///////////////////////////////////////////////////////////////////
 
+CACHE_DIR="${HOME}/.cache/arch-os"
+
 main() {
 
     set -Eeuo pipefail  # Set error handling
-    local user_arg="$*" # Get arguments
+    local user_arg="$*" # Get user arguments
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -28,7 +24,7 @@ main() {
         exit $? # Exit with result from update check
     fi
 
-    # Download updates (used from service)
+    # Download & notify updates (can used from service)
     if [ -n "$user_arg" ] && [ "$user_arg" = "--service" ]; then
         action_preload_updates || exit 1
         action_check_updates_available --notify
@@ -41,10 +37,9 @@ main() {
     trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                    # Set exit trap
 
-    # Handle arg action
-    if [ -n "$user_arg" ]; then # Remove trailing dashes from arg
-        print_header
-        local user_arg=${1#"-"} && user_arg=${user_arg#"-"}
+    if [ -n "$user_arg" ]; then # Handle arg action
+        # Remove trailing dashes from arg
+        print_header && user_arg=${1#"-"} && user_arg=${user_arg#"-"}
         case "$user_arg" in # Execute action
         list) action_list_updates ;;
         upgrade) action_upgrade_system ;;
@@ -53,12 +48,12 @@ main() {
         help) print_help ;;
         *) print_help && echo && print_fail "Option '${user_arg}' not available" && exit 1 ;;
         esac
-        exit # Exit !!!
+        exit $? # Exit !!!
     fi
 
     while (true); do
-        print_header && local user_input
-        local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
+        print_header && local user_input options
+        options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
         user_input=$(gum_choose "${options[@]}") || exit 130
         case "$user_input" in # Execute action
         'List Updates') action_list_updates ;;
@@ -74,8 +69,19 @@ main() {
 }
 
 # ///////////////////////////////////////////////////////////////////
+# TRAPS
+# ///////////////////////////////////////////////////////////////////
+
+trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'X' --negative '' ''; }
+trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line ${2})"; }
+
+# ///////////////////////////////////////////////////////////////////
 # ACTIONS
 # ///////////////////////////////////////////////////////////////////
+
+action_preload_updates() {
+    checkupdates -d || return 1
+}
 
 action_check_updates_available() {
     local update_available="false"
@@ -84,10 +90,6 @@ action_check_updates_available() {
     [ "$update_available" = "true" ] && [ "${1-}" = "--notify" ] && notify "Updates available"
     [ "$update_available" = "true" ] && return 0
     [ "$update_available" = "false" ] && return 1
-}
-
-action_preload_updates() {
-    checkupdates -d || return 1
 }
 
 action_list_updates() { # List package updates
@@ -130,17 +132,72 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
 }
 
 # ///////////////////////////////////////////////////////////////////
-# TRAPS
+# PRINT
 # ///////////////////////////////////////////////////////////////////
 
-trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'X' --negative '' ''; }
-trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line ${2})"; }
+COLOR_WHITE=251
+COLOR_GREEN=42
+COLOR_PURPLE=212
+COLOR_YELLOW=221
+COLOR_RED=9
+
+print_header() {
+    local header_logo header_title header_container
+    header_logo='
+ █████  ██████   ██████ ██   ██      ██████  ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
+███████ ██████  ██      ███████     ██    ██ ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
+██   ██ ██   ██  ██████ ██   ██      ██████  ███████
+    ' && header_logo=$(gum_purple "$header_logo")
+    header_title="${VERSION}" && header_title=$(gum_white --bold "$header_title")
+    header_container=$(gum_join --vertical "$header_logo" "$header_title")
+    clear && gum_style --width 89 --align center --margin '0 0' "$header_container" && echo
+}
+
+print_help() {
+    print_title "Help"
+    gum_white 'arch-os            Open app'
+    echo && print_title "Commands"
+    gum_white 'arch-os --help     Open help page'
+    gum_white 'arch-os --check    Check package updates'
+    gum_white 'arch-os --list     List package updates'
+    gum_white 'arch-os --upgrade  Execute system upgrade'
+    gum_white 'arch-os --orphans  Remove orphaned packages'
+    gum_white 'arch-os --reset    Reset keyring'
+    gum_white 'arch-os --service  Download & notify new updates'
+}
+
+gum() { /usr/bin/gum "$@"; }
+
+gum_space() { echo '                '; } # Spaces till header
+gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
+gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
+gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
+gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
+gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
+
+gum_choose() { gum choose --cursor "$(gum_space)• " "${@}"; }
+gum_confirm() { gum confirm "$@"; }
+gum_style() { gum style "${@}"; }
+gum_join() { gum join "${@}"; }
+gum_spin() { gum spin --spinner dot "${@}"; }
+
+print_title() { gum_purple --bold "${*}" && echo; }
+print_info() { gum_green "${*}"; }
+print_warn() { gum_yellow "${*}"; }
+print_fail() { gum_red "${*}"; }
+
+notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY
 # ///////////////////////////////////////////////////////////////////
 
-kitty() { mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf" && /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "${CACHE_DIR}/kitty.conf" "$@"; }
+kitty() {
+    mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf"
+    /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "${CACHE_DIR}/kitty.conf" "$@"
+}
 
 # https://sw.kovidgoyal.net/kitty/conf/
 KITTY_CONF='
@@ -183,74 +240,10 @@ color15                 #E5E9F0
 '
 
 # ///////////////////////////////////////////////////////////////////
-# GUM
-# ///////////////////////////////////////////////////////////////////
-
-COLOR_WHITE=251
-COLOR_GREEN=42
-COLOR_PURPLE=212
-COLOR_YELLOW=221
-COLOR_RED=9
-
-gum() { /usr/bin/gum "$@"; }
-
-gum_space() { echo '                '; } # Spaces till header
-gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
-gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
-gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
-gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
-gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
-
-gum_choose() { gum choose --cursor "$(gum_space)• " "${@}"; }
-gum_confirm() { gum confirm "$@"; }
-gum_style() { gum style "${@}"; }
-gum_join() { gum join "${@}"; }
-gum_spin() { gum spin --spinner dot "${@}"; }
-
-print_title() { gum_purple --bold "${*}" && echo; }
-print_info() { gum_green --bold "${*}"; }
-print_warn() { gum_yellow --bold "${*}"; }
-print_fail() { gum_red --bold "${*}"; }
-
-# ///////////////////////////////////////////////////////////////////
-# PRINT
-# ///////////////////////////////////////////////////////////////////
-
-print_header() {
-    local header_logo header_title header_container
-    header_logo='
- █████  ██████   ██████ ██   ██      ██████  ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
-███████ ██████  ██      ███████     ██    ██ ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
-██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    ' && header_logo=$(gum_purple --bold "$header_logo")
-    header_title="${VERSION}" && header_title=$(gum_white --bold "$header_title")
-    header_container=$(gum_join --vertical "$header_logo" "$header_title")
-    clear && gum_style --width 89 --align center --margin '0 0' "$header_container" && echo
-}
-
-print_help() {
-    print_title "Help"
-    gum_white --bold 'arch-os            Open app'
-    echo && print_title "Commands"
-    gum_white --bold 'arch-os --help     Open help page'
-    gum_white --bold 'arch-os --check    Check package updates'
-    gum_white --bold 'arch-os --list     List package updates'
-    gum_white --bold 'arch-os --upgrade  Execute system upgrade'
-    gum_white --bold 'arch-os --orphans  Remove orphaned packages'
-    gum_white --bold 'arch-os --reset    Reset keyring'
-    gum_white --bold 'arch-os --service  Download & notify new updates'
-}
-
-notify() {
-    notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"
-}
-
-# ///////////////////////////////////////////////////////////////////
 # START SCRIPT
 # ///////////////////////////////////////////////////////////////////
 
+# Locating working dir
 WORKING_SOURCE=${BASH_SOURCE[0]}
 while [ -L "$WORKING_SOURCE" ]; do
     WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
@@ -259,4 +252,4 @@ while [ -L "$WORKING_SOURCE" ]; do
 done
 WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
 
-main "$@"
+main "$@" # Start main function
