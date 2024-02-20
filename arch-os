@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.0.5"
+VERSION="1.0.6"
 
 # ///////////////////////////////////////////////////////////////////
 # ENVIRONMENT
@@ -22,10 +22,17 @@ main() {
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
-    # Check updates (used from extension)
-    if [ -n "$user_arg" ] && [ "$user_arg" = "-c" ]; then
-        bash -c 'checkupdates; paru -Qua' # Check updates
-        exit $?                           # Exit with result from update check
+    # Check updates
+    if [ -n "$user_arg" ] && [ "$user_arg" = "--check" ]; then
+        action_check_updates_available
+        exit $? # Exit with result from update check
+    fi
+
+    # Download updates (used from service)
+    if [ -n "$user_arg" ] && [ "$user_arg" = "--service" ]; then
+        #action_preload_updates
+        action_check_updates_available && notify "Updates available"
+        exit 0 # Exit
     fi
 
     # Check if executed in kitty, otherwise start with kitty
@@ -34,16 +41,19 @@ main() {
     trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                    # Set exit trap
 
+    # Check service
+    #check_service || exit 1
+
     # Handle arg action
     if [ -n "$user_arg" ]; then # Remove trailing dashes from arg
         print_header
         local user_arg=${1#"-"} && user_arg=${user_arg#"-"}
         case "$user_arg" in # Execute action
-        l) action_list_updates ;;
-        u) action_upgrade_system ;;
-        o) action_remove_orphans ;;
-        r) action_reset ;;
-        h) print_help ;;
+        list) action_list_updates ;;
+        upgrade) action_upgrade_system ;;
+        orphans) action_remove_orphans ;;
+        reset) action_reset ;;
+        help) print_help ;;
         *) print_fail "Option '${user_arg}' not available" && exit 1 ;;
         esac
         exit # Exit !!!
@@ -70,14 +80,22 @@ main() {
 # ACTIONS
 # ///////////////////////////////////////////////////////////////////
 
+action_check_updates_available() {
+    local update_available="false"
+    checkupdates && update_available="true"
+    paru -Qua && update_available="true"
+    [ "$update_available" = "true" ] && return 0
+    [ "$update_available" = "false" ] && return 1
+}
+
+action_preload_updates() {
+    checkupdates -d &>/dev/null
+}
+
 action_list_updates() { # List package updates
     print_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled." && return 0 # Preload and return if user press ctrl + c
-    local update_available="false"
-    # Call again after spin (now it should cached)
-    checkupdates && update_available="true" # Print Arch pkgs
-    paru -Qua && update_available="true"    # Print AUR pkgs
-    [ "$update_available" = "false" ] && print_info "Your system is up to date."
+    action_check_updates_available || print_info "Your system is up to date."
     return 0
 }
 
@@ -114,6 +132,42 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
 }
 
 # ///////////////////////////////////////////////////////////////////
+# SERVICE
+# ///////////////////////////////////////////////////////////////////
+
+check_service() {
+    local service="arch-os-update.service"
+    local timer="arch-os-update.timer"
+    if [ ! -f "${CACHE_DIR}/service.false" ] && { [ ! -f "/etc/systemd/system/${service}" ] || [ ! -f "/etc/systemd/system/${timer}" ]; }; then
+        print_header && print_title "Auto Package Update Downloader"
+        ! gum_confirm "Enable Systemd Service?" && touch "${CACHE_DIR}/service.false" && print_warn "Remove ${CACHE_DIR}/service.false to ask again" && return 1
+        {
+            echo '[Unit]'
+            echo 'Description=Check for Arch OS updates'
+            echo ''
+            echo '[Service]'
+            echo 'Type=oneshot'
+            echo 'ExecStart=/usr/bin/arch-os --service'
+            echo ''
+            echo '[Install]'
+            echo 'WantedBy=multi-user.target'
+        } | sudo tee "/etc/systemd/system/${service}" &>/dev/null
+        {
+            echo '[Unit]'
+            echo 'Description=Run Arch OS update check every hour'
+            echo ''
+            echo '[Timer]'
+            echo 'OnBootSec=30sec'
+            echo 'OnUnitActiveSec=120min'
+            echo ''
+            echo '[Install]'
+            echo 'WantedBy=timers.target'
+        } | sudo tee "/etc/systemd/system/${timer}" &>/dev/null
+        sudo systemctl enable --now "$timer"
+    fi
+}
+
+# ///////////////////////////////////////////////////////////////////
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
@@ -124,13 +178,15 @@ trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line 
 # KITTY
 # ///////////////////////////////////////////////////////////////////
 
-kitty() { mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf" && /usr/bin/kitty --detach --class "arch-os" -c "${CACHE_DIR}/kitty.conf" "$@"; }
+kitty() { mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf" && /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "${CACHE_DIR}/kitty.conf" "$@"; }
 
+# https://sw.kovidgoyal.net/kitty/conf/
 KITTY_CONF='
 hide_window_decorations yes
 remember_window_size false
 initial_window_width 800
 initial_window_height 600
+placement_strategy center
 window_padding_width 32
 font_family Fira Code Nerd Font
 font_size 10.0
@@ -214,18 +270,31 @@ print_fail() { gum_red --bold "${*}"; }
 
 print_help() {
     print_title "Help"
-    gum_white --bold 'arch-os     Open app'
+    gum_white --bold 'arch-os            Open app'
     echo && print_title "Commands"
-    gum_white --bold 'arch-os -h  Open help page'
-    gum_white --bold 'arch-os -c  Check package updates'
-    gum_white --bold 'arch-os -l  List package updates'
-    gum_white --bold 'arch-os -u  Execute system upgrade'
-    gum_white --bold 'arch-os -o  Remove orphaned packages'
-    gum_white --bold 'arch-os -r  Reset keyring'
+    gum_white --bold 'arch-os --help     Open help page'
+    gum_white --bold 'arch-os --check    Check package updates'
+    gum_white --bold 'arch-os --list     List package updates'
+    gum_white --bold 'arch-os --upgrade  Execute system upgrade'
+    gum_white --bold 'arch-os --orphans  Remove orphaned packages'
+    gum_white --bold 'arch-os --reset    Reset keyring'
+    gum_white --bold 'arch-os --service  Download & notify new updates'
+}
+
+notify() {
+    notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"
 }
 
 # ///////////////////////////////////////////////////////////////////
 # START SCRIPT
 # ///////////////////////////////////////////////////////////////////
+
+WORKING_SOURCE=${BASH_SOURCE[0]}
+while [ -L "$WORKING_SOURCE" ]; do
+    WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
+    WORKING_SOURCE=$(readlink "$WORKING_SOURCE")
+    [[ $WORKING_SOURCE != /* ]] && WORKING_SOURCE=$WORKING_DIR/$WORKING_SOURCE
+done
+WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
 
 main "$@"
