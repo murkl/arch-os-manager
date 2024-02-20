@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Arch OS update check every hour
+
+[Timer]
+OnBootSec=30sec
+OnUnitActiveSec=120min
+
+[Install]
+WantedBy=timers.target
