@@ -10,7 +10,7 @@
 
 <big><b>
 
-`paru kitty gum ttf-firacode-nerd`
+`kitty gum libnotify ttf-firacode-nerd paru flatpak`
 
 </b></big>
 

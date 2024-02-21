@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.1.0"
+VERSION="1.1.1"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -16,7 +16,9 @@ main() {
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/flatpak &>/dev/null; then echo "ERROR: flatpak not found" >&2 && exit 1; fi
 
     # Check updates
     if [ -n "$user_arg" ] && [ "$user_arg" = "--check" ]; then
@@ -46,7 +48,7 @@ main() {
         orphans) action_remove_orphans ;;
         reset) action_reset ;;
         help) print_help ;;
-        *) print_help && echo && print_fail "Option '${user_arg}' not available" && exit 1 ;;
+        *) print_help && echo && print_fail "Option '${*}' not available" && exit 1 ;;
         esac
         exit $? # Exit !!!
     fi
@@ -156,15 +158,14 @@ print_header() {
 }
 
 print_help() {
-    print_title "Help"
-    gum_white 'arch-os            Open app'
-    echo && print_title "Commands"
+    print_title "Commands"
     gum_white 'arch-os --help     Open help page'
-    gum_white 'arch-os --check    Check package updates'
     gum_white 'arch-os --list     List package updates'
     gum_white 'arch-os --upgrade  Execute system upgrade'
     gum_white 'arch-os --orphans  Remove orphaned packages'
     gum_white 'arch-os --reset    Reset keyring'
+    echo && print_title "No interactive"
+    gum_white 'arch-os --check    Check package updates'
     gum_white 'arch-os --service  Download & notify new updates'
 }
 
