@@ -6,11 +6,19 @@
 
 <p><img src="./screenshot.png" /></p>
 
+### Package Manager
+
+<big><b>
+
+`paru flatpak`
+
+</b></big>
+
 ### Dependencies
 
 <big><b>
 
-`kitty gum libnotify ttf-firacode-nerd paru flatpak`
+`kitty gum libnotify ttf-firacode-nerd`
 
 </b></big>
 

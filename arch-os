@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -66,7 +66,7 @@ main() {
         'Quit') exit 130 ;;
         *) print_fail "Option '${user_input}' not available" && exit 1 ;;
         esac
-        gum_confirm --affirmative "<-" --negative '' ''
+        gum_confirm --default --affirmative "< Back" --negative '' '............'
     done
 }
 
@@ -74,7 +74,7 @@ main() {
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
-trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'X' --negative '' ''; }
+trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'Exit' --negative '' '..........'; }
 trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line ${2})"; }
 
 # ///////////////////////////////////////////////////////////////////
@@ -137,6 +137,7 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
 # PRINT
 # ///////////////////////////////////////////////////////////////////
 
+# https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
 COLOR_WHITE=251
 COLOR_GREEN=42
 COLOR_PURPLE=212
@@ -171,15 +172,15 @@ print_help() {
 
 gum() { /usr/bin/gum "$@"; }
 
-gum_space() { echo '                '; } # Spaces till header
+gum_space() { echo '               '; } # Spaces till header
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
-gum_choose() { gum choose --cursor "$(gum_space)• " "${@}"; }
-gum_confirm() { gum confirm "$@"; }
+gum_choose() { gum choose --cursor "$(gum_space) • " "${@}"; }
+gum_confirm() { gum confirm --prompt.foreground "$COLOR_WHITE" "$@"; }
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
@@ -187,7 +188,7 @@ gum_spin() { gum spin --spinner dot "${@}"; }
 print_title() { gum_purple --bold "${*}" && echo; }
 print_info() { gum_green "${*}"; }
 print_warn() { gum_yellow "${*}"; }
-print_fail() { gum_red "${*}"; }
+print_fail() { gum_red --bold "${*}"; }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
 
