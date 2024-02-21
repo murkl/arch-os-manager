@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.1.5"
+VERSION="1.1.6"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -52,10 +52,11 @@ main() {
         exit $? # Exit !!!
     fi
 
+    local user_input=''
     while (true); do
-        print_header && local user_input options
-        options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
-        user_input=$(gum_choose "${options[@]}") || exit 130
+        print_header
+        local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
+        user_input=$(gum_choose --selected="$user_input" "${options[@]}") || exit 130
         case "$user_input" in # Execute action
         'List Updates') action_list_updates ;;
         'Upgrade System') action_upgrade_system ;;
