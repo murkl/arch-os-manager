@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.1.4"
+VERSION="1.1.5"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -18,7 +18,6 @@ main() {
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/flatpak &>/dev/null; then echo "ERROR: flatpak not found" >&2 && exit 1; fi
 
     # Check updates
     if [ -n "$user_arg" ] && [ "$user_arg" = "--check" ]; then
@@ -113,8 +112,8 @@ action_remove_orphans() { # Remove orphaned packages
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null # Remove orphans
     # shellcheck disable=SC2046
-    paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null # Remove more orphans
-    flatpak uninstall -y --unused                  # Remove unused flatpaks
+    paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null                  # Remove more orphans
+    command -v flatpak &>/dev/null && flatpak uninstall -y --unused # Remove unused flatpaks
     echo && print_info "Done."
     return 0
 }
@@ -137,11 +136,11 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
 # ///////////////////////////////////////////////////////////////////
 
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
-COLOR_WHITE=251
-COLOR_GREEN=42
+COLOR_WHITE=7
+COLOR_GREEN=2
 COLOR_PURPLE=212
-COLOR_YELLOW=221
-COLOR_RED=9
+COLOR_YELLOW=3
+COLOR_RED=1
 
 print_header() {
     local header_logo header_title header_container

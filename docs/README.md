@@ -10,7 +10,7 @@
 
 <big><b>
 
-`paru flatpak`
+`paru`
 
 </b></big>
 
