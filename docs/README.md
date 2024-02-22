@@ -9,6 +9,8 @@
 <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
 </p>
 
+<br>
+
 ### Dependencies
 
 **`paru kitty gum libnotify ttf-firacode-nerd`**
