@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.2.3"
+VERSION="1.2.4"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -31,9 +31,9 @@ main() {
         exit $? # Exit with result from update check
     fi
 
-    ###################### START KITTY ######################
-    [ "$TERM" != "xterm-kitty" ] && kitty "$0" "$@" && exit 0
-    #########################################################
+    ######################## START KITTY ########################
+    [ "$TERM" != "xterm-kitty" ] && kitty "$SELF" "$@" && exit 0
+    #############################################################
 
     trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                    # Set exit trap
@@ -253,5 +253,6 @@ while [ -L "$WORKING_SOURCE" ]; do
     [[ $WORKING_SOURCE != /* ]] && WORKING_SOURCE=$WORKING_DIR/$WORKING_SOURCE
 done
 WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
+SELF="$WORKING_DIR/$(basename "$0")"
 
 main "$@" # Start main function
