@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.2.0"
+VERSION="1.2.1"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -42,7 +42,7 @@ main() {
     if [ -n "$user_input" ]; then
         print_header # Print header
         # Remove trailing dashes from arg
-        user_input=${1#"-"} && user_input=${user_input#"-"}
+        user_input=${*#"-"} && user_input=${user_input#"-"}
         case "$user_input" in # Execute action
         list) action_list_updates ;;
         upgrade) action_upgrade_system ;;
@@ -104,6 +104,8 @@ action_upgrade_system() { # Update packages
     print_title "Upgrade System Packages"
     paru -Syu --skipreview
     echo && print_info "Upgrade successful."
+    ! gum_confirm "Remove Orphans?" && return 0
+    echo && action_remove_orphans
     return 0
 }
 
