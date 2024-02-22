@@ -1,9 +1,0 @@
-[Unit]
-Description=Check for Arch OS updates
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/arch-os --service
-
-[Install]
-WantedBy=multi-user.target
