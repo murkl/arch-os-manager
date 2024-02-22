@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.1.9"
+VERSION="1.2.0"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -94,7 +94,9 @@ action_check_updates_available() {
 action_list_updates() { # List package updates
     print_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled." && return 0 # Preload and return if user press ctrl + c
-    action_check_updates_available || print_info "Your system is up to date."
+    ! action_check_updates_available && print_info "Your system is up to date." && return 0
+    ! gum_confirm "Upgrade Packages?" && return 0
+    echo && action_upgrade_system
     return 0
 }
 
@@ -162,8 +164,8 @@ print_help() {
     gum_white 'arch-os --orphans  Remove orphaned packages'
     gum_white 'arch-os --reset    Reset keyring'
     echo && print_title "Options (non interactive)"
-    gum_white 'arch-os --notify   Check, print and notify package updates'
     gum_white 'arch-os --check    Check and print package updates'
+    gum_white 'arch-os --notify   Check, print and notify package updates'
 }
 
 gum() { /usr/bin/gum "$@"; }

@@ -9,25 +9,21 @@
 <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
 </p>
 
-<p><img src="./screenshot.png"></p>
+### Dependencies
 
-#### Package Manager
+**`paru kitty gum libnotify ttf-firacode-nerd`**
 
-**`paru`**
-
-#### Dependencies
-
-**`kitty gum libnotify ttf-firacode-nerd`**
-
-#### Install
+### Install
 
 **[aur/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
 
-#### Run
+### Run
 
 **`arch-os`**
 
 <br>
+
+<p><img src="./screenshot.png"></p>
 
 <sub><b>used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub>
 
