@@ -4,13 +4,6 @@
   <p><b>Arch OS Manager</b></p>
 </h1>
 
-<p>
-<img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
-<img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
-</p>
-
-<br>
-
 ### Dependencies
 
 **`paru kitty gum libnotify ttf-firacode-nerd`**
@@ -26,6 +19,11 @@
 <br>
 
 <p><img src="./screenshot.png"></p>
+
+<p>
+<img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
+<img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
+</p>
 
 <sub><b>used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub>
 
