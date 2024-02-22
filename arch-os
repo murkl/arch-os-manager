@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.1.7"
+VERSION="1.1.8"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -10,8 +10,8 @@ CACHE_DIR="${HOME}/.cache/arch-os"
 
 main() {
 
-    set -Eeuo pipefail  # Set error handling
-    local user_arg="$*" # Get user arguments
+    set -Eeuo pipefail    # Set error handling
+    local user_input="$*" # Get user arguments
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -20,27 +20,30 @@ main() {
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
     # Check updates
-    if [ -n "$user_arg" ] && [ "$user_arg" = "--check" ]; then
+    if [ -n "$user_input" ] && [ "$user_input" = "--check" ]; then
         action_check_updates_available
         exit $? # Exit with result from update check
     fi
 
     # Check updates & notify
-    if [ -n "$user_arg" ] && [ "$user_arg" = "--notify" ]; then
+    if [ -n "$user_input" ] && [ "$user_input" = "--notify" ]; then
         action_check_updates_available && notify "New updates available"
         exit $? # Exit with result from update check
     fi
 
-    # Check if executed in kitty, otherwise start with kitty
+    ###################### START KITTY ######################
     [ "$TERM" != "xterm-kitty" ] && kitty "$0" "$@" && exit 0
+    #########################################################
 
     trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                    # Set exit trap
 
-    if [ -n "$user_arg" ]; then # Handle arg action
+    # NON INTERACTIVE
+    if [ -n "$user_input" ]; then
+        print_header # Print header
         # Remove trailing dashes from arg
-        print_header && user_arg=${1#"-"} && user_arg=${user_arg#"-"}
-        case "$user_arg" in # Execute action
+        user_input=${1#"-"} && user_input=${user_input#"-"}
+        case "$user_input" in # Execute action
         list) action_list_updates ;;
         upgrade) action_upgrade_system ;;
         orphans) action_remove_orphans ;;
@@ -51,10 +54,10 @@ main() {
         exit $? # Exit !!!
     fi
 
-    local user_input=''
+    # INTERACTIVE
+    local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
     while (true); do
-        print_header
-        local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
+        print_header # Print header
         user_input=$(gum_choose --selected="$user_input" "${options[@]}") || exit 130
         case "$user_input" in # Execute action
         'List Updates') action_list_updates ;;
@@ -146,19 +149,19 @@ print_header() {
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
     ' && header_logo=$(gum_purple "$header_logo")
-    header_title="${VERSION}" && header_title=$(gum_white --bold "$header_title")
+    header_title="System Manager ${VERSION}" && header_title=$(gum_white --bold "$header_title")
     header_container=$(gum_join --vertical "$header_logo" "$header_title")
     clear && gum_style --width 89 --align center --margin '0 0' "$header_container" && echo
 }
 
 print_help() {
-    print_title "Commands"
+    print_title "Options (interactive)"
     gum_white 'arch-os --help     Open help page'
     gum_white 'arch-os --list     List package updates'
     gum_white 'arch-os --upgrade  Execute system upgrade'
     gum_white 'arch-os --orphans  Remove orphaned packages'
     gum_white 'arch-os --reset    Reset keyring'
-    echo && print_title "Non interactive"
+    echo && print_title "Options (non interactive)"
     gum_white 'arch-os --notify   Check, print and notify package updates'
     gum_white 'arch-os --check    Check and print package updates'
 }
@@ -181,7 +184,7 @@ gum_spin() { gum spin --spinner dot "${@}"; }
 print_title() { gum_purple --bold "${*}" && echo; }
 print_info() { gum_green "${*}"; }
 print_warn() { gum_yellow "${*}"; }
-print_fail() { gum_red --bold "${*}"; }
+print_fail() { gum_red --bold "ERROR: ${*}"; }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
 
