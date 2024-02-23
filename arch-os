@@ -17,6 +17,7 @@ main() {
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
     # Check updates
@@ -55,7 +56,7 @@ main() {
     fi
 
     # INTERACTIVE
-    local options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Help" "Quit")
+    local options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
     while (true); do
         print_header
         user_input=$(gum_choose --selected="$user_input" "${options[@]}") || exit 130
@@ -65,7 +66,7 @@ main() {
         'Remove Orphans') action_remove_orphans ;;
         'Downgrade Packages') action_downgrade_pkgs ;;
         'Reset Keyring') action_reset ;;
-        'Help') print_help ;;
+        'Open Help') print_help ;;
         'Quit') exit 130 ;;
         *) print_fail "Option '${user_input}' not available" && exit 1 ;;
         esac

@@ -6,7 +6,7 @@
 
 ### Dependencies
 
-**`paru kitty gum libnotify ttf-firacode-nerd`**
+**`paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`**
 
 ### Install
 
