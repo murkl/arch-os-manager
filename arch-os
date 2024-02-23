@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.2.6"
+VERSION="1.2.7"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -130,10 +130,10 @@ action_downgrade_pkgs() { # Downgrade packages
     fi
     print_header && print_title "Downgrade Packages"
     local user_input options
-    mapfile -t options < <(paru -Qe | awk '{print $1}')
+    mapfile -t options < <(pacman -Qqen) # Only packages from official db
     ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled." && return 0
     [ -z "$user_input" ] && print_warn "No package selected." && return 0
-    mapfile -t user_input <<<"$user_input"
+    mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "• ${item}"; done
     ! gum_confirm "Downgrade selected packages?" && echo && print_warn "Canceled." && return 0
     echo && sudo downgrade "${user_input[@]}"
@@ -201,7 +201,7 @@ gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
-gum_filter() { gum filter --prompt "> " --indicator "> " --placeholder "Type to filter and select with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_filter() { gum filter --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_choose() { gum choose --cursor "$(gum_space) • " "${@}"; }
 gum_confirm() { gum confirm "$@"; }
 gum_style() { gum style "${@}"; }
