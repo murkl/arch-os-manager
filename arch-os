@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.2.5"
+VERSION="1.2.6"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -17,6 +17,7 @@ main() {
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
     # Check updates
@@ -40,29 +41,30 @@ main() {
 
     # NON INTERACTIVE
     if [ -n "$user_input" ]; then
-        print_header # Print header
         # Remove trailing dashes from arg
         user_input=${*#"-"} && user_input=${user_input#"-"}
         case "$user_input" in # Execute action
         list) action_list_updates ;;
         upgrade) action_upgrade_system ;;
         orphans) action_remove_orphans ;;
+        downgrade) action_downgrade_pkgs ;;
         reset) action_reset ;;
         help) print_help ;;
-        *) print_help && echo && print_fail "Option '${*}' not available" && exit 1 ;;
+        *) print_help && print_fail "Option '${*}' not available" && exit 1 ;;
         esac
         exit $? # Exit !!!
     fi
 
     # INTERACTIVE
-    local options=("List Updates" "Upgrade System" "Remove Orphans" "Reset Keyring" "Open Help" "Quit")
+    local options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
     while (true); do
-        print_header # Print header
+        print_header
         user_input=$(gum_choose --selected="$user_input" "${options[@]}") || exit 130
         case "$user_input" in # Execute action
         'List Updates') action_list_updates ;;
         'Upgrade System') action_upgrade_system ;;
         'Remove Orphans') action_remove_orphans ;;
+        'Downgrade Packages') action_downgrade_pkgs ;;
         'Reset Keyring') action_reset ;;
         'Open Help') print_help ;;
         'Quit') exit 130 ;;
@@ -92,25 +94,25 @@ action_check_updates_available() {
 }
 
 action_list_updates() { # List package updates
-    print_title "List Package Updates"
+    print_header && print_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled." && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && print_info "Your system is up to date." && return 0
-    ! gum_confirm "Upgrade Packages?" && return 0
+    ! gum_confirm "Upgrade packages?" && return 0
     echo && action_upgrade_system
     return 0
 }
 
 action_upgrade_system() { # Update packages
-    print_title "Upgrade System Packages"
+    print_header && print_title "Upgrade System Packages"
     paru -Syu --skipreview
     echo && print_info "Upgrade successful."
-    ! gum_confirm "Remove Orphans?" && return 0
+    ! gum_confirm "Remove orphans?" && return 0
     echo && action_remove_orphans
     return 0
 }
 
 action_remove_orphans() { # Remove orphaned packages
-    print_title "Remove Orphans"
+    print_header && print_title "Remove Orphans"
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null # Remove orphans
     # shellcheck disable=SC2046
@@ -120,8 +122,27 @@ action_remove_orphans() { # Remove orphaned packages
     return 0
 }
 
+action_downgrade_pkgs() { # Downgrade packages
+    if ! command -v /usr/bin/downgrade &>/dev/null; then
+        print_header && print_title "Install Downgrade"
+        ! gum_confirm "Install missing package?" && print_warn "Canceled." && return 0
+        paru -S --noconfirm --skipreview downgrade
+    fi
+    print_header && print_title "Downgrade Packages"
+    local user_input options
+    mapfile -t options < <(paru -Qe | awk '{print $1}')
+    ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled." && return 0
+    [ -z "$user_input" ] && print_warn "No package selected." && return 0
+    mapfile -t user_input <<<"$user_input"
+    for item in "${user_input[@]}"; do gum_green "• ${item}"; done
+    ! gum_confirm "Downgrade selected packages?" && echo && print_warn "Canceled." && return 0
+    echo && sudo downgrade "${user_input[@]}"
+    echo && print_info "Downgrade successful."
+    return 0
+}
+
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    print_title "Reset Arch Keyring"
+    print_header && print_title "Reset Arch Keyring"
     ! gum_confirm "Are you sure?" && print_warn "Canceled." && return 0
     # Keyring reset
     sudo rm -rf /etc/pacman.d/gnupg
@@ -160,14 +181,15 @@ print_header() {
 
 print_help() {
     print_title "Options (interactive)"
-    gum_white 'arch-os --help     Open help page'
-    gum_white 'arch-os --list     List package updates'
-    gum_white 'arch-os --upgrade  Execute system upgrade'
-    gum_white 'arch-os --orphans  Remove orphaned packages'
-    gum_white 'arch-os --reset    Reset keyring'
+    gum_white 'arch-os --help       Open help page'
+    gum_white 'arch-os --list       List package updates'
+    gum_white 'arch-os --upgrade    Execute system upgrade'
+    gum_white 'arch-os --orphans    Remove orphaned packages'
+    gum_white 'arch-os --downgrade  Downgrade packages'
+    gum_white 'arch-os --reset      Reset keyring'
     echo && print_title "Options (non interactive)"
-    gum_white 'arch-os --check    Check and print package updates'
-    gum_white 'arch-os --notify   Check, print and notify package updates'
+    gum_white 'arch-os --check      Check and print package updates'
+    gum_white 'arch-os --notify     Check, print and notify package updates'
 }
 
 gum() { /usr/bin/gum "$@"; }
@@ -179,6 +201,7 @@ gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
+gum_filter() { gum filter --prompt "> " --indicator "> " --placeholder "Type to filter and select with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_choose() { gum choose --cursor "$(gum_space) • " "${@}"; }
 gum_confirm() { gum confirm "$@"; }
 gum_style() { gum style "${@}"; }
@@ -188,7 +211,7 @@ gum_spin() { gum spin --spinner dot "${@}"; }
 print_title() { gum_purple --bold "${*}" && echo; }
 print_info() { gum_green "${*}"; }
 print_warn() { gum_yellow "${*}"; }
-print_fail() { gum_red --bold "ERROR: ${*}"; }
+print_fail() { echo && gum_red --bold "ERROR: ${*}"; }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
 
