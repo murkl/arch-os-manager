@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.2.9"
+VERSION="1.3.0"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -60,7 +60,7 @@ main() {
     local options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
     while (true); do
         print_header # Print header
-        user_input=$(gum_choose --selected="$user_input" "${options[@]}") || exit 130
+        user_input=$(gum_choose --height=12 --selected="$user_input" "${options[@]}") || exit 130
         case "$user_input" in # Execute action
         'List Updates') action_list_updates ;;
         'Upgrade System') action_upgrade_system ;;
@@ -71,7 +71,7 @@ main() {
         'Quit') exit 130 ;;
         *) print_fail "Option '${user_input}' not available" && exit 1 ;;
         esac
-        gum_confirm --affirmative "< Back" --negative '' ''
+        ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 130
     done
 }
 
@@ -79,7 +79,7 @@ main() {
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
-trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'Exit' --negative '' ''; }
+trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'Ok' --negative 'Exit' ''; }
 trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line ${2})"; }
 
 # ///////////////////////////////////////////////////////////////////

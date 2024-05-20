@@ -36,7 +36,7 @@ dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os
 3. Set `Update command`:
 
 ```
-dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --list'"
+dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --upgrade'"
 ```
 
 4. Set `Package Manager` (optional):
