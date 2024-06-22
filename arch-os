@@ -105,7 +105,7 @@ action_list_updates() { # List package updates
 
 action_upgrade_system() { # Update packages
     print_title "Upgrade System Packages"
-    ! paru -Syu --noconfirm --skipreview && print_fail "Upgrade failed." && return 0
+    ! paru -Syu --skipreview && print_fail "Upgrade failed." && return 0
     echo && print_info "Upgrade successful."
     ! gum_confirm "Remove orphans?" && return 0
     echo && action_remove_orphans
