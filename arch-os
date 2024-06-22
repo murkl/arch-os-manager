@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.3.0"
+VERSION="1.3.1"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -30,20 +30,31 @@ main() {
         fi
     fi
 
-    # Set Traps
-    trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
-    trap 'trap_exit $?' EXIT                       # Set exit trap
-
     # Check arguments
     if [ $# -gt 1 ]; then
         print_help && print_fail "Max. 1 argument supported!"
         exit 1
     fi
 
+    # If 'check' action
+    if [ "$1" = "check" ]; then
+        action_check_updates_available
+        exit $?
+    fi
+
+    # If 'notify' action
+    if [ "$1" = "notify" ]; then
+        action_check_updates_available && notify "New updates available"
+        exit $?
+    fi
+
+    # Set Traps
+    trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
+    trap 'trap_exit $?' EXIT                       # Set exit trap
+
     # Set user action argument
     if [ -n "$1" ]; then
-        case "$1" in
-        'check' | 'notify' | 'list' | 'upgrade' | 'orphans' | 'downgrade' | 'reset' | 'help')
+        case "$1" in 'list' | 'upgrade' | 'orphans' | 'downgrade' | 'reset' | 'help')
             user_action="$1"
             ;;
         *)
@@ -58,8 +69,8 @@ main() {
 
     # Show menu or execute user action
     while (true); do
-        print_header # Print header
         if [ -z "$selected_action" ]; then
+            print_header # Print header
             options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
             user_input=$(gum_choose --height=12 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
@@ -76,8 +87,6 @@ main() {
 
         # Execute action
         case "$selected_action" in # Execute action
-        'check') action_check_updates_available ;;
-        'notify') action_check_updates_available && notify "New updates available" ;;
         'list') action_list_updates ;;
         'upgrade') action_upgrade_system ;;
         'orphans') action_remove_orphans ;;
@@ -112,7 +121,7 @@ action_check_updates_available() {
     local update_available="false"
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
-    [ "$update_available" = "false" ] && return 1
+    [ "$update_available" = "false" ] && return 130
     return 0
 }
 
@@ -212,8 +221,8 @@ print_help() {
     gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
     gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
-    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
     gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
+    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
 
     gum_white '' && print_title 'Examples'
     gum_white 'arch-os                           Open menu (Default)'
