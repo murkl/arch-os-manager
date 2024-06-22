@@ -203,9 +203,9 @@ gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
-gum_filter() { gum filter --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
-gum_choose() { gum choose --cursor "$(gum_space) • " "${@}"; }
-gum_confirm() { gum confirm "$@"; }
+gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_choose() { gum choose --no-show-help --header="" --cursor "$(gum_space) • " "${@}"; }
+gum_confirm() { gum confirm --no-show-help "$@"; }
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
