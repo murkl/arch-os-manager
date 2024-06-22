@@ -10,7 +10,7 @@ CACHE_DIR="${HOME}/.cache/arch-os"
 
 main() {
 
-    set -Eeuo pipefail    # Set error handling
+    set -Eeo pipefail    # Set error handling
     local user_input="$*" # Get user arguments
 
     # Check dependencies
