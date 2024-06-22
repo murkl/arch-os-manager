@@ -10,8 +10,8 @@ CACHE_DIR="${HOME}/.cache/arch-os"
 
 main() {
 
-    set -Eeo pipefail    # Set error handling
-    local user_input="$*" # Get user arguments
+    set -Eeo pipefail # Set error handling
+    local user_input options user_action selected_action
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -20,57 +20,73 @@ main() {
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
-    # Check updates
-    if [ -n "$user_input" ] && [ "$user_input" = "--check" ]; then
-        action_check_updates_available
-        exit $? # Exit with result from update check
+    # Check and start kitty
+    if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
+        shift # Shift argument to next
+        # Start kitty if not already present
+        if [ "$TERM" != "xterm-kitty" ]; then
+            kitty "$SELF" "$@" # Open script in kitty instance
+            exit 0
+        fi
     fi
 
-    # Check updates & notify
-    if [ -n "$user_input" ] && [ "$user_input" = "--notify" ]; then
-        action_check_updates_available && notify "New updates available"
-        exit $? # Exit with result from update check
+    # Set Traps
+    trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
+    trap 'trap_exit $?' EXIT                       # Set exit trap
+
+    # Check arguments
+    if [ $# -gt 1 ]; then
+        print_help && print_fail "Max. 1 argument supported!"
+        exit 1
     fi
 
-    ######################## START KITTY ########################
-    [ "$TERM" != "xterm-kitty" ] && kitty "$SELF" "$@" && exit 0
-    #############################################################
-
-    trap 'trap_error ${FUNCNAME} ${LINENO}' ERR # Set error trap
-    trap 'trap_exit $?' EXIT                    # Set exit trap
-
-    # NON INTERACTIVE
-    if [ -n "$user_input" ]; then
-        print_header # Print header
-        # Remove trailing dashes from arg
-        user_input=${*#"-"} && user_input=${user_input#"-"}
-        case "$user_input" in # Execute action
-        list) action_list_updates ;;
-        upgrade) action_upgrade_system ;;
-        orphans) action_remove_orphans ;;
-        downgrade) action_downgrade_pkgs ;;
-        reset) action_reset ;;
-        help) print_help ;;
-        *) print_help && print_fail "Option '${*}' not available" && exit 1 ;;
+    # Set user action argument
+    if [ -n "$1" ]; then
+        case "$1" in
+        'check' | 'notify' | 'list' | 'upgrade' | 'orphans' | 'downgrade' | 'reset' | 'help')
+            user_action="$1"
+            ;;
+        *)
+            print_help && print_fail "Action '${1}' not available"
+            exit 130
+            ;;
         esac
-        exit $? # Exit !!!
     fi
 
-    # INTERACTIVE
-    local options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
+    # Handle user action
+    selected_action="$user_action"
+
+    # Show menu or execute user action
     while (true); do
         print_header # Print header
-        user_input=$(gum_choose --height=12 --selected="$user_input" "${options[@]}") || exit 130
-        case "$user_input" in # Execute action
-        'List Updates') action_list_updates ;;
-        'Upgrade System') action_upgrade_system ;;
-        'Remove Orphans') action_remove_orphans ;;
-        'Downgrade Packages') action_downgrade_pkgs ;;
-        'Reset Keyring') action_reset ;;
-        'Open Help') print_help ;;
-        'Quit') exit 130 ;;
-        *) print_fail "Option '${user_input}' not available" && exit 1 ;;
+        if [ -z "$selected_action" ]; then
+            options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
+            user_input=$(gum_choose --height=12 --selected="$user_input" "${options[@]}") || exit 130
+            case "$user_input" in # Set user action to selected action
+            'List Updates') selected_action='list' ;;
+            'Upgrade System') selected_action='upgrade' ;;
+            'Remove Orphans') selected_action='orphans' ;;
+            'Downgrade Packages') selected_action='downgrade' ;;
+            'Reset Keyring') selected_action='reset' ;;
+            'Open Help') selected_action='help' ;;
+            'Quit') exit 130 ;;
+            *) print_fail "Action '${user_input}' not available" && exit 130 ;;
+            esac
+        fi
+
+        # Execute action
+        case "$selected_action" in # Execute action
+        'check') action_check_updates_available ;;
+        'notify') action_check_updates_available && notify "New updates available" ;;
+        'list') action_list_updates ;;
+        'upgrade') action_upgrade_system ;;
+        'orphans') action_remove_orphans ;;
+        'downgrade') action_downgrade_pkgs ;;
+        'reset') action_reset ;;
+        'help') print_help ;;
+        *) print_fail "Action '${selected_action}' not available" && exit 130 ;;
         esac
+        unset selected_action # Reset selected action
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 130
     done
 }
@@ -79,8 +95,14 @@ main() {
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
-trap_exit() { [ $? != 130 ] && gum_confirm --affirmative 'Ok' --negative 'Exit' ''; }
-trap_error() { print_fail "${BASH_COMMAND} failed ($?) in function '${1}' (line ${2})"; }
+trap_exit() {
+    [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
+    return "$1"
+}
+trap_error() {
+    [ "$1" != "130" ] && print_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    return "$1"
+}
 
 # ///////////////////////////////////////////////////////////////////
 # ACTIONS
@@ -95,25 +117,25 @@ action_check_updates_available() {
 }
 
 action_list_updates() { # List package updates
-    print_title "List Package Updates"
+    print_header && print_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled." && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && print_info "Your system is up to date." && return 0
-    ! gum_confirm "Upgrade packages?" && return 0
+    gum_white '' && ! gum_confirm "Upgrade packages?" && return 0
     echo && action_upgrade_system
     return 0
 }
 
 action_upgrade_system() { # Update packages
-    print_title "Upgrade System Packages"
+    print_header && print_title "Upgrade System Packages"
     ! paru -Syu --skipreview && print_fail "Upgrade failed." && return 0
     echo && print_info "Upgrade successful."
-    ! gum_confirm "Remove orphans?" && return 0
+    gum_white '' && ! gum_confirm "Remove orphans?" && return 0
     echo && action_remove_orphans
     return 0
 }
 
 action_remove_orphans() { # Remove orphaned packages
-    print_title "Remove Orphans"
+    print_header && print_title "Remove Orphans"
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null # Remove orphans
     # shellcheck disable=SC2046
@@ -124,6 +146,7 @@ action_remove_orphans() { # Remove orphaned packages
 }
 
 action_downgrade_pkgs() { # Downgrade packages
+    print_header
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         print_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && print_warn "Canceled." && return 0
@@ -137,14 +160,14 @@ action_downgrade_pkgs() { # Downgrade packages
     [ -z "$user_input" ] && print_warn "No package selected." && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "• ${item}"; done
-    ! gum_confirm "Downgrade selected packages?" && echo && print_warn "Canceled." && return 0
+    gum_white '' && ! gum_confirm "Downgrade selected packages?" && echo && print_warn "Canceled." && return 0
     echo && sudo downgrade "${user_input[@]}"
     echo && print_info "Downgrade successful."
     return 0
 }
 
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    print_title "Reset Arch Keyring"
+    print_header && print_title "Reset Arch Keyring"
     ! gum_confirm "Are you sure?" && print_warn "Canceled." && return 0
     # Keyring reset
     sudo rm -rf /etc/pacman.d/gnupg
@@ -182,16 +205,21 @@ print_header() {
 }
 
 print_help() {
-    print_title "Options (interactive)"
-    gum_white 'arch-os --help       Open help page'
-    gum_white 'arch-os --list       List package updates'
-    gum_white 'arch-os --upgrade    Execute system upgrade'
-    gum_white 'arch-os --orphans    Remove orphaned packages'
-    gum_white 'arch-os --downgrade  Downgrade packages'
-    gum_white 'arch-os --reset      Reset keyring'
-    echo && print_title "Options (non interactive)"
-    gum_white 'arch-os --check      Check and print package updates'
-    gum_white 'arch-os --notify     Check, print and notify package updates'
+    print_header && print_title "Actions"
+    gum_white 'arch-os [--kitty | -k] help       Open help page'
+    gum_white 'arch-os [--kitty | -k] list       List package updates'
+    gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
+    gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
+    gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
+    gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
+    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
+    gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
+
+    gum_white '' && print_title 'Examples'
+    gum_white 'arch-os                           Open menu (Default)'
+    gum_white 'arch-os --kitty                   Open menu in kitty'
+    gum_white 'arch-os list                      List updates'
+    gum_white 'arch-os -k list                   List updates in kitty'
 }
 
 gum() { /usr/bin/gum "$@"; }
@@ -205,7 +233,7 @@ gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "$(gum_space) • " "${@}"; }
-gum_confirm() { gum confirm --no-show-help "$@"; }
+gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }

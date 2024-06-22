@@ -30,19 +30,19 @@
 2. Set `Check command`:
 
 ```
-dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os --check'"
+dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
 ```
 
 3. Set `Update command`:
 
 ```
-dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --upgrade'"
+dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
 ```
 
 4. Set `Package Manager` (optional):
 
 ```
-dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os'"
+dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
 ```
 
 <br>
