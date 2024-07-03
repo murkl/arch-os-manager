@@ -72,7 +72,7 @@ main() {
         if [ -z "$selected_action" ]; then
             print_header # Print header
             options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
-            user_input=$(gum_choose --height=12 --selected="$user_input" "${options[@]}") || exit 130
+            user_input=$(gum_choose --height=10 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'List Updates') selected_action='list' ;;
             'Upgrade System') selected_action='upgrade' ;;
