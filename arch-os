@@ -138,8 +138,6 @@ action_upgrade_system() { # Update packages
     print_header && print_title "Upgrade System Packages"
     ! paru -Syu --skipreview && print_fail "Upgrade failed." && return 0
     echo && print_info "Upgrade successful."
-    gum_white '' && ! gum_confirm "Remove orphans?" && return 0
-    echo && action_remove_orphans
     return 0
 }
 
@@ -214,7 +212,10 @@ print_header() {
 }
 
 print_help() {
-    print_header && print_title "Actions"
+    print_header && print_title 'App'
+    gum_white 'arch-os [--kitty | -k]            Open main menu'
+
+    gum_white '' && print_title 'Actions'
     gum_white 'arch-os [--kitty | -k] help       Open help page'
     gum_white 'arch-os [--kitty | -k] list       List package updates'
     gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
@@ -223,12 +224,6 @@ print_help() {
     gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
     gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
     gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
-
-    gum_white '' && print_title 'Examples'
-    gum_white 'arch-os                           Open menu (Default)'
-    gum_white 'arch-os --kitty                   Open menu in kitty'
-    gum_white 'arch-os list                      List updates'
-    gum_white 'arch-os -k list                   List updates in kitty'
 }
 
 gum() { /usr/bin/gum "$@"; }
