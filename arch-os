@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.3.1"
+VERSION="1.3.2"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -72,7 +72,7 @@ main() {
         if [ -z "$selected_action" ]; then
             print_header # Print header
             options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
-            user_input=$(gum_choose --height=12 --selected="$user_input" "${options[@]}") || exit 130
+            user_input=$(gum_choose --height=10 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'List Updates') selected_action='list' ;;
             'Upgrade System') selected_action='upgrade' ;;
@@ -138,8 +138,6 @@ action_upgrade_system() { # Update packages
     print_header && print_title "Upgrade System Packages"
     ! paru -Syu --skipreview && print_fail "Upgrade failed." && return 0
     echo && print_info "Upgrade successful."
-    gum_white '' && ! gum_confirm "Remove orphans?" && return 0
-    echo && action_remove_orphans
     return 0
 }
 
@@ -159,12 +157,12 @@ action_downgrade_pkgs() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         print_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && print_warn "Canceled." && return 0
-        paru -S --noconfirm --skipreview downgrade
+        paru -S --skipreview downgrade
         print_header # Clean install output & print new header
     fi
     print_title "Downgrade Packages"
     local user_input options
-    mapfile -t options < <(pacman -Qqen) # Only packages from official db
+    mapfile -t options < <(pacman -Qqn) # Only packages from official db
     ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled." && return 0
     [ -z "$user_input" ] && print_warn "No package selected." && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
@@ -214,7 +212,10 @@ print_header() {
 }
 
 print_help() {
-    print_header && print_title "Actions"
+    print_header && print_title 'App'
+    gum_white 'arch-os [--kitty | -k]            Open main menu'
+
+    gum_white '' && print_title 'Actions'
     gum_white 'arch-os [--kitty | -k] help       Open help page'
     gum_white 'arch-os [--kitty | -k] list       List package updates'
     gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
@@ -223,12 +224,6 @@ print_help() {
     gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
     gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
     gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
-
-    gum_white '' && print_title 'Examples'
-    gum_white 'arch-os                           Open menu (Default)'
-    gum_white 'arch-os --kitty                   Open menu in kitty'
-    gum_white 'arch-os list                      List updates'
-    gum_white 'arch-os -k list                   List updates in kitty'
 }
 
 gum() { /usr/bin/gum "$@"; }
