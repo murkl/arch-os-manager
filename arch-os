@@ -159,12 +159,12 @@ action_downgrade_pkgs() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         print_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && print_warn "Canceled." && return 0
-        paru -S --noconfirm --skipreview downgrade
+        paru -S --skipreview downgrade
         print_header # Clean install output & print new header
     fi
     print_title "Downgrade Packages"
     local user_input options
-    mapfile -t options < <(pacman -Qqen) # Only packages from official db
+    mapfile -t options < <(pacman -Qqn) # Only packages from official db
     ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled." && return 0
     [ -z "$user_input" ] && print_warn "No package selected." && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
