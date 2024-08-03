@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="1.3.2"
+VERSION="1.3.3"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -127,16 +127,17 @@ action_check_updates_available() {
 
 action_list_updates() { # List package updates
     print_header && print_title "List Package Updates"
-    ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled." && return 0 # Preload and return if user press ctrl + c
+    ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && print_info "Your system is up to date." && return 0
-    gum_white '' && ! gum_confirm "Upgrade packages?" && return 0
-    echo && action_upgrade_system
+    echo && gum_confirm "Upgrade packages?" && action_upgrade_system
     return 0
 }
 
 action_upgrade_system() { # Update packages
     print_header && print_title "Upgrade System Packages"
     ! paru -Syu --skipreview && print_fail "Upgrade failed." && return 0
+    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
+    [ -n "$pacdiff_info" ] && echo && print_warn "Files need to merge:" && echo -e "$pacdiff_info"
     echo && print_info "Upgrade successful."
     return 0
 }
@@ -148,7 +149,7 @@ action_remove_orphans() { # Remove orphaned packages
     # shellcheck disable=SC2046
     paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null                  # Remove more orphans
     command -v flatpak &>/dev/null && flatpak uninstall -y --unused # Remove unused flatpaks
-    echo && print_info "Done."
+    echo && print_info "Done"
     return 0
 }
 
@@ -156,33 +157,33 @@ action_downgrade_pkgs() { # Downgrade packages
     print_header
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         print_title "Install Downgrade"
-        ! gum_confirm "Install missing package?" && print_warn "Canceled." && return 0
+        ! gum_confirm "Install missing package?" && print_warn "Canceled" && return 0
         paru -S --skipreview downgrade
         print_header # Clean install output & print new header
     fi
     print_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn) # Only packages from official db
-    ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled." && return 0
+    ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled" && return 0
     [ -z "$user_input" ] && print_warn "No package selected." && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
-    for item in "${user_input[@]}"; do gum_green "• ${item}"; done
-    gum_white '' && ! gum_confirm "Downgrade selected packages?" && echo && print_warn "Canceled." && return 0
-    echo && sudo downgrade "${user_input[@]}"
+    for item in "${user_input[@]}"; do gum_green "> ${item}"; done
+    gum_white '' && ! gum_confirm "Downgrade selected packages?" && print_warn "Canceled" && return 0
+    sudo downgrade "${user_input[@]}"
     echo && print_info "Downgrade successful."
     return 0
 }
 
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
     print_header && print_title "Reset Arch Keyring"
-    ! gum_confirm "Are you sure?" && print_warn "Canceled." && return 0
+    ! gum_confirm "Are you sure?" && print_warn "Canceled" && return 0
     # Keyring reset
     sudo rm -rf /etc/pacman.d/gnupg
     sudo pacman-key --init
     sudo pacman-key --populate
     # Update Arch keyring & system
     paru -Sy --noconfirm archlinux-keyring && paru -Su --skipreview
-    echo && print_info "Done."
+    echo && print_info "Done"
     return 0
 }
 
@@ -198,17 +199,15 @@ COLOR_YELLOW=3
 COLOR_RED=1
 
 print_header() {
-    local header_logo header_title header_container
-    header_logo='
+    clear
+    gum_purple '
  █████  ██████   ██████ ██   ██      ██████  ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
 ███████ ██████  ██      ███████     ██    ██ ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    ' && header_logo=$(gum_purple "$header_logo")
-    header_title="System Manager ${VERSION}" && header_title=$(gum_white --bold "$header_title")
-    header_container=$(gum_join --vertical "$header_logo" "$header_title")
-    clear && gum_style --width 89 --align center --margin '0 0' "$header_container" && echo
+    '
+    gum_white --bold "System Manager ${VERSION}" && echo
 }
 
 print_help() {
@@ -228,23 +227,21 @@ print_help() {
 
 gum() { /usr/bin/gum "$@"; }
 
-gum_space() { echo '               '; } # Spaces till header
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
-gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
-gum_choose() { gum choose --no-show-help --header="" --cursor "$(gum_space) • " "${@}"; }
-gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_style() { gum style "${@}"; }
-gum_join() { gum join "${@}"; }
+gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_choose() { gum choose --no-show-help --header="" --cursor "• " "${@}"; }
+gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 
-print_title() { gum_purple --bold "${*}" && echo; }
-print_info() { gum_green "${*}"; }
-print_warn() { gum_yellow "${*}"; }
+print_title() { gum_purple --bold "> ${*}" && echo; }
+print_info() { gum_green --bold "> ${*}"; }
+print_warn() { gum_yellow --bold "> ${*}"; }
 print_fail() { echo && gum_red --bold "ERROR: ${*}"; }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
@@ -262,8 +259,8 @@ kitty() {
 KITTY_CONF='
 hide_window_decorations yes
 remember_window_size false
-initial_window_width 800
-initial_window_height 600
+initial_window_width 1080
+initial_window_height 720
 placement_strategy center
 window_padding_width 32
 font_family Fira Code Nerd Font
