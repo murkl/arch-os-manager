@@ -252,6 +252,7 @@ action_logs() { # System Logs
 trap_exit() {
     rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
     [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
+    gum_message "Exit"
     return "$1"
 }
 trap_error() {
