@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090
+
 # ///////////////////////////////////////////////////////////////////
 #                         ARCH OS MANAGER
 #                - Arch Linux Helper Script TUI -
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.3.4"
+VERSION="1.3.5"
 
-# CACHE
-CACHE_DIR="${HOME}/.cache/arch-os"
+# HOME
+ARCH_OS_HOME="${HOME}/.arch-os"
+ARCH_OS_CONF="${ARCH_OS_HOME}/arch-os.conf"
+KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -33,6 +37,11 @@ main() {
     if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
+
+    # Init
+    mkdir -p "$ARCH_OS_HOME"
+    touch "$ARCH_OS_CONF"
+    source "$ARCH_OS_CONF"
 
     # Check and start kitty
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
@@ -68,12 +77,12 @@ main() {
 
     # Set user action argument
     if [ -n "$1" ]; then
-        case "$1" in 'list' | 'upgrade' | 'orphans' | 'downgrade' | 'reset' | 'help')
+        case "$1" in 'list' | 'upgrade' | 'orphans' | 'downgrade' | 'refresh' | 'merge' | 'reset' | 'logs' | 'help')
             user_action="$1"
             ;;
         *)
             print_help && gum_fail "Action '${1}' not available"
-            exit 130
+            exit 2
             ;;
         esac
     fi
@@ -85,17 +94,20 @@ main() {
     while (true); do
         if [ -z "$selected_action" ]; then
             print_header # Print header
-            options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Reset Keyring" "Open Help" "Quit")
-            user_input=$(gum_choose --height=10 --selected="$user_input" "${options[@]}") || exit 130
+            options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Refresh Mirrorlist" "Merge Configfiles" "Reset Keyring" "System Logs" "Open Help" "Quit")
+            user_input=$(gum_choose --height=13 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'List Updates') selected_action='list' ;;
             'Upgrade System') selected_action='upgrade' ;;
             'Remove Orphans') selected_action='orphans' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
+            'Refresh Mirrorlist') selected_action='refresh' ;;
+            'Merge Configfiles') selected_action='merge' ;;
             'Reset Keyring') selected_action='reset' ;;
+            'System Logs') selected_action='logs' ;;
             'Open Help') selected_action='help' ;;
             'Quit') exit 130 ;;
-            *) gum_fail "Action '${user_input}' not available" && exit 130 ;;
+            *) gum_fail "Action '${user_input}' not available" && exit 2 ;;
             esac
         fi
 
@@ -105,9 +117,12 @@ main() {
         'upgrade') action_upgrade_system ;;
         'orphans') action_remove_orphans ;;
         'downgrade') action_downgrade_pkgs ;;
+        'refresh') action_refresh ;;
+        'merge') action_merge ;;
         'reset') action_reset ;;
+        'logs') action_logs ;;
         'help') print_help ;;
-        *) gum_fail "Action '${selected_action}' not available" && exit 130 ;;
+        *) gum_fail "Action '${selected_action}' not available" && exit 2 ;;
         esac
         unset selected_action # Reset selected action
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 130
@@ -175,6 +190,38 @@ action_downgrade_pkgs() { # Downgrade packages
     return 0
 }
 
+action_refresh() { # Refresh mirrorlist with reflector
+    print_header
+    if ! command -v reflector &>/dev/null; then
+        gum_title "Install Reflector"
+        ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
+        paru -S --skipreview reflector
+        print_header # Clean install output & print new header
+    fi
+    gum_title "Refresh Mirrorlist"
+    # Refresh mirrorlist with reflector and return if user press ctrl + c
+    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
+    cat "${ARCH_OS_HOME}/.mirrorlist.tmp" && echo
+    ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
+    sudo mv -f "${ARCH_OS_HOME}/.mirrorlist.tmp" /etc/pacman.d/mirrorlist
+    gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
+    return 0
+}
+
+action_merge() { # Merge updated config files
+    print_header
+    if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
+        gum_title "Install Pacman Tools"
+        ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
+        paru -S --skipreview pacman-contrib meld
+        print_header # Clean install output & print new header
+    fi
+    gum_title "Merge Config Files"
+    ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
+    echo && gum_info "Done"
+    return 0
+}
+
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
     print_header && gum_title "Reset Arch Keyring"
     ! gum_confirm "Are you sure?" && gum_warn "Canceled" && return 0
@@ -188,16 +235,25 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     return 0
 }
 
+action_logs() { # System Logs
+    print_header && gum_title "System Error Logs"
+    journalctl -p 3 -b --quiet --no-pager
+    echo && gum_title "Service Error Logs"
+    systemctl --failed
+    return 0
+}
+
 # ///////////////////////////////////////////////////////////////////
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
 trap_exit() {
+    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
     [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
     return "$1"
 }
 trap_error() {
-    [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    [ "$1" != "2" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
     return "$1"
 }
 
@@ -248,9 +304,12 @@ print_help() {
     gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
     gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
+    gum_white 'arch-os [--kitty | -k] refresh    Refresh mirrorlist'
+    gum_white 'arch-os [--kitty | -k] merge      Merge updated config files'
     gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
     gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
     gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
+    gum_white 'arch-os [--kitty | -k] logs       Show system logs'
 }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
@@ -260,12 +319,12 @@ notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "A
 # ///////////////////////////////////////////////////////////////////
 
 kitty() {
-    mkdir -p "$CACHE_DIR" && echo "$KITTY_CONF" >"${CACHE_DIR}/kitty.conf"
-    /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "${CACHE_DIR}/kitty.conf" "$@"
+    [ ! -f "$KITTY_CONF" ] && echo "$KITTY_CONF_TEMPLATE" >"$KITTY_CONF"
+    /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "$KITTY_CONF" "$@"
 }
 
 # https://sw.kovidgoyal.net/kitty/conf/
-KITTY_CONF='
+KITTY_CONF_TEMPLATE='
 hide_window_decorations yes
 remember_window_size false
 initial_window_width 1080
