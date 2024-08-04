@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
+# ///////////////////////////////////////////////////////////////////
+#                         ARCH OS MANAGER
+#                - Arch Linux Helper Script TUI -
+# ///////////////////////////////////////////////////////////////////
 
-VERSION="1.3.3"
+# VERSION
+VERSION="1.3.4"
+
+# CACHE
+CACHE_DIR="${HOME}/.cache/arch-os"
+
+# COLORS
+# https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
+COLOR_WHITE=7
+COLOR_GREEN=2
+COLOR_PURPLE=212
+COLOR_YELLOW=3
+COLOR_RED=1
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
 # ///////////////////////////////////////////////////////////////////
-
-CACHE_DIR="${HOME}/.cache/arch-os"
 
 main() {
 
@@ -32,7 +46,7 @@ main() {
 
     # Check arguments
     if [ $# -gt 1 ]; then
-        print_help && print_fail "Max. 1 argument supported!"
+        print_help && gum_fail "Max. 1 argument supported!"
         exit 1
     fi
 
@@ -58,7 +72,7 @@ main() {
             user_action="$1"
             ;;
         *)
-            print_help && print_fail "Action '${1}' not available"
+            print_help && gum_fail "Action '${1}' not available"
             exit 130
             ;;
         esac
@@ -81,7 +95,7 @@ main() {
             'Reset Keyring') selected_action='reset' ;;
             'Open Help') selected_action='help' ;;
             'Quit') exit 130 ;;
-            *) print_fail "Action '${user_input}' not available" && exit 130 ;;
+            *) gum_fail "Action '${user_input}' not available" && exit 130 ;;
             esac
         fi
 
@@ -93,24 +107,11 @@ main() {
         'downgrade') action_downgrade_pkgs ;;
         'reset') action_reset ;;
         'help') print_help ;;
-        *) print_fail "Action '${selected_action}' not available" && exit 130 ;;
+        *) gum_fail "Action '${selected_action}' not available" && exit 130 ;;
         esac
         unset selected_action # Reset selected action
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 130
     done
-}
-
-# ///////////////////////////////////////////////////////////////////
-# TRAPS
-# ///////////////////////////////////////////////////////////////////
-
-trap_exit() {
-    [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
-    return "$1"
-}
-trap_error() {
-    [ "$1" != "130" ] && print_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
-    return "$1"
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -126,104 +127,83 @@ action_check_updates_available() {
 }
 
 action_list_updates() { # List package updates
-    print_header && print_title "List Package Updates"
-    ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && print_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
-    ! action_check_updates_available && print_info "Your system is up to date." && return 0
+    print_header && gum_title "List Package Updates"
+    ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
+    ! action_check_updates_available && gum_info "Your system is up to date" && return 0
     echo && gum_confirm "Upgrade packages?" && action_upgrade_system
     return 0
 }
 
 action_upgrade_system() { # Update packages
-    print_header && print_title "Upgrade System Packages"
-    ! paru -Syu --skipreview && print_fail "Upgrade failed." && return 0
+    print_header && gum_title "Upgrade System Packages"
+    ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -n "$pacdiff_info" ] && echo && print_warn "Files need to merge:" && echo -e "$pacdiff_info"
-    echo && print_info "Upgrade successful."
+    [ -n "$pacdiff_info" ] && echo && gum_warn "Files need to merge:" && echo -e "$pacdiff_info"
+    echo && gum_info "Upgrade successful"
     return 0
 }
 
 action_remove_orphans() { # Remove orphaned packages
-    print_header && print_title "Remove Orphans"
+    print_header && gum_title "Remove Orphans"
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null # Remove orphans
     # shellcheck disable=SC2046
     paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null                  # Remove more orphans
     command -v flatpak &>/dev/null && flatpak uninstall -y --unused # Remove unused flatpaks
-    echo && print_info "Done"
+    echo && gum_info "Done"
     return 0
 }
 
 action_downgrade_pkgs() { # Downgrade packages
     print_header
     if ! command -v /usr/bin/downgrade &>/dev/null; then
-        print_title "Install Downgrade"
-        ! gum_confirm "Install missing package?" && print_warn "Canceled" && return 0
+        gum_title "Install Downgrade"
+        ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
         paru -S --skipreview downgrade
         print_header # Clean install output & print new header
     fi
-    print_title "Downgrade Packages"
+    gum_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn) # Only packages from official db
-    ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && print_warn "Canceled" && return 0
-    [ -z "$user_input" ] && print_warn "No package selected." && return 0
+    ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && gum_warn "Canceled" && return 0
+    [ -z "$user_input" ] && gum_warn "No package selected" && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
-    gum_white '' && ! gum_confirm "Downgrade selected packages?" && print_warn "Canceled" && return 0
+    gum_white '' && ! gum_confirm "Downgrade selected packages?" && gum_warn "Canceled" && return 0
     sudo downgrade "${user_input[@]}"
-    echo && print_info "Downgrade successful."
+    echo && gum_info "Downgrade successful"
     return 0
 }
 
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    print_header && print_title "Reset Arch Keyring"
-    ! gum_confirm "Are you sure?" && print_warn "Canceled" && return 0
+    print_header && gum_title "Reset Arch Keyring"
+    ! gum_confirm "Are you sure?" && gum_warn "Canceled" && return 0
     # Keyring reset
     sudo rm -rf /etc/pacman.d/gnupg
     sudo pacman-key --init
     sudo pacman-key --populate
     # Update Arch keyring & system
     paru -Sy --noconfirm archlinux-keyring && paru -Su --skipreview
-    echo && print_info "Done"
+    echo && gum_info "Done"
     return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
-# PRINT
+# TRAPS
 # ///////////////////////////////////////////////////////////////////
 
-# https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
-COLOR_WHITE=7
-COLOR_GREEN=2
-COLOR_PURPLE=212
-COLOR_YELLOW=3
-COLOR_RED=1
-
-print_header() {
-    clear
-    gum_purple '
- █████  ██████   ██████ ██   ██      ██████  ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
-███████ ██████  ██      ███████     ██    ██ ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
-██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    '
-    gum_white --bold "System Manager ${VERSION}" && echo
+trap_exit() {
+    [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
+    return "$1"
+}
+trap_error() {
+    [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    return "$1"
 }
 
-print_help() {
-    print_header && print_title 'App'
-    gum_white 'arch-os [--kitty | -k]            Open main menu'
-
-    gum_white '' && print_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] help       Open help page'
-    gum_white 'arch-os [--kitty | -k] list       List package updates'
-    gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
-    gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
-    gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
-    gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
-    gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
-    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
-}
+# ///////////////////////////////////////////////////////////////////
+# GUM
+# ///////////////////////////////////////////////////////////////////
 
 gum() { /usr/bin/gum "$@"; }
 
@@ -239,15 +219,44 @@ gum_choose() { gum choose --no-show-help --header="" --cursor "• " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 
-print_title() { gum_purple --bold "> ${*}" && echo; }
-print_info() { gum_green --bold "> ${*}"; }
-print_warn() { gum_yellow --bold "> ${*}"; }
-print_fail() { echo && gum_red --bold "ERROR: ${*}"; }
+gum_title() { gum_purple --bold "> ${*}" && echo; }
+gum_info() { gum_green --bold "> ${*}"; }
+gum_warn() { gum_yellow --bold "> ${*}"; }
+gum_fail() { echo && gum_red --bold "ERROR: ${*}"; }
+
+# ///////////////////////////////////////////////////////////////////
+# PRINT & NOTIFY
+# ///////////////////////////////////////////////////////////////////
+
+print_header() {
+    clear && gum_purple '
+ █████  ██████   ██████ ██   ██      ██████  ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
+███████ ██████  ██      ███████     ██    ██ ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
+██   ██ ██   ██  ██████ ██   ██      ██████  ███████
+    '
+    gum_white --bold "System Manager ${VERSION}" && echo
+}
+
+print_help() {
+    print_header && gum_title 'App'
+    gum_white 'arch-os [--kitty | -k]            Open main menu'
+    gum_white '' && gum_title 'Actions'
+    gum_white 'arch-os [--kitty | -k] help       Open help page'
+    gum_white 'arch-os [--kitty | -k] list       List package updates'
+    gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
+    gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
+    gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
+    gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
+    gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
+    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
+}
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
 
 # ///////////////////////////////////////////////////////////////////
-# KITTY
+# KITTY & CONFIG
 # ///////////////////////////////////////////////////////////////////
 
 kitty() {
@@ -300,13 +309,13 @@ color15                 #E5E9F0
 # ///////////////////////////////////////////////////////////////////
 
 # Locating working dir
-WORKING_SOURCE=${BASH_SOURCE[0]}
-while [ -L "$WORKING_SOURCE" ]; do
-    WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
-    WORKING_SOURCE=$(readlink "$WORKING_SOURCE")
-    [[ $WORKING_SOURCE != /* ]] && WORKING_SOURCE=$WORKING_DIR/$WORKING_SOURCE
+working_src=${BASH_SOURCE[0]}
+while [ -L "$working_src" ]; do
+    WORKING_DIR=$(cd -P "$(dirname "$working_src")" >/dev/null 2>&1 && pwd)
+    working_src=$(readlink "$working_src")
+    [[ $working_src != /* ]] && working_src=$WORKING_DIR/$working_src
 done
-WORKING_DIR=$(cd -P "$(dirname "$WORKING_SOURCE")" >/dev/null 2>&1 && pwd)
+WORKING_DIR=$(cd -P "$(dirname "$working_src")" >/dev/null 2>&1 && pwd)
 SELF="$WORKING_DIR/$(basename "$0")"
 
 main "$@" # Start main function
