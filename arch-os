@@ -178,7 +178,6 @@ action_merge() { # Merge updated config files
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configurations"
-    gum_message "Execute pacdiff..."
     ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
