@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.3.6"
+VERSION="1.3.7"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -93,7 +93,7 @@ main() {
     # Show menu or execute user action
     while (true); do
         if [ -z "$selected_action" ]; then
-            print_header # Print header
+            print_header && echo # Print header
             options=("List Updates" "Upgrade System" "Remove Orphans" "Downgrade Packages" "Refresh Mirrorlist" "Merge Configfiles" "Reset Keyring" "System Logs" "Open Help" "Quit")
             user_input=$(gum_choose --height=13 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
@@ -145,7 +145,7 @@ action_list_updates() { # List package updates
     print_header && gum_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
-    echo && gum_confirm "Upgrade packages?" && action_upgrade_system
+    gum_confirm "Upgrade packages?" && action_upgrade_system
     return 0
 }
 
@@ -153,8 +153,8 @@ action_upgrade_system() { # Update packages
     print_header && gum_title "Upgrade System Packages"
     ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -n "$pacdiff_info" ] && echo && gum_warn "Files need to merge:" && echo -e "$pacdiff_info"
-    echo && gum_info "Upgrade successful"
+    [ -n "$pacdiff_info" ] && gum_warn "Files need to merge:" && echo -e "$pacdiff_info"
+    gum_info "Upgrade successful"
     return 0
 }
 
@@ -165,7 +165,7 @@ action_remove_orphans() { # Remove orphaned packages
     # shellcheck disable=SC2046
     paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null                  # Remove more orphans
     command -v flatpak &>/dev/null && flatpak uninstall -y --unused # Remove unused flatpaks
-    echo && gum_info "Done"
+    gum_info "Done"
     return 0
 }
 
@@ -184,9 +184,9 @@ action_downgrade_pkgs() { # Downgrade packages
     [ -z "$user_input" ] && gum_warn "No package selected" && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
-    gum_white '' && ! gum_confirm "Downgrade selected packages?" && gum_warn "Canceled" && return 0
+    ! gum_confirm "Downgrade selected packages?" && gum_warn "Canceled" && return 0
     sudo downgrade "${user_input[@]}"
-    echo && gum_info "Downgrade successful"
+    gum_info "Downgrade successful"
     return 0
 }
 
@@ -201,11 +201,11 @@ action_refresh() { # Refresh mirrorlist with reflector
     gum_title "Refresh Mirrorlist"
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
-    cat "${ARCH_OS_HOME}/.mirrorlist.tmp" && echo
+    cat "${ARCH_OS_HOME}/.mirrorlist.tmp"
     ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
     sudo mv -f "${ARCH_OS_HOME}/.mirrorlist.tmp" /etc/pacman.d/mirrorlist
     sudo chown root:root /etc/pacman.d/mirrorlist
-    echo && gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
+    gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
     return 0
 }
 
@@ -218,8 +218,9 @@ action_merge() { # Merge updated config files
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Config Files"
+    gum_message "Execute pacdiff..."
     ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
-    echo && gum_info "Done"
+    gum_info "Done"
     return 0
 }
 
@@ -232,14 +233,14 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     sudo pacman-key --populate
     # Update Arch keyring & system
     paru -Sy --noconfirm archlinux-keyring && paru -Su --skipreview
-    echo && gum_info "Done"
+    gum_info "Done"
     return 0
 }
 
 action_logs() { # System Logs
     print_header && gum_title "System Error Logs"
     journalctl -p 3 -b --quiet --no-pager
-    echo && gum_title "Service Error Logs"
+    gum_title "Service Error Logs"
     systemctl --failed
     return 0
 }
@@ -276,10 +277,11 @@ gum_choose() { gum choose --no-show-help --header="" --cursor "• " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 
-gum_title() { gum_purple --bold "> ${*}" && echo; }
+gum_title() { echo && gum_purple --bold "> ${*}"; }
+gum_message() { gum_white --bold "> ${*}"; }
 gum_info() { gum_green --bold "> ${*}"; }
 gum_warn() { gum_yellow --bold "> ${*}"; }
-gum_fail() { echo && gum_red --bold "ERROR: ${*}"; }
+gum_fail() { gum_red --bold "ERROR: ${*}"; }
 
 # ///////////////////////////////////////////////////////////////////
 # PRINT & NOTIFY
@@ -293,13 +295,13 @@ print_header() {
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
     '
-    gum_white --bold "System Manager ${VERSION}" && echo
+    gum_white --bold "System Manager ${VERSION}"
 }
 
 print_help() {
     print_header && gum_title 'App'
     gum_white 'arch-os [--kitty | -k]            Open main menu'
-    gum_white '' && gum_title 'Actions'
+    gum_title 'Actions'
     gum_white 'arch-os [--kitty | -k] help       Open help page'
     gum_white 'arch-os [--kitty | -k] list       List package updates'
     gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
