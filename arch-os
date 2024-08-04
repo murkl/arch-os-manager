@@ -153,7 +153,7 @@ action_upgrade_system() { # Update packages
     print_header && gum_title "Upgrade System Packages"
     ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -z "$pacdiff_info" ] && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
+    [ -n "$pacdiff_info" ] && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
     gum_info "Upgrade successful"
     return 0
 }
