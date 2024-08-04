@@ -204,7 +204,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     cat "${ARCH_OS_HOME}/.mirrorlist.tmp" && echo
     ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
     sudo mv -f "${ARCH_OS_HOME}/.mirrorlist.tmp" /etc/pacman.d/mirrorlist
-    gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
+    echo && gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
     return 0
 }
 
