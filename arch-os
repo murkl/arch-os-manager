@@ -125,7 +125,7 @@ main() {
         *) gum_fail "Action '${selected_action}' not available" && exit 2 ;;
         esac
         unset selected_action # Reset selected action
-        ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 130
+        ! gum_confirm --affirmative "< Menu" --negative 'Exit' '' && exit 130
     done
 }
 
