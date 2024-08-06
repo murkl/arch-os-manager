@@ -29,7 +29,7 @@ COLOR_RED=1
 main() {
 
     set -Eeo pipefail # Set error handling
-    local user_input options user_action selected_action
+    local user_input options selected_action
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -75,20 +75,8 @@ main() {
     trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                       # Set exit trap
 
-    # Set user action argument
-    if [ -n "$1" ]; then
-        case "$1" in 'list' | 'upgrade' | 'orphans' | 'merge' | 'refresh' | 'downgrade' | 'reset' | 'logs' | 'help')
-            user_action="$1"
-            ;;
-        *)
-            print_help && gum_fail "Action '${1}' not available"
-            exit 2
-            ;;
-        esac
-    fi
-
     # Handle user action
-    selected_action="$user_action"
+    selected_action="$1"
 
     # Show menu or execute user action
     while (true); do
@@ -112,6 +100,7 @@ main() {
         fi
 
         # Execute action
+        print_header && echo
         case "$selected_action" in # Execute action
         'list') action_list_updates ;;
         'upgrade') action_upgrade_system ;;
