@@ -180,7 +180,7 @@ action_merge() { # Merge updated config files
     gum_title "Merge Configurations"
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
-    gum_message "$pacdiff_info" && echo
+    echo -e "$pacdiff_info" && echo
     ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
