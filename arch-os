@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.3.8"
+VERSION="1.3.9"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -161,10 +161,10 @@ action_upgrade_system() { # Update packages
 action_remove_orphans() { # Remove orphaned packages
     print_header && gum_title "Remove Orphans"
     # shellcheck disable=SC2046
-    paru -Qtdq &>/dev/null && paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null # Remove orphans
+    paru -Qtdq &>/dev/null && ! { paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0 # Remove orphans
     # shellcheck disable=SC2046
-    paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null                  # Remove more orphans
-    command -v flatpak &>/dev/null && flatpak uninstall -y --unused # Remove unused flatpaks
+    ! paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null && gum_warn "Canceled" && return 0                  # Remove more orphans
+    command -v flatpak &>/dev/null && ! flatpak uninstall -y --unused && gum_warn "Canceled" && return 0 # Remove unused flatpaks
     gum_info "Done"
     return 0
 }
@@ -178,6 +178,9 @@ action_merge() { # Merge updated config files
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configurations"
+    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
+    [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
+    gum_message "$pacdiff_info" && echo
     ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
@@ -218,7 +221,7 @@ action_downgrade_pkgs() { # Downgrade packages
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
     ! gum_confirm "Downgrade selected packages?" && gum_warn "Canceled" && return 0
-    sudo downgrade "${user_input[@]}"
+    ! sudo downgrade "${user_input[@]}" && gum_warn "Canceled" && return 0
     gum_info "Downgrade successful"
     return 0
 }
@@ -227,11 +230,11 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     print_header && gum_title "Reset Arch Keyring"
     ! gum_confirm "Are you sure?" && gum_warn "Canceled" && return 0
     # Keyring reset
-    sudo rm -rf /etc/pacman.d/gnupg
-    sudo pacman-key --init
-    sudo pacman-key --populate
+    ! sudo rm -rf /etc/pacman.d/gnupg && gum_warn "Canceled" && return 0
+    ! sudo pacman-key --init && gum_warn "Canceled" && return 0
+    ! sudo pacman-key --populate && gum_warn "Canceled" && return 0
     # Update Arch keyring & system
-    paru -Sy --noconfirm archlinux-keyring && paru -Su --skipreview
+    ! paru -Sy --noconfirm archlinux-keyring && paru -Su --skipreview && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
 }
