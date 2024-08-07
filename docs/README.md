@@ -4,6 +4,8 @@
   <p><b>Arch OS Manager</b></p>
 </h1>
 
+<p><img src="./screenshot.png"></p>
+
 ### Dependencies
 
 **`paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`**
@@ -15,10 +17,6 @@
 ### Run
 
 **`arch-os`**
-
-<br>
-
-<p><img src="./screenshot.png"></p>
 
 </div>
 
@@ -44,6 +42,11 @@ dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty
 ```
 dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
 ```
+
+### Arch Linux News
+
+Set the number of news items to suit your needs. Add the property `ARCH_LINUX_NEWS_COUNT` to your `~/.arch-os/arch-os.conf` and set to your prefered number.
+To deactivate the Arch Linux News, the property must be set to `ARCH_LINUX_NEWS_COUNT=0`.
 
 <br>
 

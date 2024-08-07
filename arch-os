@@ -7,12 +7,16 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.3.9"
+VERSION="1.4.0"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
 ARCH_OS_CONF="${ARCH_OS_HOME}/arch-os.conf"
 KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
+
+# NEWS
+ARCH_LINUX_NEWS_URL="https://archlinux.org/feeds/news/"
+ARCH_LINUX_NEWS_COUNT="1"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -78,6 +82,9 @@ main() {
     # Handle user action
     selected_action="$1"
 
+    # Fetch the Arch Linux news feed
+    [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "$ARCH_LINUX_NEWS_URL")
+
     # Show menu or execute user action
     while (true); do
         if [ -z "$selected_action" ]; then
@@ -94,8 +101,8 @@ main() {
             'Reset Keyring') selected_action='reset' ;;
             'System Logs') selected_action='logs' ;;
             'Open Help') selected_action='help' ;;
-            'Quit') exit 130 ;;
-            *) gum_fail "Action '${user_input}' not available" && exit 2 ;;
+            'Quit') exit 2 ;;
+            *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
             esac
         fi
 
@@ -111,10 +118,11 @@ main() {
         'reset') action_reset ;;
         'logs') action_logs ;;
         'help') print_help ;;
-        *) gum_fail "Action '${selected_action}' not available" && exit 2 ;;
+        *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
         unset selected_action # Reset selected action
-        ! gum_confirm --affirmative "< Menu" --negative 'Exit' '' && exit 130
+        [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 2
+        ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 2
     done
 }
 
@@ -122,16 +130,16 @@ main() {
 # ACTIONS
 # ///////////////////////////////////////////////////////////////////
 
-action_check_updates_available() {
+action_check_updates_available() { # Check & print package updates
     local update_available="false"
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
-    [ "$update_available" = "false" ] && return 130
+    [ "$update_available" = "false" ] && return 2
     return 0
 }
 
 action_list_updates() { # List package updates
-    print_header && gum_title "List Package Updates"
+    print_header && print_news && gum_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
     gum_confirm "Upgrade packages?" && action_upgrade_system
@@ -139,7 +147,7 @@ action_list_updates() { # List package updates
 }
 
 action_upgrade_system() { # Update packages
-    print_header && gum_title "Upgrade System Packages"
+    print_header && print_news && gum_title "Upgrade System Packages"
     ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -n "$pacdiff_info" ] && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
@@ -242,13 +250,32 @@ action_logs() { # System Logs
 
 trap_exit() {
     rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
-    gum_message "Exit"
+    [ "$1" != "2" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
+    gum_msg "Exit"
     return "$1"
 }
 trap_error() {
     [ "$1" != "2" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
     return "$1"
+}
+
+# ///////////////////////////////////////////////////////////////////
+# NEWS
+# ///////////////////////////////////////////////////////////////////
+
+get_news_date() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
+get_news_title() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/title)" -; }
+get_news_url() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/link)" -; }
+
+print_news() {
+    if [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
+        for ((i = 1; i <= ARCH_LINUX_NEWS_COUNT; i++)); do
+            gum_white "$(get_news_date "$i") $(get_news_title "$i")"
+            gum_white "$(get_news_date "$i") $(get_news_url "$i")"
+            [ "$i" -lt "$ARCH_LINUX_NEWS_COUNT" ] && echo
+        done
+    fi
+    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -270,7 +297,7 @@ gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "
 gum_spin() { gum spin --spinner dot "${@}"; }
 
 gum_title() { echo && gum_purple --bold "> ${*}"; }
-gum_message() { gum_white --bold "> ${*}"; }
+gum_msg() { gum_white --bold "> ${*}"; }
 gum_info() { gum_green --bold "> ${*}"; }
 gum_warn() { gum_yellow --bold "> ${*}"; }
 gum_fail() { gum_red --bold "ERROR: ${*}"; }
@@ -286,8 +313,7 @@ print_header() {
 ███████ ██████  ██      ███████     ██    ██ ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    '
-    gum_white --bold "System Manager ${VERSION}"
+    ' && gum_white --bold "System Manager ${VERSION}"
 }
 
 print_help() {
