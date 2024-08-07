@@ -45,7 +45,7 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 ### Arch Linux News
 
-Set the number number of news items to suit your needs. Add the property `ARCH_LINUX_NEWS_COUNT` to your `~/.arch-os/arch-os.conf` and set to your prefered number.
+Set the number of news items to suit your needs. Add the property `ARCH_LINUX_NEWS_COUNT` to your `~/.arch-os/arch-os.conf` and set to your prefered number.
 To deactivate the Arch Linux News, the property must be set to `ARCH_LINUX_NEWS_COUNT=0`.
 
 <br>
