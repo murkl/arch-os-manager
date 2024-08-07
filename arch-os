@@ -168,7 +168,7 @@ action_list_updates() { # List package updates
     print_header && print_news && gum_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
-    echo && gum_confirm "Upgrade System Packages?" && action_upgrade_system
+    #echo && gum_confirm "Upgrade System Packages?" && action_upgrade_system
     return 0
 }
 
@@ -176,8 +176,8 @@ action_upgrade_system() { # Update packages
     print_header && print_news && gum_title "Upgrade System Packages"
     ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -n "$pacdiff_info" ] && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
-    gum_info "Upgrade successful"
+    gum_info "System Upgrade successful"
+    [ -n "$pacdiff_info" ] && echo && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
     return 0
 }
 
@@ -222,7 +222,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
     cat "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
+    echo && ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
     sudo mv -f "${ARCH_OS_HOME}/.mirrorlist.tmp" /etc/pacman.d/mirrorlist
     sudo chown root:root /etc/pacman.d/mirrorlist
     gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
@@ -279,7 +279,7 @@ open_settings() {
     print_header && gum_title "Edit Settings"
     if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && source "$ARCH_OS_CONF"
-        gum_info "${ARCH_OS_CONF} successfully saved" && return 0
+        gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
         gum_warn "Canceled" && return 0
