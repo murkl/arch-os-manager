@@ -16,7 +16,7 @@ KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
 
 # NEWS
 ARCH_LINUX_NEWS_URL="https://archlinux.org/feeds/news/"
-ARCH_LINUX_NEWS_COUNT="3"
+ARCH_LINUX_NEWS_COUNT="1"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
