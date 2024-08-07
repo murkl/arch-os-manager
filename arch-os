@@ -102,7 +102,7 @@ main() {
             'System Logs') selected_action='logs' ;;
             'Open Help') selected_action='help' ;;
             'Quit') exit 2 ;;
-            *) gum_fail "Action '${user_input}' not available" && exit 2 ;;
+            *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
             esac
         fi
 
@@ -118,10 +118,11 @@ main() {
         'reset') action_reset ;;
         'logs') action_logs ;;
         'help') print_help ;;
-        *) gum_fail "Action '${selected_action}' not available" && exit 2 ;;
+        *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
         unset selected_action # Reset selected action
-        ! gum_confirm --affirmative "< Menu" --negative 'Exit' '' && exit 2
+        [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 2
+        ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 2
     done
 }
 
