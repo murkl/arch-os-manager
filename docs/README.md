@@ -45,8 +45,12 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 ### Arch Linux News
 
-Set the number of news items to suit your needs. Add the property `ARCH_LINUX_NEWS_COUNT` to your `~/.arch-os/arch-os.conf` and set to your prefered number.
-To deactivate the Arch Linux News, the property must be set to `ARCH_LINUX_NEWS_COUNT=0`.
+Set the number of news items to suit your needs. Change the property `ARCH_LINUX_NEWS_COUNT` in `Settings` to your prefered number.
+To disable the Arch Linux News, set `ARCH_LINUX_NEWS_COUNT` to `0`.
+
+### Flatpak Support
+
+Flatpak support is enabled by default. To disable Flatpak support, change `FLATPAK_SUPPORT_ENABLED` in your `Settings` to `false`.
 
 <br>
 
