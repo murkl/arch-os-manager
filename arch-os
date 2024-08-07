@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.4.1"
+VERSION="1.4.2"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -165,9 +165,13 @@ action_check_updates_available() { # Check & print package updates
 }
 
 action_list_updates() { # List package updates
-    print_header && print_news && gum_title "List Package Updates"
+    print_header && print_news
+    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
+    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this configurations:" && echo -e "$pacdiff_info"
+    gum_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
+
     #echo && gum_confirm "Upgrade System Packages?" && action_upgrade_system
     return 0
 }
@@ -177,7 +181,7 @@ action_upgrade_system() { # Update packages
     ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
-    [ -n "$pacdiff_info" ] && echo && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
+    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this configurations:" && echo -e "$pacdiff_info"
     return 0
 }
 
