@@ -7,16 +7,12 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.4.0"
+VERSION="1.4.1"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
 ARCH_OS_CONF="${ARCH_OS_HOME}/arch-os.conf"
 KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
-
-# NEWS
-ARCH_LINUX_NEWS_URL="https://archlinux.org/feeds/news/"
-ARCH_LINUX_NEWS_COUNT="1"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -25,6 +21,9 @@ COLOR_GREEN=2
 COLOR_PURPLE=212
 COLOR_YELLOW=3
 COLOR_RED=1
+
+# NEWS
+ARCH_LINUX_NEWS=""
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -42,10 +41,19 @@ main() {
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
-    # Init
+    # Init properties
     mkdir -p "$ARCH_OS_HOME"
     touch "$ARCH_OS_CONF"
     source "$ARCH_OS_CONF"
+
+    # Default properties
+    [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
+    [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
+
+    { # Write properties
+        echo "ARCH_LINUX_NEWS_COUNT='$ARCH_LINUX_NEWS_COUNT'"
+        echo "FLATPAK_SUPPORT_ENABLED='$FLATPAK_SUPPORT_ENABLED'"
+    } >"$ARCH_OS_CONF"
 
     # Check and start kitty
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
@@ -83,14 +91,14 @@ main() {
     selected_action="$1"
 
     # Fetch the Arch Linux news feed
-    [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "$ARCH_LINUX_NEWS_URL")
+    [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
 
     # Show menu or execute user action
     while (true); do
         if [ -z "$selected_action" ]; then
             print_header && echo # Print header
-            options=("List Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Keyring" "System Logs" "Open Help" "Quit")
-            user_input=$(gum_choose --height=13 --selected="$user_input" "${options[@]}") || exit 130
+            options=("List Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Keyring" "System Logs" "Settings" "Open Help" "Quit")
+            user_input=$(gum_choose --height=14 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'List Updates') selected_action='list' ;;
             'Upgrade System') selected_action='upgrade' ;;
@@ -100,6 +108,7 @@ main() {
             'Downgrade Packages') selected_action='downgrade' ;;
             'Reset Keyring') selected_action='reset' ;;
             'System Logs') selected_action='logs' ;;
+            'Settings') selected_action='settings' ;;
             'Open Help') selected_action='help' ;;
             'Quit') exit 2 ;;
             *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
@@ -117,13 +126,30 @@ main() {
         'downgrade') action_downgrade_pkgs ;;
         'reset') action_reset ;;
         'logs') action_logs ;;
+        'settings') open_settings ;;
         'help') print_help ;;
         *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
+
         unset selected_action # Reset selected action
         [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 2
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 2
     done
+}
+
+# ///////////////////////////////////////////////////////////////////
+# TRAPS
+# ///////////////////////////////////////////////////////////////////
+
+trap_exit() {
+    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
+    [ "$1" != "2" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
+    gum_msg "Exit"
+    return "$1"
+}
+trap_error() {
+    [ "$1" != "2" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    return "$1"
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -142,7 +168,7 @@ action_list_updates() { # List package updates
     print_header && print_news && gum_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
-    gum_confirm "Upgrade packages?" && action_upgrade_system
+    #echo && gum_confirm "Upgrade System Packages?" && action_upgrade_system
     return 0
 }
 
@@ -150,8 +176,8 @@ action_upgrade_system() { # Update packages
     print_header && print_news && gum_title "Upgrade System Packages"
     ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -n "$pacdiff_info" ] && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
-    gum_info "Upgrade successful"
+    gum_info "System Upgrade successful"
+    [ -n "$pacdiff_info" ] && echo && gum_warn "New Configurations need to merge manually:" && echo -e "$pacdiff_info"
     return 0
 }
 
@@ -160,8 +186,9 @@ action_remove_orphans() { # Remove orphaned packages
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && ! { paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0 # Remove orphans
     # shellcheck disable=SC2046
-    ! paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null && gum_warn "Canceled" && return 0                  # Remove more orphans
-    command -v flatpak &>/dev/null && ! flatpak uninstall -y --unused && gum_warn "Canceled" && return 0 # Remove unused flatpaks
+    ! paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null && gum_warn "Canceled" && return 0 # Remove orphans
+    # Remove unused flatpaks
+    [ "$FLATPAK_SUPPORT_ENABLED" = "true" ] && command -v flatpak &>/dev/null && ! flatpak uninstall -y --unused && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
 }
@@ -195,7 +222,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
     cat "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
+    echo && ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
     sudo mv -f "${ARCH_OS_HOME}/.mirrorlist.tmp" /etc/pacman.d/mirrorlist
     sudo chown root:root /etc/pacman.d/mirrorlist
     gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
@@ -245,18 +272,18 @@ action_logs() { # System Logs
 }
 
 # ///////////////////////////////////////////////////////////////////
-# TRAPS
+# Settings
 # ///////////////////////////////////////////////////////////////////
 
-trap_exit() {
-    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    [ "$1" != "2" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
-    gum_msg "Exit"
-    return "$1"
-}
-trap_error() {
-    [ "$1" != "2" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
-    return "$1"
+open_settings() {
+    print_header && gum_title "Edit Settings"
+    if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && source "$ARCH_OS_CONF"
+        gum_info "Saved: ${ARCH_OS_CONF}" && return 0
+    else
+        rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
+        gum_warn "Canceled" && return 0
+    fi
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -270,10 +297,11 @@ get_news_url() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/li
 print_news() {
     if [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
         for ((i = 1; i <= ARCH_LINUX_NEWS_COUNT; i++)); do
-            gum_white "$(get_news_date "$i") $(get_news_title "$i")"
-            gum_white "$(get_news_date "$i") $(get_news_url "$i")"
-            [ "$i" -lt "$ARCH_LINUX_NEWS_COUNT" ] && echo
+            gum_white "$(get_news_date "$i") │ $(get_news_title "$i")"
+            #gum_white "$(get_news_date "$i") $(get_news_url "$i")"
         done
+        echo && gum_white "More Information: https://archlinux.org/news"
+        #[ "$i" -lt "$ARCH_LINUX_NEWS_COUNT" ] && echo
     fi
     return 0
 }
@@ -292,7 +320,8 @@ gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 gum_style() { gum style "${@}"; }
 gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
-gum_choose() { gum choose --no-show-help --header="" --cursor "• " "${@}"; }
+gum_write() { gum write --prompt "• " --header.foreground "$COLOR_PURPLE" --show-cursor-line --char-limit 0 "${@}"; }
+gum_choose() { gum choose --no-show-help --header="" --cursor "> " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 
@@ -320,7 +349,8 @@ print_help() {
     print_header && gum_title 'App'
     gum_white 'arch-os [--kitty | -k]            Open main menu'
     gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] help       Open help page'
+    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
+    gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
     gum_white 'arch-os [--kitty | -k] list       List package updates'
     gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
     gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
@@ -328,9 +358,9 @@ print_help() {
     gum_white 'arch-os [--kitty | -k] refresh    Refresh mirrorlist'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
     gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
-    gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
-    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
     gum_white 'arch-os [--kitty | -k] logs       Show system logs'
+    gum_white 'arch-os [--kitty | -k] settings   Open settings'
+    gum_white 'arch-os [--kitty | -k] help       Open help page'
 }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
