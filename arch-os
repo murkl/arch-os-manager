@@ -91,7 +91,7 @@ main() {
     selected_action="$1"
 
     # Fetch the Arch Linux news feed
-    [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
+    [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
 
     # Show menu or execute user action
     while (true); do
@@ -299,7 +299,7 @@ get_news_title() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/
 get_news_url() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/link)" -; }
 
 print_news() {
-    if [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
+    if [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
         for ((i = 1; i <= ARCH_LINUX_NEWS_COUNT; i++)); do
             gum_white "$(get_news_date "$i") │ $(get_news_title "$i")"
             #gum_white "$(get_news_date "$i") $(get_news_url "$i")"
