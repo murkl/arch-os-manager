@@ -4,7 +4,20 @@
   <p><b>Arch OS Manager</b></p>
 </h1>
 
-<p><img src="./screenshot.png"></p>
+<div align="center">
+
+<p>
+<img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
+<img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
+</p>
+
+<sub><b>100% shellcheck approved</b></sub>
+
+<sub><b>used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub>
+
+</div>
+
+<p><img src="./screenshots/main.png"></p>
 
 ### Dependencies
 
@@ -19,8 +32,6 @@
 **`arch-os`**
 
 </div>
-
-<br>
 
 ### GNOME Extension
 
@@ -52,17 +63,16 @@ To disable the Arch Linux News, set `ARCH_LINUX_NEWS_COUNT` to `0`.
 
 Flatpak support is enabled by default. To disable Flatpak support, change `FLATPAK_SUPPORT_ENABLED` in your `Settings` to `false`.
 
-<br>
+### Screenshots
 
 <div align="center">
 
-<p>
-<img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
-<img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
-</p>
-
-<sub><b>100% shellcheck approved</b></sub>
-
-<sub><b>used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub>
+<p><img width="90%" src="./screenshots/help.png"></p>
+<p><img width="90%" src="./screenshots/list.png"></p>
+<p><img width="90%" src="./screenshots/upgrade.png"></p>
+<p><img width="90%" src="./screenshots/merge.png"></p>
+<p><img width="90%" src="./screenshots/refresh.png"></p>
+<p><img width="90%" src="./screenshots/downgrade.png"></p>
+<p><img width="90%" src="./screenshots/settings.png"></p>
 
 </div>
