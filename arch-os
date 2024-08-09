@@ -162,8 +162,12 @@ action_check_updates_available() { # Check & print package updates
 action_search() { # Manage packages
     local user_input
     print_header && gum_title "Search Package"
-    ! user_input=$(gum_filter --limit 1 --height 15 --placeholder "Enter package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
-    paru -Qi "$user_input" 2>/dev/null || gum_warn "Package '${user_input}' not installed"
+    if [ "$SEARCH_PRELOAD_ENABLED" = "true" ]; then
+        ! user_input=$(gum_filter --limit 1 --height 15 --placeholder "Enter package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+        paru -Qi "$user_input" 2>/dev/null || gum_warn "Package '${user_input}' not installed"
+    else
+        gum_warn "Not implemented"
+    fi
     return 0
 }
 
@@ -180,7 +184,7 @@ action_fetch() { # List package updates
 
 action_upgrade() { # Update packages
     print_header && print_news && gum_title "Upgrade System Packages"
-    local paru_args && [ "$PARU_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
+    local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
     ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
     sync_packages
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
@@ -242,7 +246,7 @@ action_downgrade() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         gum_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
-        local paru_args && [ "$PARU_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
+        local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
         paru -S "$paru_args" downgrade
         print_header # Clean install output & print new header
     fi
@@ -268,7 +272,7 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --init && gum_warn "Canceled" && return 0
     ! sudo pacman-key --populate && gum_warn "Canceled" && return 0
     # Update Arch keyring & system
-    local paru_args && [ "$PARU_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
+    local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
     ! paru -Sy --noconfirm archlinux-keyring && paru -Su "$paru_args" && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
@@ -304,7 +308,8 @@ init_settings() {
     # Default properties
     [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
     [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
-    [ -z "$PARU_REVIEW_ENABLED" ] && PARU_REVIEW_ENABLED="false"
+    [ -z "$AUR_REVIEW_ENABLED" ] && AUR_REVIEW_ENABLED="false"
+    [ -z "$SEARCH_PRELOAD_ENABLED" ] && SEARCH_PRELOAD_ENABLED="true"
 
     # Validate
     [ "$ARCH_LINUX_NEWS_COUNT" -gt 10 ] && ARCH_LINUX_NEWS_COUNT="10" # Set to max 10
@@ -312,7 +317,8 @@ init_settings() {
     { # Write properties
         echo "ARCH_LINUX_NEWS_COUNT=${ARCH_LINUX_NEWS_COUNT}"
         echo "FLATPAK_SUPPORT_ENABLED=${FLATPAK_SUPPORT_ENABLED}"
-        echo "PARU_REVIEW_ENABLED=${PARU_REVIEW_ENABLED}"
+        echo "AUR_REVIEW_ENABLED=${AUR_REVIEW_ENABLED}"
+        echo "SEARCH_PRELOAD_ENABLED=${SEARCH_PRELOAD_ENABLED}"
     } >"$ARCH_OS_CONF"
 
     # Source again
