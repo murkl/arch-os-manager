@@ -67,7 +67,8 @@ Flatpak support is enabled by default. To disable Flatpak support, change `FLATP
 
 ### Screenshots
 
-<center>
+<div align="center">
+
 <p><img width="90%" src="./screenshots/help.png"></p>
 <p><img width="90%" src="./screenshots/list.png"></p>
 <p><img width="90%" src="./screenshots/upgrade.png"></p>
@@ -75,4 +76,5 @@ Flatpak support is enabled by default. To disable Flatpak support, change `FLATP
 <p><img width="90%" src="./screenshots/refresh.png"></p>
 <p><img width="90%" src="./screenshots/downgrade.png"></p>
 <p><img width="90%" src="./screenshots/settings.png"></p>
-</center>
+
+</div>>
