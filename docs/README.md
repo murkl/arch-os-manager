@@ -77,4 +77,4 @@ Flatpak support is enabled by default. To disable Flatpak support, change `FLATP
 <p><img width="90%" src="./screenshots/downgrade.png"></p>
 <p><img width="90%" src="./screenshots/settings.png"></p>
 
-</div>>
+</div>
