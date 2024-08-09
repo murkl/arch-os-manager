@@ -7,12 +7,13 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.4.3"
+VERSION="1.4.4"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
 ARCH_OS_CONF="${ARCH_OS_HOME}/arch-os.conf"
 KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
+PACKAGES_DB="${ARCH_OS_HOME}/packages.db"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -56,7 +57,7 @@ main() {
 
     # Check arguments
     if [ $# -gt 1 ]; then
-        print_help && gum_fail "Max. 1 argument supported!"
+        action_help && gum_fail "Max. 1 argument supported!"
         exit 1
     fi
 
@@ -79,27 +80,30 @@ main() {
     # Handle user action
     selected_action="$1"
 
-    # Fetch the Arch Linux news feed
+    # Init
     print_header && gum_title "Loading..."
+    # Fetch the Arch Linux news feed
     [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
+    [ ! -f "$PACKAGES_DB" ] && sync_packages
 
     # Show menu or execute user action
     while (true); do
         if [ -z "$selected_action" ]; then
             print_header && echo # Print header
-            options=("List Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Keyring" "System Logs" "Settings" "Open Help" "Quit")
-            user_input=$(gum_choose --height=14 --selected="$user_input" "${options[@]}") || exit 130
+            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Logs" "Settings" "Help" "Quit")
+            user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
-            'List Updates') selected_action='list' ;;
+            'Search Package') selected_action='search' ;;
+            'Fetch Updates') selected_action='fetch' ;;
             'Upgrade System') selected_action='upgrade' ;;
             'Remove Orphans') selected_action='orphans' ;;
             'Merge Configurations') selected_action='merge' ;;
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
-            'Reset Keyring') selected_action='reset' ;;
+            'Reset Pacman') selected_action='reset' ;;
             'System Logs') selected_action='logs' ;;
             'Settings') selected_action='settings' ;;
-            'Open Help') selected_action='help' ;;
+            'Help') selected_action='help' ;;
             'Quit') exit 2 ;;
             *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
             esac
@@ -108,16 +112,17 @@ main() {
         # Execute action
         print_header && echo
         case "$selected_action" in # Execute action
-        'list') action_list_updates ;;
-        'upgrade') action_upgrade_system ;;
-        'orphans') action_remove_orphans ;;
+        'search') action_search ;;
+        'fetch') action_fetch ;;
+        'upgrade') action_upgrade ;;
+        'orphans') action_orphans ;;
         'merge') action_merge ;;
         'refresh') action_refresh ;;
-        'downgrade') action_downgrade_pkgs ;;
+        'downgrade') action_downgrade ;;
         'reset') action_reset ;;
         'logs') action_logs ;;
-        'settings') open_settings ;;
-        'help') print_help ;;
+        'settings') action_settings ;;
+        'help') action_help ;;
         *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
 
@@ -154,29 +159,38 @@ action_check_updates_available() { # Check & print package updates
     return 0
 }
 
-action_list_updates() { # List package updates
-    print_header && print_news
-    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this configurations:" && echo -e "$pacdiff_info"
-    gum_title "List Package Updates"
-    ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
-    ! action_check_updates_available && gum_info "Your system is up to date" && return 0
-    #echo && gum_confirm "Upgrade System Packages?" && action_upgrade_system
+action_search() { # Manage packages
+    local user_input
+    print_header && gum_title "Search Package"
+    ! user_input=$(gum_filter --limit 1 --height 15 --placeholder "Enter package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+    paru -Qi "$user_input" 2>/dev/null || gum_warn "Package '${user_input}' not installed"
     return 0
 }
 
-action_upgrade_system() { # Update packages
+action_fetch() { # List package updates
+    print_header && print_news
+    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
+    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
+    gum_title "Fetch Package Updates"
+    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
+    ! action_check_updates_available && gum_info "Your system is up to date" && return 0
+    #echo && gum_confirm "Upgrade System Packages?" && action_upgrade
+    return 0
+}
+
+action_upgrade() { # Update packages
     print_header && print_news && gum_title "Upgrade System Packages"
     local paru_args && [ "$PARU_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
     ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
+    sync_packages
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
-    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this configurations:" && echo -e "$pacdiff_info"
+    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
     return 0
 }
 
-action_remove_orphans() { # Remove orphaned packages
-    print_header && gum_title "Remove Orphans"
+action_orphans() { # Remove orphaned packages
+    print_header && gum_title "Remove Package Orphans"
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && ! { paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0 # Remove orphans
     # shellcheck disable=SC2046
@@ -195,7 +209,7 @@ action_merge() { # Merge updated config files
         paru -S pacman-contrib meld
         print_header # Clean install output & print new header
     fi
-    gum_title "Merge Configurations"
+    gum_title "Merge Update Configurations"
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
     echo -e "$pacdiff_info" && echo
@@ -212,7 +226,7 @@ action_refresh() { # Refresh mirrorlist with reflector
         paru -S reflector
         print_header # Clean install output & print new header
     fi
-    gum_title "Refresh Mirrorlist"
+    gum_title "Refresh Pacman Mirrorlist"
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
     cat "${ARCH_OS_HOME}/.mirrorlist.tmp"
@@ -223,7 +237,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     return 0
 }
 
-action_downgrade_pkgs() { # Downgrade packages
+action_downgrade() { # Downgrade packages
     print_header
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         gum_title "Install Downgrade"
@@ -232,10 +246,10 @@ action_downgrade_pkgs() { # Downgrade packages
         paru -S "$paru_args" downgrade
         print_header # Clean install output & print new header
     fi
-    gum_title "Downgrade Packages"
+    gum_title "Downgrade System Packages"
     local user_input options
-    mapfile -t options < <(pacman -Qqn) # Only packages from official db
-    ! user_input=$(gum_filter --limit 100 --height 15 "${options[@]}") && gum_warn "Canceled" && return 0
+    mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
+    ! user_input=$(gum_filter --limit 25 --height 15 --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
     [ -z "$user_input" ] && gum_warn "No package selected" && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
@@ -246,8 +260,9 @@ action_downgrade_pkgs() { # Downgrade packages
 }
 
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    print_header && gum_title "Reset Arch Keyring"
+    print_header && gum_title "Reset Pacman"
     ! gum_confirm "Are you sure?" && gum_warn "Canceled" && return 0
+    sudo rm -f /var/lib/pacman/db.lck # Remove pacman lock if exists
     # Keyring reset
     ! sudo rm -rf /etc/pacman.d/gnupg && gum_warn "Canceled" && return 0
     ! sudo pacman-key --init && gum_warn "Canceled" && return 0
@@ -265,6 +280,14 @@ action_logs() { # System Logs
     gum_title "Service Error Logs"
     systemctl --failed
     return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
+# Packages
+# ///////////////////////////////////////////////////////////////////
+
+sync_packages() {
+    gum_spin --title 'Synchronize Packages...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -296,7 +319,7 @@ init_settings() {
     source "$ARCH_OS_CONF"
 }
 
-open_settings() {
+action_settings() {
     print_header && gum_title "Edit Settings"
     if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
@@ -340,7 +363,7 @@ gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 gum_style() { gum style "${@}"; }
-gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --placeholder "Type to filter and toggle with CTRL + Space ..." --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --prompt "• " --header.foreground "$COLOR_PURPLE" --show-cursor-line --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "> " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
@@ -366,22 +389,23 @@ print_header() {
     ' && gum_white --bold "System Manager ${VERSION}"
 }
 
-print_help() {
+action_help() {
     print_header && gum_title 'App'
     gum_white 'arch-os [--kitty | -k]            Open main menu'
     gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] check      Check and print package updates'
-    gum_white 'arch-os [--kitty | -k] notify     Check, print and notify package updates'
-    gum_white 'arch-os [--kitty | -k] list       List package updates'
-    gum_white 'arch-os [--kitty | -k] upgrade    Execute system upgrade'
+    gum_white 'arch-os [--kitty | -k] check      Check & print package updates'
+    gum_white 'arch-os [--kitty | -k] notify     Check, print & notify package updates'
+    gum_white 'arch-os [--kitty | -k] search     Search package'
+    gum_white 'arch-os [--kitty | -k] fetch      Fetch package updates'
+    gum_white 'arch-os [--kitty | -k] upgrade    System upgrade'
     gum_white 'arch-os [--kitty | -k] orphans    Remove orphaned packages'
-    gum_white 'arch-os [--kitty | -k] merge      Merge updated config files'
-    gum_white 'arch-os [--kitty | -k] refresh    Refresh mirrorlist'
+    gum_white 'arch-os [--kitty | -k] merge      Merge updated configurations'
+    gum_white 'arch-os [--kitty | -k] refresh    Refresh Pacman mirrorlist'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
-    gum_white 'arch-os [--kitty | -k] reset      Reset keyring'
-    gum_white 'arch-os [--kitty | -k] logs       Show system logs'
-    gum_white 'arch-os [--kitty | -k] settings   Open settings'
-    gum_white 'arch-os [--kitty | -k] help       Open help page'
+    gum_white 'arch-os [--kitty | -k] reset      Reset Pacman'
+    gum_white 'arch-os [--kitty | -k] logs       System logs'
+    gum_white 'arch-os [--kitty | -k] settings   Settings'
+    gum_white 'arch-os [--kitty | -k] help       Help'
 }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
