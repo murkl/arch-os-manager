@@ -80,6 +80,7 @@ main() {
     selected_action="$1"
 
     # Fetch the Arch Linux news feed
+    print_header && gum_title "Loading..."
     [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
 
     # Show menu or execute user action
@@ -160,7 +161,6 @@ action_list_updates() { # List package updates
     gum_title "List Package Updates"
     ! gum_spin --title 'Checking updates...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
-
     #echo && gum_confirm "Upgrade System Packages?" && action_upgrade_system
     return 0
 }
