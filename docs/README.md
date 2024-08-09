@@ -67,10 +67,12 @@ Flatpak support is enabled by default. To disable Flatpak support, change `FLATP
 
 ### Screenshots
 
-<p><img width="75%" src="./screenshots/help.png"></p>
-<p><img width="75%" src="./screenshots/list.png"></p>
-<p><img width="75%" src="./screenshots/upgrade.png"></p>
-<p><img width="75%" src="./screenshots/merge.png"></p>
-<p><img width="75%" src="./screenshots/refresh.png"></p>
-<p><img width="75%" src="./screenshots/downgrade.png"></p>
-<p><img width="75%" src="./screenshots/settings.png"></p>
+<center>
+<p><img width="90%" src="./screenshots/help.png"></p>
+<p><img width="90%" src="./screenshots/list.png"></p>
+<p><img width="90%" src="./screenshots/upgrade.png"></p>
+<p><img width="90%" src="./screenshots/merge.png"></p>
+<p><img width="90%" src="./screenshots/refresh.png"></p>
+<p><img width="90%" src="./screenshots/downgrade.png"></p>
+<p><img width="90%" src="./screenshots/settings.png"></p>
+</center>
