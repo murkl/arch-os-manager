@@ -295,7 +295,7 @@ open_settings() {
     print_header && gum_title "Edit Settings"
     if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
-        gum_info "Saved: ${ARCH_OS_CONF}" && return 0
+        gum_info "Settings saved at ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
         gum_warn "Canceled" && return 0
