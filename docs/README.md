@@ -33,8 +33,6 @@
 
 </div>
 
-<br>
-
 ### GNOME Extension
 
 1. Install GNOME Extension: **[archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**

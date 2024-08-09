@@ -167,7 +167,8 @@ action_list_updates() { # List package updates
 
 action_upgrade_system() { # Update packages
     print_header && print_news && gum_title "Upgrade System Packages"
-    ! paru -Syu --skipreview && gum_fail "Upgrade failed" && return 0
+    local paru_args && [ "$PARU_SKIP_REVIEW" = "true" ] && paru_args='--skipreview'
+    ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
     [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this configurations:" && echo -e "$pacdiff_info"
@@ -191,7 +192,7 @@ action_merge() { # Merge updated config files
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         gum_title "Install Pacman Tools"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
-        paru -S --skipreview pacman-contrib meld
+        paru -S pacman-contrib meld
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configurations"
@@ -208,7 +209,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     if ! command -v reflector &>/dev/null; then
         gum_title "Install Reflector"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
-        paru -S --skipreview reflector
+        paru -S reflector
         print_header # Clean install output & print new header
     fi
     gum_title "Refresh Mirrorlist"
@@ -227,7 +228,8 @@ action_downgrade_pkgs() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         gum_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
-        paru -S --skipreview downgrade
+        local paru_args && [ "$PARU_SKIP_REVIEW" = "true" ] && paru_args='--skipreview'
+        paru -S "$paru_args" downgrade
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade Packages"
@@ -251,7 +253,8 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --init && gum_warn "Canceled" && return 0
     ! sudo pacman-key --populate && gum_warn "Canceled" && return 0
     # Update Arch keyring & system
-    ! paru -Sy --noconfirm archlinux-keyring && paru -Su --skipreview && gum_warn "Canceled" && return 0
+    local paru_args && [ "$PARU_SKIP_REVIEW" = "true" ] && paru_args='--skipreview'
+    ! paru -Sy --noconfirm archlinux-keyring && paru -Su "$paru_args" && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
 }
@@ -278,6 +281,7 @@ init_settings() {
     # Default properties
     [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
     [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
+    [ -z "$PARU_SKIP_REVIEW" ] && PARU_SKIP_REVIEW="true"
 
     # Validate
     [ "$ARCH_LINUX_NEWS_COUNT" -gt 10 ] && ARCH_LINUX_NEWS_COUNT="10" # Set to max 10
@@ -285,6 +289,7 @@ init_settings() {
     { # Write properties
         echo "ARCH_LINUX_NEWS_COUNT=$ARCH_LINUX_NEWS_COUNT"
         echo "FLATPAK_SUPPORT_ENABLED=$FLATPAK_SUPPORT_ENABLED"
+        echo "PARU_SKIP_REVIEW=$PARU_SKIP_REVIEW"
     } >"$ARCH_OS_CONF"
 
     # Source again
