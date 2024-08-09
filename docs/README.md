@@ -17,7 +17,6 @@
 
 </div>
 
-<br>
 <p><img src="./screenshots/main.png"></p>
 
 ### Dependencies
