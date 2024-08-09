@@ -287,7 +287,7 @@ action_logs() { # System Logs
 # ///////////////////////////////////////////////////////////////////
 
 sync_packages() {
-    gum_spin --title 'Synchronize Packages...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
+    gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
 }
 
 # ///////////////////////////////////////////////////////////////////
