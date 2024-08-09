@@ -41,19 +41,8 @@ main() {
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
-    # Init properties
-    mkdir -p "$ARCH_OS_HOME"
-    touch "$ARCH_OS_CONF"
-    source "$ARCH_OS_CONF"
-
-    # Default properties
-    [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
-    [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
-
-    { # Write properties
-        echo "ARCH_LINUX_NEWS_COUNT='$ARCH_LINUX_NEWS_COUNT'"
-        echo "FLATPAK_SUPPORT_ENABLED='$FLATPAK_SUPPORT_ENABLED'"
-    } >"$ARCH_OS_CONF"
+    # Create & source properties
+    init_settings
 
     # Check and start kitty
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
@@ -279,10 +268,33 @@ action_logs() { # System Logs
 # Settings
 # ///////////////////////////////////////////////////////////////////
 
+init_settings() {
+
+    # Init properties
+    mkdir -p "$ARCH_OS_HOME"
+    touch "$ARCH_OS_CONF"
+    source "$ARCH_OS_CONF"
+
+    # Default properties
+    [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
+    [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
+
+    # Validate
+    [ "$ARCH_LINUX_NEWS_COUNT" -gt 10 ] && ARCH_LINUX_NEWS_COUNT="10" # Set to max 10
+
+    { # Write properties
+        echo "ARCH_LINUX_NEWS_COUNT=$ARCH_LINUX_NEWS_COUNT"
+        echo "FLATPAK_SUPPORT_ENABLED=$FLATPAK_SUPPORT_ENABLED"
+    } >"$ARCH_OS_CONF"
+
+    # Source again
+    source "$ARCH_OS_CONF"
+}
+
 open_settings() {
     print_header && gum_title "Edit Settings"
     if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && source "$ARCH_OS_CONF"
+        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
