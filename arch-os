@@ -90,7 +90,7 @@ main() {
     while (true); do
         if [ -z "$selected_action" ]; then
             print_header && echo # Print header
-            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Logs" "Settings" "Help" "Quit")
+            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'Search Package') selected_action='search' ;;
@@ -101,7 +101,7 @@ main() {
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
             'Reset Pacman') selected_action='reset' ;;
-            'System Logs') selected_action='logs' ;;
+            'System Info') selected_action='info' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
             'Quit') exit 2 ;;
@@ -120,7 +120,7 @@ main() {
         'refresh') action_refresh ;;
         'downgrade') action_downgrade ;;
         'reset') action_reset ;;
-        'logs') action_logs ;;
+        'info') action_info ;;
         'settings') action_settings ;;
         'help') action_help ;;
         *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
@@ -142,6 +142,7 @@ trap_exit() {
     gum_msg "Exit"
     return "$1"
 }
+
 trap_error() {
     [ "$1" != "2" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
     return "$1"
@@ -213,7 +214,7 @@ action_merge() { # Merge updated config files
         paru -S pacman-contrib meld
         print_header # Clean install output & print new header
     fi
-    gum_title "Merge Update Configurations"
+    gum_title "Merge Configuration Updates"
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
     echo -e "$pacdiff_info" && echo
@@ -278,7 +279,7 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     return 0
 }
 
-action_logs() { # System Logs
+action_info() { # System Logs
     print_header && gum_title "System Error Logs"
     journalctl -p 3 -b --quiet --no-pager
     gum_title "Service Error Logs"
@@ -286,8 +287,19 @@ action_logs() { # System Logs
     return 0
 }
 
+action_settings() { # Settings
+    print_header && gum_title "Edit Settings"
+    if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
+        gum_info "Settings saved at ${ARCH_OS_CONF}" && return 0
+    else
+        rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
+        gum_warn "Canceled" && return 0
+    fi
+}
+
 # ///////////////////////////////////////////////////////////////////
-# Packages
+# PACKAGES
 # ///////////////////////////////////////////////////////////////////
 
 sync_packages() {
@@ -295,7 +307,7 @@ sync_packages() {
 }
 
 # ///////////////////////////////////////////////////////////////////
-# Settings
+# SETTINGS
 # ///////////////////////////////////////////////////////////////////
 
 init_settings() {
@@ -323,17 +335,6 @@ init_settings() {
 
     # Source again
     source "$ARCH_OS_CONF"
-}
-
-action_settings() {
-    print_header && gum_title "Edit Settings"
-    if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
-        gum_info "Settings saved at ${ARCH_OS_CONF}" && return 0
-    else
-        rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
-        gum_warn "Canceled" && return 0
-    fi
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -409,7 +410,7 @@ action_help() {
     gum_white 'arch-os [--kitty | -k] refresh    Refresh Pacman mirrorlist'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
     gum_white 'arch-os [--kitty | -k] reset      Reset Pacman'
-    gum_white 'arch-os [--kitty | -k] logs       System logs'
+    gum_white 'arch-os [--kitty | -k] info       System info'
     gum_white 'arch-os [--kitty | -k] settings   Settings'
     gum_white 'arch-os [--kitty | -k] help       Help'
 }
