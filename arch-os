@@ -139,7 +139,7 @@ main() {
 trap_exit() {
     rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
     [ "$1" != "2" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Exit' --negative '' ''
-    gum_msg "Exit"
+    gum_mesg "Exit"
     return "$1"
 }
 
@@ -161,14 +161,34 @@ action_check_updates_available() { # Check & print package updates
 }
 
 action_search() { # Manage packages
-    local user_input
-    print_header && gum_title "Search Package"
-    if [ "$SEARCH_PRELOAD_ENABLED" = "true" ]; then
-        ! user_input=$(gum_filter --limit 1 --height 15 --placeholder "Enter package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
-        paru -Qi "$user_input" 2>/dev/null || gum_warn "Package '${user_input}' not installed"
-    else
-        gum_warn "Not implemented"
+    print_header && gum_title "Search Package" && local user_input
+    ! user_input=$(gum_filter --limit 1 --height 15 --placeholder "Filter..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+
+    print_header && gum_title "Package Information" && echo # Print pkg info
+    gum_white --bold "$(print_filled_spaces "Name:") ${user_input}"
+    gum_white "$(print_filled_spaces "Repository:") $(print_package_info "$user_input" "Repository")"
+    gum_white "$(print_filled_spaces "Version:") $(print_package_info "$user_input" "Version")"
+    gum_white "$(print_filled_spaces "Description:") $(print_package_info "$user_input" "Description")"
+
+    # Check if AUR pkg
+    if pacman -Qm "$user_input" &>/dev/null; then # AUR package info
+        gum_white "$(print_filled_spaces "AUR Link:") $(print_package_info "$user_input" "AUR URL")"
+        gum_white "$(print_filled_spaces "AUR Maintainer:") $(print_package_info "$user_input" "Maintainer")"
+        gum_white "$(print_filled_spaces "AUR Votes:") $(print_package_info "$user_input" "Votes")"
+        gum_white "$(print_filled_spaces "AUR Popularity:") $(print_package_info "$user_input" "Popularity")"
+        gum_white "$(print_filled_spaces "AUR Modified:") $(print_package_info "$user_input" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
+    else # Official package info
+        gum_white "$(print_filled_spaces "Build Date:") $(print_package_info "$user_input" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
     fi
+
+    # Check if pkg is installed
+    if pacman -Q "$user_input" &>/dev/null; then # Installed
+        gum_white "$(print_filled_spaces "Install Date:") $(print_package_info "$user_input" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
+        gum_green --bold "$(print_filled_spaces "Installed:") yes"
+    else # Not installed
+        gum_yellow --bold "$(print_filled_spaces "Installed:") no"
+    fi
+
     return 0
 }
 
@@ -306,6 +326,19 @@ sync_packages() {
     gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
 }
 
+print_package_info() {
+    local package info result
+    package="$1"
+    info="$2"
+    # Try getting with paru -Si (fails on unknown identifier)
+    result=$(LANG=en_US.UTF-8 paru -Si "$package" 2>/dev/null | grep -i "^${info}" | sed -E "s/^${info}\s*:\s*//") || true
+    # If installed (need more info from paru -Qi)
+    if [ -z "$result" ] && pacman -Q "$package" &>/dev/null; then
+        result=$(LANG=en_US.UTF-8 paru -Qi "$package" 2>/dev/null | grep -i "^${info}" | sed -E "s/^${info}\s*:\s*//")
+    fi
+    echo "$result"
+}
+
 # ///////////////////////////////////////////////////////////////////
 # SETTINGS
 # ///////////////////////////////////////////////////////////////////
@@ -321,7 +354,6 @@ init_settings() {
     [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
     [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
     [ -z "$AUR_REVIEW_ENABLED" ] && AUR_REVIEW_ENABLED="false"
-    [ -z "$SEARCH_PRELOAD_ENABLED" ] && SEARCH_PRELOAD_ENABLED="true"
 
     # Validate
     [ "$ARCH_LINUX_NEWS_COUNT" -gt 10 ] && ARCH_LINUX_NEWS_COUNT="10" # Set to max 10
@@ -330,7 +362,6 @@ init_settings() {
         echo "ARCH_LINUX_NEWS_COUNT=${ARCH_LINUX_NEWS_COUNT}"
         echo "FLATPAK_SUPPORT_ENABLED=${FLATPAK_SUPPORT_ENABLED}"
         echo "AUR_REVIEW_ENABLED=${AUR_REVIEW_ENABLED}"
-        echo "SEARCH_PRELOAD_ENABLED=${SEARCH_PRELOAD_ENABLED}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -377,10 +408,10 @@ gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "
 gum_spin() { gum spin --spinner dot "${@}"; }
 
 gum_title() { echo && gum_purple --bold "> ${*}"; }
-gum_msg() { gum_white --bold "> ${*}"; }
+gum_mesg() { gum_white --bold "> ${*}"; }
 gum_info() { gum_green --bold "> ${*}"; }
 gum_warn() { gum_yellow --bold "> ${*}"; }
-gum_fail() { gum_red --bold "ERROR: ${*}"; }
+gum_fail() { gum_red --bold "> ${*}"; }
 
 # ///////////////////////////////////////////////////////////////////
 # PRINT & NOTIFY
@@ -416,6 +447,19 @@ action_help() {
 }
 
 notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
+
+print_filled_spaces() {
+    local total=24
+    local input_string="$1"
+    local length="${#input_string}"
+
+    if [ "$length" -ge "$total" ]; then
+        echo "$input_string"
+    else
+        local padding=$((total - length))
+        printf '%s%*s\n' "$input_string" "$padding" ""
+    fi
+}
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY & CONFIG
