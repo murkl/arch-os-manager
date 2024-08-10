@@ -68,6 +68,7 @@ Flatpak support is enabled by default. To disable Flatpak support, change `FLATP
 <div align="center">
 
 <p><img width="90%" src="./screenshots/help.png"></p>
+<p><img width="90%" src="./screenshots/search.png"></p>
 <p><img width="90%" src="./screenshots/list.png"></p>
 <p><img width="90%" src="./screenshots/upgrade.png"></p>
 <p><img width="90%" src="./screenshots/merge.png"></p>
