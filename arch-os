@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSIO
-VERSION="1.4.5"
+VERSION="1.4.6"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -83,7 +83,7 @@ main() {
     # Init
     gum_title "Loading..."
     # Fetch the Arch Linux news feed
-    gum_info "Loading Arch Linux News Feed..."
+    gum_white "Loading Arch Linux News Feed..."
     [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
     [ ! -f "$PACKAGES_DB" ] && sync_packages
 
