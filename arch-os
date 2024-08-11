@@ -212,13 +212,13 @@ action_search() { # Manage packages
     case "$user_input" in # Set user action to selected action
     'Install')
         gum_info "Install Package: ${pkg_name} (AUR: ${pkg_is_aur})"
-        local paru_args='' && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-        ! paru -S "$paru_args" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
+        local paru_args="" && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
+        ! paru -S $paru_args "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
         gum_info "Done"
         return 0
         ;;
     'Remove')
-        gum_info "Remove Package: ${pkg_name} (AUR: ${pkg_is_aur})"
+        gum_warn "Remove Package: ${pkg_name} (AUR: ${pkg_is_aur})"
         ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
         gum_info "Done"
         return 0
@@ -304,7 +304,7 @@ action_downgrade() { # Downgrade packages
         gum_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
         local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-        paru -S "$paru_args" downgrade
+        paru -S $paru_args downgrade
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade System Packages"
@@ -330,7 +330,7 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --populate && gum_warn "Canceled" && return 0
     # Update Arch keyring & system
     local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-    ! paru -Sy --noconfirm archlinux-keyring && paru -Su "$paru_args" && gum_warn "Canceled" && return 0
+    ! paru -Sy --noconfirm archlinux-keyring && paru -Su $paru_args && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
 }
@@ -480,7 +480,7 @@ action_help() {
     gum_white 'arch-os [--kitty | -k] refresh    Refresh Pacman mirrorlist'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
     gum_white 'arch-os [--kitty | -k] reset      Reset Pacman'
-    gum_white 'arch-os [--kitty | -k] info       System info'
+    gum_white 'arch-os [--kitty | -k] system     System info'
     gum_white 'arch-os [--kitty | -k] settings   Settings'
     gum_white 'arch-os [--kitty | -k] help       Help'
 }
