@@ -6,8 +6,8 @@
 #                - Arch Linux Helper Script TUI -
 # ///////////////////////////////////////////////////////////////////
 
-# VERSION
-VERSION="1.4.4"
+# VERSIO
+VERSION="1.4.5"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -81,15 +81,16 @@ main() {
     selected_action="$1"
 
     # Init
-    print_header && gum_title "Loading..."
+    gum_title "Loading..."
     # Fetch the Arch Linux news feed
+    gum_info "Loading Arch Linux News Feed..."
     [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
     [ ! -f "$PACKAGES_DB" ] && sync_packages
 
     # Show menu or execute user action
     while (true); do
         if [ -z "$selected_action" ]; then
-            print_header && echo # Print header
+            print_header # Print header
             options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
@@ -101,7 +102,7 @@ main() {
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
             'Reset Pacman') selected_action='reset' ;;
-            'System Info') selected_action='info' ;;
+            'System Info') selected_action='system' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
             'Quit') exit 2 ;;
@@ -110,7 +111,6 @@ main() {
         fi
 
         # Execute action
-        print_header && echo
         case "$selected_action" in # Execute action
         'search') action_search ;;
         'fetch') action_fetch ;;
@@ -120,13 +120,14 @@ main() {
         'refresh') action_refresh ;;
         'downgrade') action_downgrade ;;
         'reset') action_reset ;;
-        'info') action_info ;;
+        'system') action_system ;;
         'settings') action_settings ;;
         'help') action_help ;;
         *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
-
+        local result="$?"
         unset selected_action # Reset selected action
+        [ "$result" = "2" ] && continue
         [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 2
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 2
     done
@@ -161,50 +162,88 @@ action_check_updates_available() { # Check & print package updates
 }
 
 action_search() { # Manage packages
-    print_header && gum_title "Search Package" && local user_input
-    ! user_input=$(gum_filter --limit 1 --height 15 --placeholder "Filter..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+    local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
+    gum_title "Package"
+    ! pkg_name=$(gum_filter --fuzzy --sort --limit 1 --height "$SEARCH_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+    pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
+    pkg_is_aur="false" && [ "$(print_package_info "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
+    pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
 
-    print_header && gum_title "Package Information" && echo # Print pkg info
-    gum_white --bold "$(print_filled_spaces "Name:") ${user_input}"
-    gum_white "$(print_filled_spaces "Repository:") $(print_package_info "$user_input" "Repository")"
-    gum_white "$(print_filled_spaces "Version:") $(print_package_info "$user_input" "Version")"
-    gum_white "$(print_filled_spaces "Description:") $(print_package_info "$user_input" "Description")"
+    # Get package info
+    if [ "$pkg_is_installed" = "true" ]; then
+        pkg_info_local="$(LANG=en_US.UTF-8 paru -Qi "$pkg_name" 2>/dev/null)" # Installed
+    fi
 
+    #echo # Print new line
+    gum_white --bold "$(print_filled_spaces "Name:") ${pkg_name}"
+    gum_white "$(print_filled_spaces "Repository:") $(print_package_info "$pkg_info_remote" "Repository")"
+    gum_white "$(print_filled_spaces "Version:") $(print_package_info "$pkg_info_remote" "Version")"
+    gum_white "$(print_filled_spaces "Description:") $(print_package_info "$pkg_info_remote" "Description")"
     # Check if AUR pkg
-    if pacman -Qm "$user_input" &>/dev/null; then # AUR package info
-        gum_white "$(print_filled_spaces "AUR Link:") $(print_package_info "$user_input" "AUR URL")"
-        gum_white "$(print_filled_spaces "AUR Maintainer:") $(print_package_info "$user_input" "Maintainer")"
-        gum_white "$(print_filled_spaces "AUR Votes:") $(print_package_info "$user_input" "Votes")"
-        gum_white "$(print_filled_spaces "AUR Popularity:") $(print_package_info "$user_input" "Popularity")"
-        gum_white "$(print_filled_spaces "AUR Modified:") $(print_package_info "$user_input" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
-    else # Official package info
-        gum_white "$(print_filled_spaces "Build Date:") $(print_package_info "$user_input" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
+    if [ "$pkg_is_aur" = "true" ]; then # AUR package info
+        gum_white "$(print_filled_spaces "AUR URL:") $(print_package_info "$pkg_info_remote" "AUR URL")"
+        gum_white "$(print_filled_spaces "AUR Maintainer:") $(print_package_info "$pkg_info_remote" "Maintainer")"
+        gum_white "$(print_filled_spaces "AUR Votes:") $(print_package_info "$pkg_info_remote" "Votes")"
+        gum_white "$(print_filled_spaces "AUR Popularity:") $(print_package_info "$pkg_info_remote" "Popularity")"
+        gum_white "$(print_filled_spaces "AUR Modified:") $(print_package_info "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
+    else
+        gum_white "$(print_filled_spaces "Package URL:") $(print_package_info "$pkg_info_remote" "URL")"
+        gum_white "$(print_filled_spaces "Package Date:") $(print_package_info "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
     fi
 
     # Check if pkg is installed
-    if pacman -Q "$user_input" &>/dev/null; then # Installed
-        gum_white "$(print_filled_spaces "Install Date:") $(print_package_info "$user_input" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
+    if [ "$pkg_is_installed" = "true" ]; then # Installed
+        gum_white "$(print_filled_spaces "Install Date:") $(print_package_info "$pkg_info_local" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
+        gum_white "$(print_filled_spaces "Install Version:") $(print_package_info "$pkg_info_local" "Version")"
+        gum_white "$(print_filled_spaces "Install Reason:") $(print_package_info "$pkg_info_local" "Install Reason")"
         gum_green --bold "$(print_filled_spaces "Installed:") yes"
     else # Not installed
         gum_yellow --bold "$(print_filled_spaces "Installed:") no"
     fi
 
+    # Show options menu
+    echo && gum_title "Options"
+    local options=()
+    local user_input=''
+    [ "$pkg_is_installed" = "false" ] && options+=("Install")
+    [ "$pkg_is_installed" = "true" ] && options+=("Remove")
+    options+=("Quit")
+    user_input=$(gum_choose --height=5 "${options[@]}") || return 0
+    case "$user_input" in # Set user action to selected action
+    'Install')
+        gum_info "Install Package: ${pkg_name} (AUR: ${pkg_is_aur})"
+        local paru_args="" && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
+        ! paru -S $paru_args "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
+        gum_info "Done"
+        return 0
+        ;;
+    'Remove')
+        gum_warn "Remove Package: ${pkg_name} (AUR: ${pkg_is_aur})"
+        ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
+        gum_info "Done"
+        return 0
+        ;;
+    'Quit')
+        gum_info "Done"
+        return 0
+        ;;
+    *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
+    esac
     return 0
 }
 
 action_fetch() { # List package updates
-    print_header && print_news
+    print_news
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
     gum_title "Fetch Package Updates"
     ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
     ! action_check_updates_available && gum_info "Your system is up to date" && return 0
-    #echo && gum_confirm "Upgrade System Packages?" && action_upgrade
     return 0
 }
 
 action_upgrade() { # Update packages
-    print_header && print_news && gum_title "Upgrade System Packages"
+    print_news && echo && gum_title "Upgrade System Packages"
     local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
     ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
     sync_packages
@@ -215,7 +254,7 @@ action_upgrade() { # Update packages
 }
 
 action_orphans() { # Remove orphaned packages
-    print_header && gum_title "Remove Package Orphans"
+    gum_title "Remove Package Orphans"
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && ! { paru -Rns --noconfirm $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0 # Remove orphans
     # shellcheck disable=SC2046
@@ -227,7 +266,6 @@ action_orphans() { # Remove orphaned packages
 }
 
 action_merge() { # Merge updated config files
-    print_header
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         gum_title "Install Pacman Tools"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
@@ -244,7 +282,6 @@ action_merge() { # Merge updated config files
 }
 
 action_refresh() { # Refresh mirrorlist with reflector
-    print_header
     if ! command -v reflector &>/dev/null; then
         gum_title "Install Reflector"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
@@ -263,12 +300,11 @@ action_refresh() { # Refresh mirrorlist with reflector
 }
 
 action_downgrade() { # Downgrade packages
-    print_header
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         gum_title "Install Downgrade"
         ! gum_confirm "Install missing package?" && gum_warn "Canceled" && return 0
         local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-        paru -S "$paru_args" downgrade
+        paru -S $paru_args downgrade
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade System Packages"
@@ -285,7 +321,7 @@ action_downgrade() { # Downgrade packages
 }
 
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
-    print_header && gum_title "Reset Pacman"
+    gum_title "Reset Pacman"
     ! gum_confirm "Are you sure?" && gum_warn "Canceled" && return 0
     sudo rm -f /var/lib/pacman/db.lck # Remove pacman lock if exists
     # Keyring reset
@@ -294,21 +330,21 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --populate && gum_warn "Canceled" && return 0
     # Update Arch keyring & system
     local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-    ! paru -Sy --noconfirm archlinux-keyring && paru -Su "$paru_args" && gum_warn "Canceled" && return 0
+    ! paru -Sy --noconfirm archlinux-keyring && paru -Su $paru_args && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
 }
 
-action_info() { # System Logs
-    print_header && gum_title "System Error Logs"
+action_system() { # System Logs
+    gum_title "System Error Logs"
     journalctl -p 3 -b --quiet --no-pager
-    gum_title "Service Error Logs"
+    echo && gum_title "Service Error Logs"
     systemctl --failed
     return 0
 }
 
 action_settings() { # Settings
-    print_header && gum_title "Edit Settings"
+    gum_title "Edit Settings"
     if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
         gum_info "Settings saved at ${ARCH_OS_CONF}" && return 0
@@ -322,21 +358,15 @@ action_settings() { # Settings
 # PACKAGES
 # ///////////////////////////////////////////////////////////////////
 
-sync_packages() {
-    gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
+print_package_info() {
+    local result
+    result="$(echo "$1" | grep -i "^${2}" | sed -E "s/^${2}\s*:\s*//" || echo "unavailable")"
+    # Cut after 50 chars and print
+    echo "$result" | awk '{print (length($0) > '"${PACKAGE_INFO_WIDTH}"' ? substr($0, 1, '"${PACKAGE_INFO_WIDTH}"') "..." : $0)}'
 }
 
-print_package_info() {
-    local package info result
-    package="$1"
-    info="$2"
-    # Try getting with paru -Si (fails on unknown identifier)
-    result=$(LANG=en_US.UTF-8 paru -Si "$package" 2>/dev/null | grep -i "^${info}" | sed -E "s/^${info}\s*:\s*//") || true
-    # If installed (need more info from paru -Qi)
-    if [ -z "$result" ] && pacman -Q "$package" &>/dev/null; then
-        result=$(LANG=en_US.UTF-8 paru -Qi "$package" 2>/dev/null | grep -i "^${info}" | sed -E "s/^${info}\s*:\s*//")
-    fi
-    echo "$result"
+sync_packages() {
+    gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -350,18 +380,27 @@ init_settings() {
     touch "$ARCH_OS_CONF"
     source "$ARCH_OS_CONF"
 
-    # Default properties
+    # Set default properties
     [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
     [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
     [ -z "$AUR_REVIEW_ENABLED" ] && AUR_REVIEW_ENABLED="false"
+    [ -z "$SEARCH_RESULT_SIZE" ] && SEARCH_RESULT_SIZE="20"
+    [ -z "$PACKAGE_INFO_WIDTH" ] && PACKAGE_INFO_WIDTH="80"
 
-    # Validate
+    # Validate properties
     [ "$ARCH_LINUX_NEWS_COUNT" -gt 10 ] && ARCH_LINUX_NEWS_COUNT="10" # Set to max 10
+    [ "$ARCH_LINUX_NEWS_COUNT" -lt 0 ] && ARCH_LINUX_NEWS_COUNT="0"   # Set to min 0
+    [ "$SEARCH_RESULT_SIZE" -gt 50 ] && SEARCH_RESULT_SIZE="50"       # Set to max 50
+    [ "$SEARCH_RESULT_SIZE" -lt 1 ] && SEARCH_RESULT_SIZE="1"         # Set to min 1
+    [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500"     # Set to max 500
+    [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"       # Set to min 20
 
     { # Write properties
         echo "ARCH_LINUX_NEWS_COUNT=${ARCH_LINUX_NEWS_COUNT}"
         echo "FLATPAK_SUPPORT_ENABLED=${FLATPAK_SUPPORT_ENABLED}"
         echo "AUR_REVIEW_ENABLED=${AUR_REVIEW_ENABLED}"
+        echo "SEARCH_RESULT_SIZE=${SEARCH_RESULT_SIZE}"
+        echo "PACKAGE_INFO_WIDTH=${PACKAGE_INFO_WIDTH}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -407,7 +446,7 @@ gum_choose() { gum choose --no-show-help --header="" --cursor "> " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 
-gum_title() { echo && gum_purple --bold "> ${*}"; }
+gum_title() { gum_purple --bold "> ${*}"; }
 gum_mesg() { gum_white --bold "> ${*}"; }
 gum_info() { gum_green --bold "> ${*}"; }
 gum_warn() { gum_yellow --bold "> ${*}"; }
@@ -424,13 +463,13 @@ print_header() {
 ███████ ██████  ██      ███████     ██    ██ ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    ' && gum_white --bold "System Manager ${VERSION}"
+    ' && gum_white --bold "System Manager ${VERSION}" && echo
 }
 
 action_help() {
-    print_header && gum_title 'App'
+    gum_title 'App'
     gum_white 'arch-os [--kitty | -k]            Open main menu'
-    gum_title 'Actions'
+    echo && gum_title 'Actions'
     gum_white 'arch-os [--kitty | -k] check      Check & print package updates'
     gum_white 'arch-os [--kitty | -k] notify     Check, print & notify package updates'
     gum_white 'arch-os [--kitty | -k] search     Search package'
@@ -441,7 +480,7 @@ action_help() {
     gum_white 'arch-os [--kitty | -k] refresh    Refresh Pacman mirrorlist'
     gum_white 'arch-os [--kitty | -k] downgrade  Downgrade packages'
     gum_white 'arch-os [--kitty | -k] reset      Reset Pacman'
-    gum_white 'arch-os [--kitty | -k] info       System info'
+    gum_white 'arch-os [--kitty | -k] system     System info'
     gum_white 'arch-os [--kitty | -k] settings   Settings'
     gum_white 'arch-os [--kitty | -k] help       Help'
 }
