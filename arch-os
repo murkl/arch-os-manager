@@ -33,7 +33,7 @@ ARCH_LINUX_NEWS=""
 main() {
 
     set -Eeo pipefail # Set error handling
-    local user_input options selected_action
+    local user_input options selected_action skip_confirm
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -109,23 +109,24 @@ main() {
         fi
 
         # Execute action
+        skip_confirm="false"
         case "$selected_action" in # Execute action
-        'search') action_search ;;
-        'fetch') action_fetch ;;
-        'upgrade') action_upgrade ;;
-        'orphans') action_orphans ;;
-        'merge') action_merge ;;
-        'refresh') action_refresh ;;
-        'downgrade') action_downgrade ;;
-        'reset') action_reset ;;
-        'system') action_system ;;
-        'settings') action_settings ;;
-        'help') action_help ;;
+        'search') action_search || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'fetch') action_fetch || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'upgrade') action_upgrade || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'orphans') action_orphans || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'merge') action_merge || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'refresh') action_refresh || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'downgrade') action_downgrade || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'reset') action_reset || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'system') action_system || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'settings') action_settings || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'help') action_help || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
         *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
-        local result="$?"
         unset selected_action # Reset selected action
-        [ "$result" = "2" ] && continue
+        [ "$skip_confirm" = "true" ] && [ -n "$1" ] && exit 2
+        [ "$skip_confirm" = "true" ] && continue
         [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 2
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 2
     done
@@ -155,7 +156,7 @@ action_check_updates_available() { # Check & print package updates
     local update_available="false"
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
-    [ "$update_available" = "false" ] && return 2
+    [ "$update_available" = "false" ] && return 1
     return 0
 }
 
@@ -212,21 +213,21 @@ action_search() { # Manage packages
     user_input=$(gum_choose --height=6 "${options[@]}") || return 0
     case "$user_input" in # Set user action to selected action
     'Install')
-        gum_info "Install Package: ${pkg_name} (AUR: ${pkg_is_aur})"
+        gum_info "Install Package: ${pkg_name}"
         local paru_args="" && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
         ! paru -S $paru_args "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
         gum_info "Done"
         return 0
         ;;
     'Remove')
-        gum_warn "Remove Package: ${pkg_name} (AUR: ${pkg_is_aur})"
+        gum_warn "Remove Package: ${pkg_name}"
         ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
         gum_info "Done"
         return 0
         ;;
     'Show PKGBUILD')
         print_header && gum_title "Show PKGBUILD"
-        paru -Gp "$pkg_name" || return 1
+        paru -Gp "$pkg_name"
         gum_info "Done"
         return 0
         ;;
@@ -238,7 +239,7 @@ action_search() { # Manage packages
         ;;
     'Exit')
         gum_info "Done"
-        return 0
+        return 2
         ;;
     *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
     esac
