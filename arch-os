@@ -312,7 +312,7 @@ action_downgrade() { # Downgrade packages
         paru -S $paru_args downgrade
         print_header # Clean install output & print new header
     fi
-    gum_title "Downgrade System Packages"
+    gum_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
     ! user_input=$(gum_filter --limit 25 --height "$SEARCH_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
