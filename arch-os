@@ -204,6 +204,7 @@ action_search() { # Manage packages
     echo && gum_title "Options"
     local options=()
     local user_input=''
+    [ "$pkg_is_aur" = "true" ] && options+=("Show PKGBUILD")
     [ "$pkg_is_installed" = "false" ] && options+=("Install")
     [ "$pkg_is_installed" = "true" ] && options+=("Remove")
     command -v /usr/bin/downgrade &>/dev/null && [ "$pkg_is_installed" = "true" ] && [ "$pkg_is_aur" = "false" ] && options+=("Downgrade")
@@ -220,6 +221,12 @@ action_search() { # Manage packages
     'Remove')
         gum_warn "Remove Package: ${pkg_name} (AUR: ${pkg_is_aur})"
         ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
+        gum_info "Done"
+        return 0
+        ;;
+    'Show PKGBUILD')
+        print_header && gum_title "Show PKGBUILD"
+        paru -Gp "$pkg_name" || return 1
         gum_info "Done"
         return 0
         ;;
