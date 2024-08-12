@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSIO
-VERSION="1.4.5"
+VERSION="1.4.6"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -33,7 +33,7 @@ ARCH_LINUX_NEWS=""
 main() {
 
     set -Eeo pipefail # Set error handling
-    local user_input options selected_action
+    local user_input options selected_action skip_confirm
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -81,17 +81,15 @@ main() {
     selected_action="$1"
 
     # Init
-    gum_title "Loading..."
-    # Fetch the Arch Linux news feed
-    gum_info "Loading Arch Linux News Feed..."
+    gum_white "Loading Arch OS Manager..."
     [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
     [ ! -f "$PACKAGES_DB" ] && sync_packages
 
     # Show menu or execute user action
     while (true); do
+        print_header # Print header
         if [ -z "$selected_action" ]; then
-            print_header # Print header
-            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
+            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Exit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'Search Package') selected_action='search' ;;
@@ -105,29 +103,30 @@ main() {
             'System Info') selected_action='system' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
-            'Quit') exit 2 ;;
+            'Exit') exit 2 ;;
             *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
             esac
         fi
 
         # Execute action
+        skip_confirm="false"
         case "$selected_action" in # Execute action
-        'search') action_search ;;
-        'fetch') action_fetch ;;
-        'upgrade') action_upgrade ;;
-        'orphans') action_orphans ;;
-        'merge') action_merge ;;
-        'refresh') action_refresh ;;
-        'downgrade') action_downgrade ;;
-        'reset') action_reset ;;
-        'system') action_system ;;
-        'settings') action_settings ;;
-        'help') action_help ;;
+        'search') action_search || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'fetch') action_fetch || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'upgrade') action_upgrade || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'orphans') action_orphans || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'merge') action_merge || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'refresh') action_refresh || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'downgrade') action_downgrade || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'reset') action_reset || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'system') action_system || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'settings') action_settings || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
+        'help') action_help || { [ "$?" = "2" ] && skip_confirm="true"; } ;;
         *) gum_fail "Action '${selected_action}' not available" && exit 1 ;;
         esac
-        local result="$?"
         unset selected_action # Reset selected action
-        [ "$result" = "2" ] && continue
+        [ "$skip_confirm" = "true" ] && [ -n "$1" ] && exit 2
+        [ "$skip_confirm" = "true" ] && continue
         [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 2
         ! gum_confirm --affirmative "< Back" --negative 'Exit' '' && exit 2
     done
@@ -157,93 +156,106 @@ action_check_updates_available() { # Check & print package updates
     local update_available="false"
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
-    [ "$update_available" = "false" ] && return 2
+    [ "$update_available" = "false" ] && return 1
     return 0
 }
 
 action_search() { # Manage packages
     local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
-    gum_title "Package"
-    ! pkg_name=$(gum_filter --fuzzy --sort --limit 1 --height "$SEARCH_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
-    pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
-    pkg_is_aur="false" && [ "$(print_package_info "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
-    pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
+    while (true); do
+        gum_title "Package Information"
+        [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$SEARCH_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+        pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
+        pkg_is_aur="false" && [ "$(print_package_info "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
+        pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
 
-    # Get package info
-    if [ "$pkg_is_installed" = "true" ]; then
-        pkg_info_local="$(LANG=en_US.UTF-8 paru -Qi "$pkg_name" 2>/dev/null)" # Installed
-    fi
+        # Get package info
+        if [ "$pkg_is_installed" = "true" ]; then
+            pkg_info_local="$(LANG=en_US.UTF-8 paru -Qi "$pkg_name" 2>/dev/null)" # Installed
+        fi
 
-    #echo # Print new line
-    gum_white --bold "$(print_filled_spaces "Name:") ${pkg_name}"
-    gum_white "$(print_filled_spaces "Repository:") $(print_package_info "$pkg_info_remote" "Repository")"
-    gum_white "$(print_filled_spaces "Version:") $(print_package_info "$pkg_info_remote" "Version")"
-    gum_white "$(print_filled_spaces "Description:") $(print_package_info "$pkg_info_remote" "Description")"
-    # Check if AUR pkg
-    if [ "$pkg_is_aur" = "true" ]; then # AUR package info
-        gum_white "$(print_filled_spaces "AUR URL:") $(print_package_info "$pkg_info_remote" "AUR URL")"
-        gum_white "$(print_filled_spaces "AUR Maintainer:") $(print_package_info "$pkg_info_remote" "Maintainer")"
-        gum_white "$(print_filled_spaces "AUR Votes:") $(print_package_info "$pkg_info_remote" "Votes")"
-        gum_white "$(print_filled_spaces "AUR Popularity:") $(print_package_info "$pkg_info_remote" "Popularity")"
-        gum_white "$(print_filled_spaces "AUR Modified:") $(print_package_info "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
-    else
-        gum_white "$(print_filled_spaces "Package URL:") $(print_package_info "$pkg_info_remote" "URL")"
-        gum_white "$(print_filled_spaces "Package Date:") $(print_package_info "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
-    fi
+        echo # Print new line
+        gum_white --bold "$(print_filled_spaces "Name:") ${pkg_name}"
+        gum_white "$(print_filled_spaces "Repository:") $(print_package_info "$pkg_info_remote" "Repository")"
+        gum_white "$(print_filled_spaces "Dependencies:") $(print_package_info "$pkg_info_remote" "Depends On" | wc -w)"
+        gum_white "$(print_filled_spaces "Version:") $(print_package_info "$pkg_info_remote" "Version")"
+        gum_white "$(print_filled_spaces "Description:") $(print_package_info "$pkg_info_remote" "Description")"
+        # Check if AUR pkg
+        if [ "$pkg_is_aur" = "true" ]; then # AUR package info
+            gum_white "$(print_filled_spaces "AUR URL:") $(print_package_info "$pkg_info_remote" "AUR URL")"
+            gum_white "$(print_filled_spaces "AUR Maintainer:") $(print_package_info "$pkg_info_remote" "Maintainer")"
+            gum_white "$(print_filled_spaces "AUR Votes:") $(print_package_info "$pkg_info_remote" "Votes")"
+            gum_white "$(print_filled_spaces "AUR Popularity:") $(print_package_info "$pkg_info_remote" "Popularity")"
+            gum_white "$(print_filled_spaces "AUR Modified:") $(print_package_info "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
+        else
+            gum_white "$(print_filled_spaces "Package URL:") $(print_package_info "$pkg_info_remote" "URL")"
+            gum_white "$(print_filled_spaces "Package Date:") $(print_package_info "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
+        fi
 
-    # Check if pkg is installed
-    if [ "$pkg_is_installed" = "true" ]; then # Installed
-        gum_white "$(print_filled_spaces "Install Date:") $(print_package_info "$pkg_info_local" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
-        gum_white "$(print_filled_spaces "Install Version:") $(print_package_info "$pkg_info_local" "Version")"
-        gum_white "$(print_filled_spaces "Install Reason:") $(print_package_info "$pkg_info_local" "Install Reason")"
-        gum_green --bold "$(print_filled_spaces "Installed:") yes"
-    else # Not installed
-        gum_yellow --bold "$(print_filled_spaces "Installed:") no"
-    fi
+        # Check if pkg is installed
+        if [ "$pkg_is_installed" = "true" ]; then # Installed
+            gum_white "$(print_filled_spaces "Install Date:") $(print_package_info "$pkg_info_local" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
+            gum_white "$(print_filled_spaces "Install Version:") $(print_package_info "$pkg_info_local" "Version")"
+            gum_white "$(print_filled_spaces "Install Reason:") $(print_package_info "$pkg_info_local" "Install Reason")"
+            gum_green --bold "$(print_filled_spaces "Installed:") yes"
+        else # Not installed
+            gum_yellow --bold "$(print_filled_spaces "Installed:") no"
+        fi
 
-    # Show options menu
-    echo && gum_title "Options"
-    local options=()
-    local user_input=''
-    [ "$pkg_is_installed" = "false" ] && options+=("Install")
-    [ "$pkg_is_installed" = "true" ] && options+=("Remove")
-    options+=("Quit")
-    user_input=$(gum_choose --height=5 "${options[@]}") || return 0
-    case "$user_input" in # Set user action to selected action
-    'Install')
-        gum_info "Install Package: ${pkg_name} (AUR: ${pkg_is_aur})"
-        local paru_args="" && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-        ! paru -S $paru_args "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
-        gum_info "Done"
-        return 0
-        ;;
-    'Remove')
-        gum_warn "Remove Package: ${pkg_name} (AUR: ${pkg_is_aur})"
-        ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
-        gum_info "Done"
-        return 0
-        ;;
-    'Quit')
-        gum_info "Done"
-        return 0
-        ;;
-    *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
-    esac
+        # Show options menu
+        echo && gum_title "Options"
+        local options=()
+        local user_input=''
+        [ "$pkg_is_aur" = "true" ] && options+=("Show PKGBUILD")
+        [ "$pkg_is_installed" = "false" ] && options+=("Install")
+        [ "$pkg_is_installed" = "true" ] && options+=("Remove")
+        command -v /usr/bin/downgrade &>/dev/null && [ "$pkg_is_installed" = "true" ] && [ "$pkg_is_aur" = "false" ] && options+=("Downgrade")
+        options+=("Exit")
+        user_input=$(gum_choose --height=6 "${options[@]}") || return 0
+        case "$user_input" in # Set user action to selected action
+        'Install')
+            gum_info "Install Package: ${pkg_name}"
+            local paru_args="" && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
+            ! paru -S $paru_args "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
+            gum_info "Done"
+            ;;
+        'Remove')
+            gum_warn "Remove Package: ${pkg_name}"
+            ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
+            gum_info "Done"
+            ;;
+        'Show PKGBUILD')
+            print_header && gum_title "PKGBUILD" && echo
+            paru -Gp "$pkg_name"
+            ;;
+        'Downgrade')
+            gum_warn "Downgrade Package: ${pkg_name}"
+            ! sudo downgrade "$pkg_name" && gum_fail "Downgrading ${pkg_name} failed" && return 0
+            gum_info "Done"
+            ;;
+        'Exit')
+            gum_info "Done"
+            return 2
+            ;;
+        *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
+        esac
+        gum_confirm --affirmative "< Back" --negative '' '' || exit 2
+        print_header
+    done
     return 0
 }
 
 action_fetch() { # List package updates
-    print_news
+    print_news && gum_title "Fetch Package Updates"
+    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
+    ! action_check_updates_available && gum_info "Your system is up to date"
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
-    gum_title "Fetch Package Updates"
-    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
-    ! action_check_updates_available && gum_info "Your system is up to date" && return 0
     return 0
 }
 
 action_upgrade() { # Update packages
-    print_news && echo && gum_title "Upgrade System Packages"
+    print_news && gum_title "Upgrade System Packages"
     local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
     ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
     sync_packages
@@ -307,10 +319,10 @@ action_downgrade() { # Downgrade packages
         paru -S $paru_args downgrade
         print_header # Clean install output & print new header
     fi
-    gum_title "Downgrade System Packages"
+    gum_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height 15 --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
+    ! user_input=$(gum_filter --limit 25 --height "$SEARCH_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
     [ -z "$user_input" ] && gum_warn "No package selected" && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
@@ -345,7 +357,7 @@ action_system() { # System Logs
 
 action_settings() { # Settings
     gum_title "Edit Settings"
-    if gum_write --height=10 --width=75 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+    if gum_write --height=6 --value="$(cat "$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
         gum_info "Settings saved at ${ARCH_OS_CONF}" && return 0
     else
@@ -413,16 +425,13 @@ init_settings() {
 
 get_news_date() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
 get_news_title() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/title)" -; }
-get_news_url() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/link)" -; }
 
 print_news() {
     if [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
         for ((i = 1; i <= ARCH_LINUX_NEWS_COUNT; i++)); do
             gum_white "$(get_news_date "$i") │ $(get_news_title "$i")"
-            #gum_white "$(get_news_date "$i") $(get_news_url "$i")"
         done
-        echo && gum_white "More Information: https://archlinux.org/news"
-        #[ "$i" -lt "$ARCH_LINUX_NEWS_COUNT" ] && echo
+        echo && gum_white "More Information: https://archlinux.org/news" && echo
     fi
     return 0
 }
@@ -440,8 +449,8 @@ gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 gum_style() { gum style "${@}"; }
-gum_filter() { gum filter --width=80 --prompt "> " --indicator "> " --header.foreground "$COLOR_PURPLE" "${@}"; }
-gum_write() { gum write --prompt "• " --header.foreground "$COLOR_PURPLE" --show-cursor-line --char-limit 0 "${@}"; }
+gum_filter() { gum filter --width="$PACKAGE_INFO_WIDTH" --prompt "> " --indicator "> " --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_write() { gum write --width="$PACKAGE_INFO_WIDTH" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "> " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }

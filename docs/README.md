@@ -17,7 +17,7 @@
 
 </div>
 
-<p><img src="./screenshots/main.png"></p>
+<p><img src="./screenshots/arch-os-manager.png"></p>
 
 ### Dependencies
 
@@ -67,13 +67,14 @@ Flatpak support is enabled by default. To disable Flatpak support, change `FLATP
 
 <div align="center">
 
-<p><img width="90%" src="./screenshots/help.png"></p>
+<p><img width="90%" src="./screenshots/main.png"></p>
 <p><img width="90%" src="./screenshots/search.png"></p>
-<p><img width="90%" src="./screenshots/list.png"></p>
+<p><img width="90%" src="./screenshots/fetch.png"></p>
 <p><img width="90%" src="./screenshots/upgrade.png"></p>
 <p><img width="90%" src="./screenshots/merge.png"></p>
 <p><img width="90%" src="./screenshots/refresh.png"></p>
 <p><img width="90%" src="./screenshots/downgrade.png"></p>
 <p><img width="90%" src="./screenshots/settings.png"></p>
+<p><img width="90%" src="./screenshots/help.png"></p>
 
 </div>
