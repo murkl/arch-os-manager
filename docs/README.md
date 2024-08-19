@@ -20,7 +20,7 @@
 
 **[➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
 
-**Run Arch OS Manager: `arch-os`**
+Run Arch OS Manager: `arch-os`
 
 ## Install from GitHub
 
