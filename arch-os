@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSIO
-VERSION="1.4.6"
+VERSION="1.4.7"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -82,14 +82,14 @@ main() {
 
     # Init
     gum_white "Loading Arch OS Manager..."
-    [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
+    [ -n "$ARCH_NEWS_COUNT" ] && [ "$ARCH_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
     [ ! -f "$PACKAGES_DB" ] && sync_packages
 
     # Show menu or execute user action
     while (true); do
         print_header # Print header
         if [ -z "$selected_action" ]; then
-            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Exit")
+            options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
             case "$user_input" in # Set user action to selected action
             'Search Package') selected_action='search' ;;
@@ -103,7 +103,7 @@ main() {
             'System Info') selected_action='system' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
-            'Exit') exit 2 ;;
+            'Quit') exit 2 ;;
             *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
             esac
         fi
@@ -156,6 +156,13 @@ action_check_updates_available() { # Check & print package updates
     local update_available="false"
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
+    if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
+        local flatpak_updates && flatpak_updates=$(LANG=en_US.UTF-8 flatpak remote-ls --updates --columns=application,installed-size,download-size,version,branch)
+        [ -n "$flatpak_updates" ] && update_available="true"
+        #echo -e "$flatpak_updates" | awk '{printf "\033[1m%s\033[0m \033[1;32m%s\033[0m -> \033[1;32m%s\033[0m\n", $1, $4, ($5 == "" ? "latest" : $5)}'
+        # Format output and use tput if text decoration is not supported
+        [ -n "$flatpak_updates" ] && echo "$flatpak_updates" | awk -v b="$(tput bold 2>/dev/null)" -v g="$(tput setaf 2 2>/dev/null)" -v r="$(tput sgr0 2>/dev/null)" '{printf "%s%s%s %s%s%s -> %s%s%s\n", b, $1, r, b, g, $4, b, g, ($5 == "" ? "latest" : $5), r}'
+    fi
     [ "$update_available" = "false" ] && return 1
     return 0
 }
@@ -164,7 +171,7 @@ action_search() { # Manage packages
     local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
         gum_title "Package Information"
-        [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$SEARCH_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+        [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$FILTER_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
         pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
         pkg_is_aur="false" && [ "$(print_package_info "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
         pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
@@ -257,7 +264,14 @@ action_fetch() { # List package updates
 action_upgrade() { # Update packages
     print_news && gum_title "Upgrade System Packages"
     local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-    ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
+    ! paru -Syu $paru_args && gum_fail "Paru upgrade failed" && return 0
+    if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
+        if [ -n "$(flatpak remote-ls --updates)" ]; then
+            gum_mesg "Flatpak Update" && ! flatpak update -y --noninteractive && gum_fail "Flatpak upgrade failed" && return 0
+        else
+            gum_mesg "No Flatpak updates available"
+        fi
+    fi
     sync_packages
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
@@ -322,7 +336,7 @@ action_downgrade() { # Downgrade packages
     gum_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "$SEARCH_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
+    ! user_input=$(gum_filter --limit 25 --height "$FILTER_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
     [ -z "$user_input" ] && gum_warn "No package selected" && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
@@ -393,26 +407,28 @@ init_settings() {
     source "$ARCH_OS_CONF"
 
     # Set default properties
-    [ -z "$ARCH_LINUX_NEWS_COUNT" ] && ARCH_LINUX_NEWS_COUNT="3"
-    [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
-    [ -z "$AUR_REVIEW_ENABLED" ] && AUR_REVIEW_ENABLED="false"
-    [ -z "$SEARCH_RESULT_SIZE" ] && SEARCH_RESULT_SIZE="20"
+    [ -z "$ARCH_NEWS_COUNT" ] && ARCH_NEWS_COUNT="3"
+    [ -z "$ARCH_NEWS_URL_ENABLED" ] && ARCH_NEWS_URL_ENABLED="true"
+    [ -z "$FILTER_RESULT_SIZE" ] && FILTER_RESULT_SIZE="20"
     [ -z "$PACKAGE_INFO_WIDTH" ] && PACKAGE_INFO_WIDTH="80"
+    [ -z "$AUR_REVIEW_ENABLED" ] && AUR_REVIEW_ENABLED="false"
+    [ -z "$FLATPAK_SUPPORT_ENABLED" ] && FLATPAK_SUPPORT_ENABLED="true"
 
     # Validate properties
-    [ "$ARCH_LINUX_NEWS_COUNT" -gt 10 ] && ARCH_LINUX_NEWS_COUNT="10" # Set to max 10
-    [ "$ARCH_LINUX_NEWS_COUNT" -lt 0 ] && ARCH_LINUX_NEWS_COUNT="0"   # Set to min 0
-    [ "$SEARCH_RESULT_SIZE" -gt 50 ] && SEARCH_RESULT_SIZE="50"       # Set to max 50
-    [ "$SEARCH_RESULT_SIZE" -lt 1 ] && SEARCH_RESULT_SIZE="1"         # Set to min 1
-    [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500"     # Set to max 500
-    [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"       # Set to min 20
+    [ "$ARCH_NEWS_COUNT" -gt 10 ] && ARCH_NEWS_COUNT="10"         # Set to max 10
+    [ "$ARCH_NEWS_COUNT" -lt 0 ] && ARCH_NEWS_COUNT="0"           # Set to min 0
+    [ "$FILTER_RESULT_SIZE" -gt 50 ] && FILTER_RESULT_SIZE="50"   # Set to max 50
+    [ "$FILTER_RESULT_SIZE" -lt 1 ] && FILTER_RESULT_SIZE="1"     # Set to min 1
+    [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500" # Set to max 500
+    [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"   # Set to min 20
 
     { # Write properties
-        echo "ARCH_LINUX_NEWS_COUNT=${ARCH_LINUX_NEWS_COUNT}"
-        echo "FLATPAK_SUPPORT_ENABLED=${FLATPAK_SUPPORT_ENABLED}"
-        echo "AUR_REVIEW_ENABLED=${AUR_REVIEW_ENABLED}"
-        echo "SEARCH_RESULT_SIZE=${SEARCH_RESULT_SIZE}"
+        echo "ARCH_NEWS_COUNT=${ARCH_NEWS_COUNT}"
+        echo "ARCH_NEWS_URL_ENABLED=${ARCH_NEWS_URL_ENABLED}"
+        echo "FILTER_RESULT_SIZE=${FILTER_RESULT_SIZE}"
         echo "PACKAGE_INFO_WIDTH=${PACKAGE_INFO_WIDTH}"
+        echo "AUR_REVIEW_ENABLED=${AUR_REVIEW_ENABLED}"
+        echo "FLATPAK_SUPPORT_ENABLED=${FLATPAK_SUPPORT_ENABLED}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -427,11 +443,12 @@ get_news_date() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/p
 get_news_title() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/title)" -; }
 
 print_news() {
-    if [ -n "$ARCH_LINUX_NEWS_COUNT" ] && [ "$ARCH_LINUX_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
-        for ((i = 1; i <= ARCH_LINUX_NEWS_COUNT; i++)); do
+    if [ -n "$ARCH_NEWS_COUNT" ] && [ "$ARCH_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
+        for ((i = 1; i <= ARCH_NEWS_COUNT; i++)); do
             gum_white "$(get_news_date "$i") │ $(get_news_title "$i")"
         done
-        echo && gum_white "More Information: https://archlinux.org/news" && echo
+        [ "$ARCH_NEWS_URL_ENABLED" = "true" ] && echo && gum_white "More Information: https://archlinux.org/news"
+        echo # Print new line
     fi
     return 0
 }
