@@ -94,14 +94,14 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
-<img width="48%"  style="vertical-align: top;" src="./screenshots/main.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/search.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/fetch.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/upgrade.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/merge.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/refresh.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/downgrade.png">
-<img width="48%"  style="vertical-align: top;" src="./screenshots/help.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/main.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/search.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/fetch.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/upgrade.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/merge.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/refresh.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/downgrade.png">
+<img width="48%" style="vertical-align: top;" src="./screenshots/help.png">
 
 </div>
 
