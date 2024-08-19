@@ -33,15 +33,15 @@ Run Arch OS Manager: `arch-os`
 Edit settings with the build-in editor in Arch OS Manager or edit the config file manually at `~/.arch-os/arch-os.conf`.
 
 ```
-FLATPAK_SUPPORT_ENABLED=true            # Enable Flatpak Support (Disable: false)
-FLATPAK_UPGRADE_CONFIRM_ENABLED=false   # Disable flatpak upgrade confirm (Enable: true)
-ORPHANS_CONFIRM_ENABLED=false           # Disable confirm remove orphans (Enable: true)
-UPGRADE_CONFIRM_ENABLED=true            # Enable confirm upgrade system packages (Disable: false)
-AUR_REVIEW_ENABLED=false                # Disable AUR review (Enable: true)
-ARCH_NEWS_URL_ENABLED=true              # Show 'More info url' below the news (Disable: false)
-ARCH_NEWS_COUNT=3                       # Number of news to shown (Disable: 0)
-FILTER_RESULT_SIZE=20                   # Max filter results
-PACKAGE_INFO_WIDTH=80                   # Max info width (cut horizontal output)
+ARCH_AUR_REVIEW=false           # Disable AUR review (Enable: true)
+ARCH_UPGRADE_CONFIRM=true       # Enable confirm upgrade system packages (Disable: false)
+FLATPAK_SUPPORT=true            # Enable Flatpak Support (Disable: false)
+FLATPAK_UPGRADE_CONFIRM=false   # Disable flatpak upgrade confirm (Enable: true)
+NEWS_QUANTITY=3                 # Number of news to shown (Disable: 0)
+NEWS_SHOW_URL=true              # Show 'More info url' below the news (Disable: false)
+ORPHANS_CONFIRM=false           # Disable confirm remove orphans (Enable: true)
+FILTER_RESULT_SIZE=20           # Max filter results
+PACKAGE_INFO_WIDTH=80           # Max info width (cut horizontal output)
 ```
 
 ## Integrate GNOME Extension
