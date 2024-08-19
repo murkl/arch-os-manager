@@ -53,7 +53,7 @@ arch-os [--kitty | -k] help        Help
 
 ## Settings
 
-Edit settings with the build-in editor in Arch OS Manager or edit the config file manually at `~/.arch-os/arch-os.conf`
+Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/arch-os.conf`
 
 ```
 ARCH_AUR_REVIEW=false              # Disable AUR review (Enable: true)
