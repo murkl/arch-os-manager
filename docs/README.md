@@ -7,7 +7,6 @@
 
 <div align="center">
   <p><img src="./screenshots/arch-os-manager.png"></p>
-  <p><b>Streamlining software management and updates for enhanced usability in Arch Linux</b></p>
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
     <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
