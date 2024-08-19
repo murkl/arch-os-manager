@@ -7,7 +7,7 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSIO
-VERSION="1.4.6"
+VERSION="1.4.7"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -156,6 +156,13 @@ action_check_updates_available() { # Check & print package updates
     local update_available="false"
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
+    if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
+        local flatpak_updates && flatpak_updates=$(LANG=en_US.UTF-8 flatpak remote-ls --updates --columns=application,installed-size,download-size,version,branch)
+        [ -n "$flatpak_updates" ] && update_available="true"
+        #echo -e "$flatpak_updates" | awk '{printf "\033[1m%s\033[0m \033[1;32m%s\033[0m -> \033[1;32m%s\033[0m\n", $1, $4, ($5 == "" ? "latest" : $5)}'
+        # Format output and use tput if text decoration is not supported
+        [ -n "$flatpak_updates" ] && echo "$flatpak_updates" | awk -v b="$(tput bold 2>/dev/null)" -v g="$(tput setaf 2 2>/dev/null)" -v r="$(tput sgr0 2>/dev/null)" '{printf "%s%s%s %s%s%s -> %s%s%s\n", b, $1, r, b, g, $4, b, g, ($5 == "" ? "latest" : $5), r}'
+    fi
     [ "$update_available" = "false" ] && return 1
     return 0
 }
@@ -257,7 +264,14 @@ action_fetch() { # List package updates
 action_upgrade() { # Update packages
     print_news && gum_title "Upgrade System Packages"
     local paru_args && [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args='--skipreview'
-    ! paru -Syu $paru_args && gum_fail "Upgrade failed" && return 0
+    ! paru -Syu $paru_args && gum_fail "Paru upgrade failed" && return 0
+    if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
+        if [ -n "$(flatpak remote-ls --updates)" ]; then
+            gum_mesg "Flatpak Update" && ! flatpak update -y --noninteractive && gum_fail "Flatpak upgrade failed" && return 0
+        else
+            gum_mesg "No Flatpak updates available"
+        fi
+    fi
     sync_packages
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
