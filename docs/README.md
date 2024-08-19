@@ -34,7 +34,7 @@ Edit settings with the build-in editor in Arch OS Manager or edit the config fil
 
 ```
 FLATPAK_SUPPORT_ENABLED=true            # Enable Flatpak Support (Disable: false)
-FLATPAK_UPGRADE_CONFIRM_ENABLED=false   # Disable flatpak upgrade confirm (Enable: true)u
+FLATPAK_UPGRADE_CONFIRM_ENABLED=false   # Disable flatpak upgrade confirm (Enable: true)
 ORPHANS_CONFIRM_ENABLED=false           # Disable confirm remove orphans (Enable: true)
 UPGRADE_CONFIRM_ENABLED=true            # Enable confirm upgrade system packages (Disable: false)
 AUR_REVIEW_ENABLED=false                # Disable AUR review (Enable: true)
