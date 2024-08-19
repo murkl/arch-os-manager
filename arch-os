@@ -292,13 +292,13 @@ action_upgrade() { # Update packages
     local paru_args=()
     [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args+=('--skipreview')
     [ "$UPGRADE_CONFIRM_ENABLED" = "false" ] && paru_args+=('--noconfirm')
-    local flatpak_args=() && [ "$FLATPAK_UPGRADE_CONFIRM_ENABLED" = "false" ] && flatpak_args+=('-y')
     # Upgrade system
     ! paru -Syuq "${paru_args[@]}" && gum_fail "Paru upgrade failed" && return 0
     if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
         # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
-            gum_mesg "Upgrade Flatpak Apps" && ! flatpak update "${flatpak_args[@]}" --noninteractive && gum_fail "Flatpak upgrade failed" && return 0
+            [ "$FLATPAK_UPGRADE_CONFIRM_ENABLED" = "false" ] && ! gum_spin --title 'Upgrade Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_warn "Canceled" && return 0
+            [ "$FLATPAK_UPGRADE_CONFIRM_ENABLED" = "true" ] && gum_mesg "Upgrade Flatpak Apps" && ! flatpak update && gum_fail "Flatpak upgrade failed" && return 0
         else
             gum_mesg "Flatpak is up to date"
         fi
@@ -315,7 +315,7 @@ action_orphans() { # Remove orphaned packages
     gum_title "Remove Package Orphans"
     # Prepare args
     local paru_args=() && [ "$ORPHANS_CONFIRM_ENABLED" = "false" ] && paru_args+=('--noconfirm')
-    local flatpak_args=() && [ "$ORPHANS_CONFIRM_ENABLED" = "false" ] && flatpak_args+=('-y')
+    local flatpak_args=() && [ "$ORPHANS_CONFIRM_ENABLED" = "false" ] && flatpak_args+=('-y') && flatpak_args+=('--noninteractive')
     # Remove pacman orphans
     # shellcheck disable=SC2046
     paru -Qtdq &>/dev/null && ! { paru -Rnsq "${paru_args[@]}" $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0
@@ -323,7 +323,7 @@ action_orphans() { # Remove orphaned packages
     # shellcheck disable=SC2046
     ! paru -Rsu "${paru_args[@]}" $(paru -Qqd) 2>/dev/null && gum_warn "Canceled" && return 0 # Remove orphans
     # Remove unused flatpaks
-    [ "$FLATPAK_SUPPORT_ENABLED" = "true" ] && command -v flatpak &>/dev/null && ! flatpak uninstall --noninteractive "${flatpak_args[@]}" --unused && gum_warn "Canceled" && return 0
+    [ "$FLATPAK_SUPPORT_ENABLED" = "true" ] && command -v flatpak &>/dev/null && ! flatpak uninstall "${flatpak_args[@]}" --unused && gum_warn "Canceled" && return 0
     gum_info "Done"
     return 0
 }
