@@ -104,3 +104,11 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <img width="48%"  style="vertical-align: top;" src="./screenshots/help.png">
 
 </div>
+
+## Credits
+
+- https://archlinux.org
+- https://github.com/Morganamilo/paru
+- https://github.com/kovidgoyal/kitty
+- https://github.com/charmbracelet/gum
+- https://github.com/RaphaelRochet/arch-update
