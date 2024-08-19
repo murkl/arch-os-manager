@@ -1,39 +1,73 @@
 <div align="center">
-<h1>
-  <img src="./logo.svg" width="150" height="150">
-  <p><b>Arch OS Manager</b></p>
-</h1>
+  <h1>
+    <img src="./logo.svg" width="150" height="150">
+    <p><b>Arch OS Manager</b></p>
+  </h1>
+</div>
 
 <div align="center">
-
-<p>
-<img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
-<img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
-</p>
-
-<sub><b>100% shellcheck approved</b></sub>
-
-<sub><b>used by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub>
-
+  <p><img src="./screenshots/arch-os-manager.png"></p>
+  <p>
+    <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
+    <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
+  </p>
+  <p><sub>100% shellcheck approved</sub></p>
+  <p><sub>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></sub></p>
 </div>
 
-<p><img src="./screenshots/arch-os-manager.png"></p>
+## Install from AUR
 
-### Dependencies
+**[➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
 
-**`paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`**
+Run Arch OS Manager: `arch-os`
 
-### Install
+## Install from GitHub
 
-**[aur/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
+1. Install Dependencies: `paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`
+2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
+3. Run Arch OS Manager: `./arch-os`
 
-### Run
+## Usage
 
-**`arch-os`**
+```
+arch-os [--kitty | -k]             Open main menu
+```
 
-</div>
+```
 
-### GNOME Extension
+arch-os [--kitty | -k] check       Check & print package updates
+arch-os [--kitty | -k] notify      Check, print & notify package updates
+arch-os [--kitty | -k] search      Search package
+arch-os [--kitty | -k] fetch       Fetch package updates
+arch-os [--kitty | -k] upgrade     System upgrade
+arch-os [--kitty | -k] orphans     Remove orphaned packages
+arch-os [--kitty | -k] merge       Merge updated configurations
+arch-os [--kitty | -k] refresh     Refresh Pacman mirrorlist
+arch-os [--kitty | -k] downgrade   Downgrade packages
+arch-os [--kitty | -k] reset       Reset Pacman
+arch-os [--kitty | -k] system      System info
+arch-os [--kitty | -k] settings    Settings
+arch-os [--kitty | -k] help        Help
+
+```
+
+## Settings
+
+Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/arch-os.conf`
+
+```
+ARCH_AUR_REVIEW=false              # Disable AUR review (Enable: true)
+ARCH_UPGRADE_CONFIRM=true          # Enable confirm upgrade system packages (Disable: false)
+FLATPAK_SUPPORT=true               # Enable Flatpak Support (Disable: false)
+FLATPAK_UPGRADE_CONFIRM=false      # Disable flatpak upgrade confirm (Enable: true)
+NEWS_QUANTITY=3                    # Number of news to shown (Disable: 0)
+NEWS_SHOW_URL=true                 # Show 'More info url' below the news (Disable: false)
+ORPHANS_CONFIRM=false              # Disable confirm remove orphans (Enable: true)
+FILTER_RESULT_SIZE=20              # Max filter results
+PACKAGE_INFO_WIDTH=80              # Max info width (cut horizontal output)
+```
+
+## Integrate GNOME Extension
 
 1. Install GNOME Extension: **[archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
 2. Set `Check command`:
@@ -54,27 +88,27 @@ dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty
 dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
 ```
 
-### Arch Linux News
-
-Set the number of news items to suit your needs. Change the property `ARCH_LINUX_NEWS_COUNT` in `Settings` to your prefered number.
-To disable the Arch Linux News, set `ARCH_LINUX_NEWS_COUNT` to `0`.
-
-### Flatpak Support
-
-Flatpak support is enabled by default. To disable Flatpak support, change `FLATPAK_SUPPORT_ENABLED` in your `Settings` to `false`.
-
-### Screenshots
-
 <div align="center">
 
-<p><img width="90%" src="./screenshots/main.png"></p>
-<p><img width="90%" src="./screenshots/search.png"></p>
-<p><img width="90%" src="./screenshots/fetch.png"></p>
-<p><img width="90%" src="./screenshots/upgrade.png"></p>
-<p><img width="90%" src="./screenshots/merge.png"></p>
-<p><img width="90%" src="./screenshots/refresh.png"></p>
-<p><img width="90%" src="./screenshots/downgrade.png"></p>
-<p><img width="90%" src="./screenshots/settings.png"></p>
-<p><img width="90%" src="./screenshots/help.png"></p>
+## Screenshots
+
+<sub><b>This screenshots may outdated.</b></sub>
+
+<img width="48%"  style="vertical-align: top;" src="./screenshots/main.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/search.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/fetch.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/upgrade.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/merge.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/refresh.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/downgrade.png">
+<img width="48%"  style="vertical-align: top;" src="./screenshots/help.png">
 
 </div>
+
+## Credits
+
+- https://archlinux.org
+- https://github.com/Morganamilo/paru
+- https://github.com/kovidgoyal/kitty
+- https://github.com/charmbracelet/gum
+- https://github.com/RaphaelRochet/arch-update
