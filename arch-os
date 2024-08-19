@@ -89,7 +89,10 @@ main() {
     # Show menu or execute user action
     local first_run="true"
     while (true); do
+
         [ "$first_run" = "false" ] && print_header # Print header (except first run)
+
+        # Show menu if now user action is set
         if [ -z "$selected_action" ]; then
             options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
@@ -126,6 +129,8 @@ main() {
         'help') action_help || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
         *) action_help && echo && gum_fail "Action '${selected_action}' not available" && exit 2 ;;
         esac
+
+        # Cleanup
         unset selected_action # Reset selected action
         first_run="false"     # Set first run
         [ "$skip_confirm" = "true" ] && [ -n "$1" ] && exit 3
@@ -166,12 +171,13 @@ action_check_updates_available() { # Check & print package updates
     checkupdates && update_available="true"
     paru -Qua && update_available="true"
     if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
+        # Fetch flatpak updates
         local flatpak_updates && flatpak_updates=$(LANG=en_US.UTF-8 flatpak remote-ls --updates --columns=application,installed-size,download-size,version,branch)
+        # If result is not null set update available
         [ -n "$flatpak_updates" ] && update_available="true"
-        # Format output and use tput if text decoration is not supported (b=big, g=green, r=reset)
+        # Format output and use tput if text decoration is not supported (b=big, g=green, r=reset) (regarding to checkupdates format)
         [ -n "$flatpak_updates" ] && echo "$flatpak_updates" | awk -v b="$(tput bold 2>/dev/null)" -v g="$(tput setaf 2 2>/dev/null)" -v r="$(tput sgr0 2>/dev/null)" '{printf "%s%s%s %s%s%s%s -> %s%s%s%s\n", b, $1, r, b, g, $4, r, b, g, ($5 == "" ? "latest" : $5), r}'
     fi
-
     [ "$update_available" = "false" ] && return 1
     return 0
 }
@@ -180,53 +186,61 @@ action_search() { # Manage packages
     local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
         gum_title "Package Information"
+        # If pkg name is null (first run) show search promt
         [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$FILTER_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+
+        # Fetch general package infos
         pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
         pkg_is_aur="false" && [ "$(print_package_info "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
         pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
 
-        # Get package info
+        # Get installed package info
         if [ "$pkg_is_installed" = "true" ]; then
             pkg_info_local="$(LANG=en_US.UTF-8 paru -Qi "$pkg_name" 2>/dev/null)" # Installed
         fi
 
+        # Print general package info
         echo # Print new line
         gum_white --bold "$(print_filled_spaces "Name:") ${pkg_name}"
         gum_white "$(print_filled_spaces "Repository:") $(print_package_info "$pkg_info_remote" "Repository")"
         gum_white "$(print_filled_spaces "Dependencies:") $(print_package_info "$pkg_info_remote" "Depends On" | wc -w)"
         gum_white "$(print_filled_spaces "Version:") $(print_package_info "$pkg_info_remote" "Version")"
         gum_white "$(print_filled_spaces "Description:") $(print_package_info "$pkg_info_remote" "Description")"
-        # Check if AUR pkg
+
+        # Repo Info
         if [ "$pkg_is_aur" = "true" ]; then # AUR package info
             gum_white "$(print_filled_spaces "AUR URL:") $(print_package_info "$pkg_info_remote" "AUR URL")"
             gum_white "$(print_filled_spaces "AUR Maintainer:") $(print_package_info "$pkg_info_remote" "Maintainer")"
             gum_white "$(print_filled_spaces "AUR Votes:") $(print_package_info "$pkg_info_remote" "Votes")"
             gum_white "$(print_filled_spaces "AUR Popularity:") $(print_package_info "$pkg_info_remote" "Popularity")"
             gum_white "$(print_filled_spaces "AUR Modified:") $(print_package_info "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
-        else
+        else # Non AUR package info
             gum_white "$(print_filled_spaces "Package URL:") $(print_package_info "$pkg_info_remote" "URL")"
             gum_white "$(print_filled_spaces "Package Date:") $(print_package_info "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
         fi
 
-        # Check if pkg is installed
-        if [ "$pkg_is_installed" = "true" ]; then # Installed
+        # Installed/Not installed package info
+        if [ "$pkg_is_installed" = "true" ]; then # Installed package info
             gum_white "$(print_filled_spaces "Install Date:") $(print_package_info "$pkg_info_local" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
             gum_white "$(print_filled_spaces "Install Version:") $(print_package_info "$pkg_info_local" "Version")"
             gum_white "$(print_filled_spaces "Install Reason:") $(print_package_info "$pkg_info_local" "Install Reason")"
             gum_green --bold "$(print_filled_spaces "Installed:") yes"
-        else # Not installed
+        else # Not installed package info
             gum_yellow --bold "$(print_filled_spaces "Installed:") no"
         fi
 
-        # Show options menu
+        # Show package options menu
         echo && gum_title "Options"
         local options=()
         local user_input=''
+        # Dynamic package entries
         [ "$pkg_is_aur" = "true" ] && options+=("Show PKGBUILD")
         [ "$pkg_is_installed" = "false" ] && options+=("Install")
         [ "$pkg_is_installed" = "true" ] && options+=("Remove")
+        # Show downgrade entry if package is installed and not from AUR
         command -v /usr/bin/downgrade &>/dev/null && [ "$pkg_is_installed" = "true" ] && [ "$pkg_is_aur" = "false" ] && options+=("Downgrade")
         options+=("Exit")
+        # Show menu
         user_input=$(gum_choose --height=6 "${options[@]}") || return 0
         case "$user_input" in # Set user action to selected action
         'Install')
@@ -263,8 +277,10 @@ action_search() { # Manage packages
 
 action_fetch() { # List package updates
     print_news && gum_title "Fetch Package Updates"
-    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0 # Preload and return if user press ctrl + c
+    # Preload and return if user press ctrl + c
+    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0
     ! action_check_updates_available && gum_info "Your system is up to date"
+    # Show pacdiff warning
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
     return 0
@@ -272,19 +288,23 @@ action_fetch() { # List package updates
 
 action_upgrade() { # Update packages
     print_news && gum_title "Upgrade System Packages"
+    # Prepare args
     local paru_args=()
     [ "$AUR_REVIEW_ENABLED" = "false" ] && paru_args+=('--skipreview')
     [ "$UPGRADE_CONFIRM_ENABLED" = "false" ] && paru_args+=('--noconfirm')
     local flatpak_args=() && [ "$FLATPAK_UPGRADE_CONFIRM_ENABLED" = "false" ] && flatpak_args+=('-y')
+    # Upgrade system
     ! paru -Syuq "${paru_args[@]}" && gum_fail "Paru upgrade failed" && return 0
     if [ "$FLATPAK_SUPPORT_ENABLED" = "true" ]; then
+        # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
-            gum_mesg "Flatpak Update" && ! flatpak update "${flatpak_args[@]}" --noninteractive && gum_fail "Flatpak upgrade failed" && return 0
+            gum_mesg "Upgrade Flatpak Apps" && ! flatpak update "${flatpak_args[@]}" --noninteractive && gum_fail "Flatpak upgrade failed" && return 0
         else
-            gum_mesg "No Flatpak updates available"
+            gum_mesg "Flatpak is up to date"
         fi
     fi
-    sync_packages
+    sync_packages # Resync packages
+    # Show pacdiff warning
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
     [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
@@ -293,10 +313,13 @@ action_upgrade() { # Update packages
 
 action_orphans() { # Remove orphaned packages
     gum_title "Remove Package Orphans"
+    # Prepare args
     local paru_args=() && [ "$ORPHANS_CONFIRM_ENABLED" = "false" ] && paru_args+=('--noconfirm')
     local flatpak_args=() && [ "$ORPHANS_CONFIRM_ENABLED" = "false" ] && flatpak_args+=('-y')
+    # Remove pacman orphans
     # shellcheck disable=SC2046
-    paru -Qtdq &>/dev/null && ! { paru -Rnsq "${paru_args[@]}" $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0 # Remove orphans
+    paru -Qtdq &>/dev/null && ! { paru -Rnsq "${paru_args[@]}" $(paru -Qtdq) 2>/dev/null; } && gum_warn "Canceled" && return 0
+    # Remove pacman orphans (alternative)
     # shellcheck disable=SC2046
     ! paru -Rsu "${paru_args[@]}" $(paru -Qqd) 2>/dev/null && gum_warn "Canceled" && return 0 # Remove orphans
     # Remove unused flatpaks
@@ -314,7 +337,9 @@ action_merge() { # Merge updated config files
     fi
     gum_title "Merge Configuration Updates"
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
+    # Check if up to date and return
     [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
+    # Merge files
     echo -e "$pacdiff_info" && echo
     ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
     gum_info "Done"
@@ -333,6 +358,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
     cat "${ARCH_OS_HOME}/.mirrorlist.tmp"
     echo && ! gum_confirm "Save Mirrorlist?" && gum_warn "Canceled" && return 0
+    # Save mirrorlist and set correct permissions
     sudo mv -f "${ARCH_OS_HOME}/.mirrorlist.tmp" /etc/pacman.d/mirrorlist
     sudo chown root:root /etc/pacman.d/mirrorlist
     gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
@@ -353,6 +379,7 @@ action_downgrade() { # Downgrade packages
     ! user_input=$(gum_filter --limit 25 --height "$FILTER_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
     [ -z "$user_input" ] && gum_warn "No package selected" && return 0
     mapfile -t user_input <<<"$user_input" # Convert string to array
+    # Print packages
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
     ! gum_confirm "Downgrade selected packages?" && gum_warn "Canceled" && return 0
     ! sudo downgrade "${user_input[@]}" && gum_warn "Canceled" && return 0
@@ -553,7 +580,7 @@ print_filled_spaces() {
 # ///////////////////////////////////////////////////////////////////
 
 kitty() {
-    [ ! -f "$KITTY_CONF" ] && echo "$KITTY_CONF_TEMPLATE" >"$KITTY_CONF"
+    [ ! -f "$KITTY_CONF" ] && echo "$KITTY_CONF_TEMPLATE" >"$KITTY_CONF" # Create kitty.conf if not exists
     /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "$KITTY_CONF" "$@"
 }
 
