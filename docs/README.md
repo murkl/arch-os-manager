@@ -6,7 +6,6 @@
 </div>
 
 <div align="center">
-  <p><sub><b>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub></p>
   <p><img src="./screenshots/arch-os-manager.png"></p>
   <p><i>Streamlining software management and updates for enhanced usability in Arch Linux</i></p>
   <p>
@@ -14,19 +13,20 @@
     <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
   </p>
   <p><sub><b>100% shellcheck approved</b></sub></p>
+  <p><sub><b>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub></p>
 </div>
 
 ## Install from AUR
 
 **[➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
 
-**Run Arch OS Manager:** `arch-os`
+Run Arch OS Manager: `arch-os`
 
 ## Install from GitHub
 
-1. **Install Dependencies:** `paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`
-2. **Clone GitHub Repo:** `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
-3. **Run Arch OS Manager:** `./arch-os`
+1. Install Dependencies: `paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`
+2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
+3. Run Arch OS Manager: `./arch-os`
 
 ## Settings
 
