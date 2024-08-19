@@ -7,13 +7,13 @@
 
 <div align="center">
   <p><img src="./screenshots/arch-os-manager.png"></p>
-  <p><i>Streamlining software management and updates for enhanced usability in Arch Linux</i></p>
+  <p><b><i>Streamlining software management and updates for enhanced usability in Arch Linux</i></b></p>
+  <p><sub>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></sub></p>
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
     <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
   </p>
-  <p><sub><b>100% shellcheck approved</b></sub></p>
-  <p><sub><b>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></b></sub></p>
+  <p><sub>100% shellcheck approved</sub></p>
 </div>
 
 ## Install from AUR
