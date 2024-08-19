@@ -7,13 +7,14 @@
 # ///////////////////////////////////////////////////////////////////
 
 # VERSIO
-VERSION="1.4.8"
+VERSION="1.4.9"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
 ARCH_OS_CONF="${ARCH_OS_HOME}/arch-os.conf"
 KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
 PACKAGES_DB="${ARCH_OS_HOME}/packages.db"
+NEWS_DB="${ARCH_OS_HOME}/news.db"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -22,9 +23,6 @@ COLOR_GREEN=2
 COLOR_PURPLE=212
 COLOR_YELLOW=3
 COLOR_RED=1
-
-# NEWS
-ARCH_LINUX_NEWS=""
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -82,13 +80,16 @@ main() {
     selected_action="$1"
 
     # Init
-    gum_white "Loading Arch OS Manager..."
-    [ -n "$ARCH_NEWS_COUNT" ] && [ "$ARCH_NEWS_COUNT" -gt 0 ] && ARCH_LINUX_NEWS=$(curl -s "https://archlinux.org/feeds/news/")
+    print_header
+    if [ -n "$ARCH_NEWS_COUNT" ] && [ "$ARCH_NEWS_COUNT" -gt 0 ]; then
+        gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || gum_warn "Canceled"
+    fi
     [ ! -f "$PACKAGES_DB" ] && sync_packages
 
     # Show menu or execute user action
+    local first_run="true"
     while (true); do
-        print_header # Print header
+        [ "$first_run" = "false" ] && print_header # Print header (except first run)
         if [ -z "$selected_action" ]; then
             options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
@@ -126,6 +127,7 @@ main() {
         *) action_help && echo && gum_fail "Action '${selected_action}' not available" && exit 2 ;;
         esac
         unset selected_action # Reset selected action
+        first_run="false"     # Set first run
         [ "$skip_confirm" = "true" ] && [ -n "$1" ] && exit 3
         [ "$skip_confirm" = "true" ] && continue
         [ -n "$1" ] && gum_confirm --affirmative "Exit" --negative '' '' && exit 3
@@ -446,8 +448,8 @@ init_settings() {
 # NEWS
 # ///////////////////////////////////////////////////////////////////
 
-get_news_date() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
-get_news_title() { echo "$ARCH_LINUX_NEWS" | xmllint --xpath "string(//item[$i]/title)" -; }
+get_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
+get_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
 
 print_news() {
     if [ -n "$ARCH_NEWS_COUNT" ] && [ "$ARCH_NEWS_COUNT" -gt 0 ] && gum_title "Arch Linux News"; then
