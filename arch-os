@@ -58,6 +58,7 @@ main() {
     # Check arguments
     if [ $# -gt 1 ]; then
         print_header && action_help && echo && gum_fail "Max. 1 argument supported!"
+        gum_confirm --affirmative "Exit" --negative '' ''
         exit 2
     fi
 
