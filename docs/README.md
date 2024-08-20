@@ -25,7 +25,7 @@ Run Arch OS Manager: `arch-os`
 
 1. Install Dependencies: `paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`
 2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
-3. Run Arch OS Manager: **`./arch-os`**
+3. Run Arch OS Manager: `./arch-os`
 
 ## Usage
 
