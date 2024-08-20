@@ -60,6 +60,8 @@ FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: tru
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
 NEWS_SHOW_URL=true                # Show 'More Information' below the news (disable: false)
 ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true)
+ORPHANS_SHOW_INFO=true            # Enable orphans info (disable: false)
+PACDIFF_SHOW_INFO=true            # Enable pacdiff info (disable: false)
 FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
 PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
