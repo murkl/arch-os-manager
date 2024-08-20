@@ -242,8 +242,8 @@ init_properties() {
 action_help() {
     gum_title 'App'
     gum_white 'arch-os [--kitty | -k]              Open main menu'
-    gum_white 'arch-os [--kitty | -k] help         Open Help page'
-    gum_white 'arch-os [--kitty | -k] settings     Edit Properties'
+    gum_white 'arch-os [--kitty | -k] help         Open help page'
+    gum_white 'arch-os [--kitty | -k] settings     Edit properties'
     echo && gum_title 'Actions'
     gum_white 'arch-os [--kitty | -k] check        Print package updates (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates (pacman, aur, flatpak)'
@@ -252,9 +252,9 @@ action_help() {
     gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
-    gum_white 'arch-os [--kitty | -k] refresh      Refresh Pacman mirrorlist (using preconfigured reflector)'
+    gum_white 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
     gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
-    gum_white 'arch-os [--kitty | -k] reset        Reset Pacman (refresh pacman keyring)'
+    gum_white 'arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)'
     gum_white 'arch-os [--kitty | -k] system       System info (system & services logging)'
 }
 

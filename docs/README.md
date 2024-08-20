@@ -31,8 +31,8 @@ Run Arch OS Manager: `arch-os`
 
 ```
 arch-os [--kitty | -k]            # Open main menu
-arch-os [--kitty | -k] help       # Open Help page
-arch-os [--kitty | -k] settings   # Edit Properties
+arch-os [--kitty | -k] help       # Open help page
+arch-os [--kitty | -k] settings   # Edit properties
 arch-os [--kitty | -k] check      # Print package updates (pacman, aur, flatpak)
 arch-os [--kitty | -k] notify     # Notify on new package updates (pacman, aur, flatpak)
 arch-os [--kitty | -k] search     # Search & manage package (pacman, aur)
@@ -40,9 +40,9 @@ arch-os [--kitty | -k] fetch      # Fetch package updates (news, pacdiff, pacman
 arch-os [--kitty | -k] upgrade    # System upgrade (news, pacdiff, pacman, aur, flatpak)
 arch-os [--kitty | -k] orphans    # Remove orphaned packages (pacman, aur, flatpak)
 arch-os [--kitty | -k] merge      # Merge updated configurations (using pacdiff and meld)
-arch-os [--kitty | -k] refresh    # Refresh Pacman mirrorlist (using preconfigured reflector)
+arch-os [--kitty | -k] refresh    # Refresh pacman mirrorlist (using preconfigured reflector)
 arch-os [--kitty | -k] downgrade  # Downgrade packages (pacman only)
-arch-os [--kitty | -k] reset      # Reset Pacman (refresh pacman keyring)
+arch-os [--kitty | -k] reset      # Reset pacman (refresh pacman keyring)
 arch-os [--kitty | -k] system     # System info (system & services logging)
 ```
 
@@ -55,7 +55,7 @@ AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
 ARCH_AUR_REVIEW=false             # Disable AUR review (enable: true)
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
-FLATPAK_SUPPORT=true              # Enable Flatpak Support (disable: false)
+FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
 FLATPAK_UPGRADE_CONFIRM=false     # Disable flatpak upgrade confirm (enable: true)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
 NEWS_SHOW_URL=true                # Show 'More Information' below the news (disable: false)
