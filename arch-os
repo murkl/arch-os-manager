@@ -64,7 +64,7 @@ main() {
     if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
 
     # Create & source properties
-    init_settings
+    init_properties
 
     # Check and start kitty
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
@@ -80,7 +80,7 @@ main() {
     if [ $# -gt 1 ]; then
         print_header && action_help && echo && gum_fail "Max. 1 argument supported!"
         gum_confirm --affirmative "Quit" --negative '' ''
-        exit 2
+        clear && exit 2
     fi
 
     # If 'check' action
@@ -91,8 +91,16 @@ main() {
 
     # If 'notify' action
     if [ "$1" = "notify" ]; then
-        action_check_updates_available && notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"
-        exit $?
+        local update_result update_count update_txt
+        update_result="$(action_check_updates_available)"
+        update_count=$(echo "$update_result" | wc -l)
+        if [ "$update_count" -gt 0 ]; then
+            [ "$update_count" = 1 ] && update_txt="${update_count} new Update available"
+            [ "$update_count" -gt 1 ] && update_txt="${update_count} new Updates available"
+            notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "System Update" "$update_txt"
+            echo "$update_result"
+        fi
+        exit 0
     fi
 
     # Set Traps
@@ -162,10 +170,10 @@ main() {
 }
 
 # ///////////////////////////////////////////////////////////////////
-# SETTINGS
+# PROPERTIES
 # ///////////////////////////////////////////////////////////////////
 
-init_settings() {
+init_properties() {
 
     # Init properties
     mkdir -p "$ARCH_OS_HOME"
@@ -173,6 +181,8 @@ init_settings() {
     source "$ARCH_OS_CONF"
 
     # Set default properties
+    [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
+    [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="30"
     [ -z "$ARCH_AUR_REVIEW" ] && ARCH_AUR_REVIEW="false"
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
     [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
@@ -184,6 +194,8 @@ init_settings() {
     [ -z "$PACKAGE_INFO_WIDTH" ] && PACKAGE_INFO_WIDTH="80"
 
     # Validate properties
+    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500"       # Set to max 500
+    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"         # Set to min 10
     [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"             # Set to max 10
     [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"               # Set to min 0
     [ "$FILTER_RESULT_SIZE" -gt 50 ] && FILTER_RESULT_SIZE="50"   # Set to max 50
@@ -191,7 +203,23 @@ init_settings() {
     [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500" # Set to max 500
     [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"   # Set to min 20
 
+    # Toggle settings
+    if [ "$AUTOSTART_NOTIFY" = "true" ]; then
+        mkdir -p "${HOME}/.config/autostart"
+        {
+            echo "[Desktop Entry]"
+            echo "Type=Application"
+            echo "Name=Arch OS Manager"
+            echo "Icon=${WORKING_DIR}/docs/logo.svg"
+            echo "Exec=bash -c 'sleep ${AUTOSTART_DELAY} && ${SELF} notify'"
+        } >"${HOME}/.config/autostart/arch-os.desktop"
+    else
+        rm -f "${HOME}/.config/autostart/arch-os.desktop"
+    fi
+
     { # Write properties
+        echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}"
+        echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}"
         echo "ARCH_AUR_REVIEW=${ARCH_AUR_REVIEW}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
         echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
@@ -217,11 +245,11 @@ action_help() {
     gum_white 'arch-os [--kitty | -k] help         Open Help page'
     gum_white 'arch-os [--kitty | -k] settings     Edit Properties'
     echo && gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] check        Check & print package updates (pacman, aur, flatpak)'
-    gum_white 'arch-os [--kitty | -k] notify       Check, print & notify package updates (pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] check        Print package updates (pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
-    gum_white 'arch-os [--kitty | -k] fetch        Fetch package updates (pacman, aur, flatpak)'
-    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] fetch        Fetch package updates (news, pacdiff, pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
     gum_white 'arch-os [--kitty | -k] refresh      Refresh Pacman mirrorlist (using preconfigured reflector)'
@@ -233,9 +261,13 @@ action_help() {
 # -------------------------------------------------------------------
 
 action_settings() { # Settings
-    gum_title "Edit Settings"
-    if gum_write --height=10 --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
+    gum_title "Edit Properties"
+    local property_count && property_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
+    # Open editor with count of properties + 2
+    # BUG: gum write does not accept height greater than 7
+    if gum_write --height="$((property_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+        # If success: save/move file and re-init properties
+        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
