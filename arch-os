@@ -97,7 +97,7 @@ main() {
         if [ "$update_count" -gt 0 ]; then
             [ "$update_count" = 1 ] && update_txt="${update_count} new Update available"
             [ "$update_count" -gt 1 ] && update_txt="${update_count} new Updates available"
-            notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "System Update" "$update_txt"
+            notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "System Upgrade" "$update_txt"
             echo "$update_result"
         fi
         exit 0
