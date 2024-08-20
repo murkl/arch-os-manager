@@ -8,7 +8,7 @@ set -Eeo pipefail # Set script error handling
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.5.2"
+VERSION="1.5.3"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -190,6 +190,8 @@ init_properties() {
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$NEWS_SHOW_URL" ] && NEWS_SHOW_URL="true"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
+    [ -z "$ORPHANS_SHOW_INFO" ] && ORPHANS_SHOW_INFO="true"
+    [ -z "$PACDIFF_SHOW_INFO" ] && PACDIFF_SHOW_INFO="true"
     [ -z "$FILTER_RESULT_SIZE" ] && FILTER_RESULT_SIZE="20"
     [ -z "$PACKAGE_INFO_WIDTH" ] && PACKAGE_INFO_WIDTH="80"
 
@@ -227,6 +229,8 @@ init_properties() {
         echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
         echo "NEWS_SHOW_URL=${NEWS_SHOW_URL}"
         echo "ORPHANS_CONFIRM=${ORPHANS_CONFIRM}"
+        echo "ORPHANS_SHOW_INFO=${ORPHANS_SHOW_INFO}"
+        echo "PACDIFF_SHOW_INFO=${PACDIFF_SHOW_INFO}"
         echo "FILTER_RESULT_SIZE=${FILTER_RESULT_SIZE}"
         echo "PACKAGE_INFO_WIDTH=${PACKAGE_INFO_WIDTH}"
     } >"$ARCH_OS_CONF"
@@ -402,38 +406,25 @@ action_search() { # Manage packages
 
 # -------------------------------------------------------------------
 
-action_print_news() {
-
-    print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
-    print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
-
-    if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
-        for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            gum_white "$(print_news_date "$i") │ $(print_news_title "$i")"
-        done
-        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_white "More Information: https://archlinux.org/news"
-        echo # Print new line
-    fi
-    return 0
-}
-
-# -------------------------------------------------------------------
-
 action_fetch() { # List package updates
-    action_print_news && gum_title "Fetch Package Updates"
+    print_news_info && gum_title "Fetch Package Updates"
+    local orphans_packages orphans_count
     # Preload and return if user press ctrl + c
     ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_fail "Failed" && return 2
-    ! action_check_updates_available && gum_info "Your system is up to date"
+    if ! action_check_updates_available; then
+        gum_info "Your system is up to date"
+    fi
+    # Show orphans info
+    print_orphans_info
     # Show pacdiff warning
-    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
+    print_pacdiff_info
     return 0
 }
 
 # -------------------------------------------------------------------
 
 action_upgrade() { # Update packages
-    action_print_news && ! gum_confirm "Upgrade System Packages?" && return 3
+    print_news_info && ! gum_confirm "Upgrade System Packages?" && return 3
     gum_title "Upgrade System Packages"
     # Prepare args
     local paru_args=()
@@ -455,10 +446,11 @@ action_upgrade() { # Update packages
         fi
     fi
     ! sync_package_db && gum_fail "Synchronize Package Database failed!" # Resync packages
+    gum_info "System Upgrade finished"
+    # Show orphans info
+    print_orphans_info
     # Show pacdiff warning
-    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    gum_info "System Upgrade successful"
-    [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
+    print_pacdiff_info
     return 0
 }
 
@@ -581,6 +573,8 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
 sync_package_db() { gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1; }
 sync_news_db() { gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || return 1; }
 
+# -------------------------------------------------------------------
+
 print_header() {
     clear && gum_purple '
  █████  ██████   ██████ ██   ██      ██████  ███████ 
@@ -591,10 +585,7 @@ print_header() {
     ' && gum_white --bold "System Manager ${VERSION}" && echo
 }
 
-print_package_info() {
-    local result && result="$(echo "$1" | grep -i "^${2}" | sed -E "s/^${2}\s*:\s*//" || echo "unavailable")"
-    echo "$result" | awk '{print (length($0) > '"${PACKAGE_INFO_WIDTH}"' ? substr($0, 1, '"${PACKAGE_INFO_WIDTH}"') "..." : $0)}' # Cut after 50 chars and print
-}
+# -------------------------------------------------------------------
 
 print_filled_spaces() {
     local total=24 && local input_string="$1" && local length="${#input_string}"
@@ -604,6 +595,48 @@ print_filled_spaces() {
         local padding=$((total - length))
         printf '%s%*s\n' "$input_string" "$padding" ""
     fi
+}
+
+# -------------------------------------------------------------------
+
+print_package_info() {
+    local result && result="$(echo "$1" | grep -i "^${2}" | sed -E "s/^${2}\s*:\s*//" || echo "unavailable")"
+    echo "$result" | awk '{print (length($0) > '"${PACKAGE_INFO_WIDTH}"' ? substr($0, 1, '"${PACKAGE_INFO_WIDTH}"') "..." : $0)}' # Cut after 50 chars and print
+}
+
+# -------------------------------------------------------------------
+
+print_news_info() {
+
+    print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
+    print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
+
+    if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
+        for ((i = 1; i <= NEWS_QUANTITY; i++)); do
+            gum_white "$(print_news_date "$i") │ $(print_news_title "$i")"
+        done
+        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_white "More Information: https://archlinux.org/news"
+        echo # Print new line
+    fi
+    return 0
+}
+
+print_pacdiff_info() {
+    if [ "$PACDIFF_SHOW_INFO" = "true" ]; then
+        local pacdiff_info && pacdiff_info="$(pacdiff -o)"
+        [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
+    fi
+    return 0
+}
+
+print_orphans_info() {
+    if [ "$ORPHANS_SHOW_INFO" = "true" ]; then
+        local orphans_packages orphans_count
+        orphans_packages="$(paru -Qtdq &>/dev/null && paru -Qtdq)"
+        orphans_count="$(echo "$orphans_packages" | wc -w)"
+        [ "$orphans_count" -gt 0 ] && echo && gum_warn "Orphaned Packages found!" && echo
+    fi
+    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
