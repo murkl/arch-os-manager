@@ -36,19 +36,19 @@ arch-os [--kitty | -k] [action]
 ### Actions
 
 ```
-check        # Check & print package updates
-notify       # Check, print & notify package updates
-search       # Search package
-fetch        # Fetch package updates
-upgrade      # System upgrade
-orphans      # Remove orphaned packages
-merge        # Merge updated configurations
-refresh      # Refresh Pacman mirrorlist
-downgrade    # Downgrade packages
-reset        # Reset Pacman
-system       # System info
-settings     # Settings
-help         # Help
+check      # Check & print package updates
+notify     # Check, print & notify package updates
+search     # Search package
+fetch      # Fetch package updates
+upgrade    # System upgrade
+orphans    # Remove orphaned packages
+merge      # Merge updated configurations
+refresh    # Refresh Pacman mirrorlist
+downgrade  # Downgrade packages
+reset      # Reset Pacman
+system     # System info
+settings   # Settings
+help       # Help
 ```
 
 ## Settings
@@ -56,15 +56,15 @@ help         # Help
 Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/arch-os.conf`
 
 ```
-ARCH_AUR_REVIEW=false            # Disable AUR review (Enable: true)
-ARCH_UPGRADE_CONFIRM=true        # Enable confirm upgrade system packages (Disable: false)
-FLATPAK_SUPPORT=true             # Enable Flatpak Support (Disable: false)
-FLATPAK_UPGRADE_CONFIRM=false    # Disable flatpak upgrade confirm (Enable: true)
-NEWS_QUANTITY=3                  # Number of news to shown (Disable: 0)
-NEWS_SHOW_URL=true               # Show 'More info url' below the news (Disable: false)
-ORPHANS_CONFIRM=false            # Disable confirm remove orphans (Enable: true)
-FILTER_RESULT_SIZE=20            # Max filter results
-PACKAGE_INFO_WIDTH=80            # Max info width (cut horizontal output)
+ARCH_AUR_REVIEW=false          # Disable AUR review (Enable: true)
+ARCH_UPGRADE_CONFIRM=true      # Enable confirm upgrade system packages (Disable: false)
+FLATPAK_SUPPORT=true           # Enable Flatpak Support (Disable: false)
+FLATPAK_UPGRADE_CONFIRM=false  # Disable flatpak upgrade confirm (Enable: true)
+NEWS_QUANTITY=3                # Number of news to shown (Disable: 0)
+NEWS_SHOW_URL=true             # Show 'More info url' below the news (Disable: false)
+ORPHANS_CONFIRM=false          # Disable confirm remove orphans (Enable: true)
+FILTER_RESULT_SIZE=20          # Max filter results
+PACKAGE_INFO_WIDTH=80          # Max info width (cut horizontal output)
 ```
 
 ## Integrate GNOME Extension

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
+set -Eeo pipefail # Set script error handling
 
 # ///////////////////////////////////////////////////////////////////
 #                         ARCH OS MANAGER
 #                - Arch Linux Helper Script TUI -
 # ///////////////////////////////////////////////////////////////////
 
-# VERSIO
-VERSION="1.5.1"
+# VERSION
+VERSION="1.5.2"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -25,13 +26,35 @@ COLOR_YELLOW=3
 COLOR_RED=1
 
 # ///////////////////////////////////////////////////////////////////
+# TRAPS
+# ///////////////////////////////////////////////////////////////////
+
+# Return Codes:
+# 0   = success (default)
+# 1   = fatal (uncatched)
+# 2   = error (catched)
+# 3   = exit (user)
+# 130 = exit (user)
+
+trap_exit() {
+    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
+    [ "$1" != "3" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Quit' --negative '' ''
+    clear && return "$1"
+}
+
+trap_error() {
+    [ "$1" != "2" ] && [ "$1" != "3" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    return "$1"
+}
+
+# ///////////////////////////////////////////////////////////////////
 # MAIN
 # ///////////////////////////////////////////////////////////////////
 
 main() {
 
-    set -Eeo pipefail # Set error handling
-    local user_input options selected_action skip_confirm
+    # Local vars
+    local user_input options selected_action skip_confirm first_run
 
     # Check dependencies
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
@@ -68,7 +91,7 @@ main() {
 
     # If 'notify' action
     if [ "$1" = "notify" ]; then
-        action_check_updates_available && notify "New updates available"
+        action_check_updates_available && notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"
         exit $?
     fi
 
@@ -81,18 +104,16 @@ main() {
 
     # Init
     print_header
-    if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ]; then
-        ! gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" && gum_fail "Synchronize News failed!"
-    fi
-    [ ! -f "$PACKAGES_DB" ] && ! sync_packages && gum_fail "Synchronize Package Database failed!"
+    [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && ! sync_news_db && gum_fail "Synchronize News failed!"
+    [ ! -f "$PACKAGES_DB" ] && ! sync_package_db && gum_fail "Synchronize Package Database failed!"
 
     # Show menu or execute user action
-    local first_run="true"
+    first_run="true"
     while (true); do
 
         [ "$first_run" = "false" ] && print_header # Print header (except first run)
 
-        # Show menu if now user action is set
+        # Show menu if user action is NOT set
         if [ -z "$selected_action" ]; then
             options=("Search Package" "Fetch Updates" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Info" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || exit 130
@@ -124,13 +145,13 @@ main() {
         'refresh') action_refresh || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
         'downgrade') action_downgrade || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
         'reset') action_reset || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
-        'system') action_system || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
+        'system') action_system_info || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
         'settings') action_settings || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
         'help') action_help || { [ "$?" = "3" ] && skip_confirm="true"; } ;;
         *) action_help && echo && gum_fail "Action '${selected_action}' not available" && exit 2 ;;
         esac
 
-        # Cleanup
+        # Cleanup run
         unset selected_action # Reset selected action
         first_run="false"     # Set first run
         [ "$skip_confirm" = "true" ] && [ -n "$1" ] && exit 3
@@ -141,30 +162,98 @@ main() {
 }
 
 # ///////////////////////////////////////////////////////////////////
-# TRAPS
+# SETTINGS
 # ///////////////////////////////////////////////////////////////////
 
-# 0 = success
-# 1 = fatal (uncatched)
-# 2 = error (catched)
-# 3 = exit (user)
-# 130 = exit (user)
+init_settings() {
 
-trap_exit() {
-    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    [ "$1" != "3" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Quit' --negative '' ''
-    clear
-    return "$1"
-}
+    # Init properties
+    mkdir -p "$ARCH_OS_HOME"
+    touch "$ARCH_OS_CONF"
+    source "$ARCH_OS_CONF"
 
-trap_error() {
-    [ "$1" != "2" ] && [ "$1" != "3" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
-    return "$1"
+    # Set default properties
+    [ -z "$ARCH_AUR_REVIEW" ] && ARCH_AUR_REVIEW="false"
+    [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
+    [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
+    [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
+    [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
+    [ -z "$NEWS_SHOW_URL" ] && NEWS_SHOW_URL="true"
+    [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
+    [ -z "$FILTER_RESULT_SIZE" ] && FILTER_RESULT_SIZE="20"
+    [ -z "$PACKAGE_INFO_WIDTH" ] && PACKAGE_INFO_WIDTH="80"
+
+    # Validate properties
+    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"             # Set to max 10
+    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"               # Set to min 0
+    [ "$FILTER_RESULT_SIZE" -gt 50 ] && FILTER_RESULT_SIZE="50"   # Set to max 50
+    [ "$FILTER_RESULT_SIZE" -lt 1 ] && FILTER_RESULT_SIZE="1"     # Set to min 1
+    [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500" # Set to max 500
+    [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"   # Set to min 20
+
+    { # Write properties
+        echo "ARCH_AUR_REVIEW=${ARCH_AUR_REVIEW}"
+        echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
+        echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
+        echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
+        echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
+        echo "NEWS_SHOW_URL=${NEWS_SHOW_URL}"
+        echo "ORPHANS_CONFIRM=${ORPHANS_CONFIRM}"
+        echo "FILTER_RESULT_SIZE=${FILTER_RESULT_SIZE}"
+        echo "PACKAGE_INFO_WIDTH=${PACKAGE_INFO_WIDTH}"
+    } >"$ARCH_OS_CONF"
+
+    # Source again
+    source "$ARCH_OS_CONF"
 }
 
 # ///////////////////////////////////////////////////////////////////
 # ACTIONS
 # ///////////////////////////////////////////////////////////////////
+
+action_help() {
+    gum_title 'App'
+    gum_white 'arch-os [--kitty | -k]              Open main menu'
+    echo && gum_title 'Actions'
+    gum_white 'arch-os [--kitty | -k] check        Check & print package updates'
+    gum_white 'arch-os [--kitty | -k] notify       Check, print & notify package updates'
+    gum_white 'arch-os [--kitty | -k] search       Search package'
+    gum_white 'arch-os [--kitty | -k] fetch        Fetch package updates'
+    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade'
+    gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages'
+    gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations'
+    gum_white 'arch-os [--kitty | -k] refresh      Refresh Pacman mirrorlist'
+    gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages'
+    gum_white 'arch-os [--kitty | -k] reset        Reset Pacman'
+    gum_white 'arch-os [--kitty | -k] system       System info'
+    gum_white 'arch-os [--kitty | -k] settings     Settings'
+    gum_white 'arch-os [--kitty | -k] help         Help'
+}
+
+# -------------------------------------------------------------------
+
+action_settings() { # Settings
+    gum_title "Edit Settings"
+    if gum_write --height=10 --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
+        gum_info "Saved: ${ARCH_OS_CONF}" && return 0
+    else
+        rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
+        gum_warn "Canceled" && return 2
+    fi
+}
+
+# -------------------------------------------------------------------
+
+action_system_info() { # System Info Logs
+    gum_title "System Error Logs"
+    journalctl -p 3 -b --quiet --no-pager
+    echo && gum_title "Service Error Logs"
+    systemctl --failed
+    return 0
+}
+
+# -------------------------------------------------------------------
 
 action_check_updates_available() { # Check & print package updates
     local update_available="false"
@@ -181,6 +270,8 @@ action_check_updates_available() { # Check & print package updates
     [ "$update_available" = "false" ] && return 1
     return 0
 }
+
+# -------------------------------------------------------------------
 
 action_search() { # Manage packages
     local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
@@ -275,8 +366,27 @@ action_search() { # Manage packages
     return 0
 }
 
+# -------------------------------------------------------------------
+
+action_print_news() {
+
+    print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
+    print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
+
+    if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
+        for ((i = 1; i <= NEWS_QUANTITY; i++)); do
+            gum_white "$(print_news_date "$i") │ $(print_news_title "$i")"
+        done
+        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_white "More Information: https://archlinux.org/news"
+        echo # Print new line
+    fi
+    return 0
+}
+
+# -------------------------------------------------------------------
+
 action_fetch() { # List package updates
-    print_news && gum_title "Fetch Package Updates"
+    action_print_news && gum_title "Fetch Package Updates"
     # Preload and return if user press ctrl + c
     ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_fail "Failed" && return 2
     ! action_check_updates_available && gum_info "Your system is up to date"
@@ -286,8 +396,10 @@ action_fetch() { # List package updates
     return 0
 }
 
+# -------------------------------------------------------------------
+
 action_upgrade() { # Update packages
-    print_news && ! gum_confirm "Upgrade System Packages?" && return 3
+    action_print_news && ! gum_confirm "Upgrade System Packages?" && return 3
     gum_title "Upgrade System Packages"
     # Prepare args
     local paru_args=()
@@ -308,13 +420,15 @@ action_upgrade() { # Update packages
             gum_mesg "Flatpak is up to date"
         fi
     fi
-    ! sync_packages && gum_fail "Synchronize Package Database failed!" # Resync packages
+    ! sync_package_db && gum_fail "Synchronize Package Database failed!" # Resync packages
     # Show pacdiff warning
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
     [ -n "$pacdiff_info" ] && echo && gum_warn "Please merge this updated configurations:" && echo -e "$pacdiff_info"
     return 0
 }
+
+# -------------------------------------------------------------------
 
 action_orphans() { # Remove orphaned packages
     ! gum_confirm "Remove Package Orphans?" && return 3
@@ -342,6 +456,8 @@ action_orphans() { # Remove orphaned packages
     return 0
 }
 
+# -------------------------------------------------------------------
+
 action_merge() { # Merge updated config files
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         ! gum_confirm "Install Dependencies? (pacman-contrib, meld)" && return 3
@@ -359,6 +475,8 @@ action_merge() { # Merge updated config files
     gum_info "Done"
     return 0
 }
+
+# -------------------------------------------------------------------
 
 action_refresh() { # Refresh mirrorlist with reflector
     if ! command -v reflector &>/dev/null; then
@@ -378,6 +496,8 @@ action_refresh() { # Refresh mirrorlist with reflector
     gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
     return 0
 }
+
+# -------------------------------------------------------------------
 
 action_downgrade() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
@@ -401,6 +521,8 @@ action_downgrade() { # Downgrade packages
     return 0
 }
 
+# -------------------------------------------------------------------
+
 action_reset() { # Keyring reset (if update failed, try to reset & reinit keyring)
     ! gum_confirm "Reset Pacman Keyring and perform System Upgrade?" && return 3
     gum_title "Reset Pacman"
@@ -418,103 +540,36 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     return 0
 }
 
-action_system() { # System Logs
-    gum_title "System Error Logs"
-    journalctl -p 3 -b --quiet --no-pager
-    echo && gum_title "Service Error Logs"
-    systemctl --failed
-    return 0
-}
-
-action_settings() { # Settings
-    gum_title "Edit Settings"
-    if gum_write --height=10 --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_settings
-        gum_info "Saved: ${ARCH_OS_CONF}" && return 0
-    else
-        rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
-        gum_warn "Canceled" && return 2
-    fi
-}
-
 # ///////////////////////////////////////////////////////////////////
-# PACKAGES
+# HELPER FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
+
+sync_package_db() { gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1; }
+sync_news_db() { gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || return 1; }
+
+print_header() {
+    clear && gum_purple '
+ █████  ██████   ██████ ██   ██      ██████  ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
+███████ ██████  ██      ███████     ██    ██ ███████ 
+██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
+██   ██ ██   ██  ██████ ██   ██      ██████  ███████
+    ' && gum_white --bold "System Manager ${VERSION}" && echo
+}
 
 print_package_info() {
-    local result
-    result="$(echo "$1" | grep -i "^${2}" | sed -E "s/^${2}\s*:\s*//" || echo "unavailable")"
-    # Cut after 50 chars and print
-    echo "$result" | awk '{print (length($0) > '"${PACKAGE_INFO_WIDTH}"' ? substr($0, 1, '"${PACKAGE_INFO_WIDTH}"') "..." : $0)}'
+    local result && result="$(echo "$1" | grep -i "^${2}" | sed -E "s/^${2}\s*:\s*//" || echo "unavailable")"
+    echo "$result" | awk '{print (length($0) > '"${PACKAGE_INFO_WIDTH}"' ? substr($0, 1, '"${PACKAGE_INFO_WIDTH}"') "..." : $0)}' # Cut after 50 chars and print
 }
 
-sync_packages() {
-    gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1
-    return 0
-}
-
-# ///////////////////////////////////////////////////////////////////
-# SETTINGS
-# ///////////////////////////////////////////////////////////////////
-
-init_settings() {
-
-    # Init properties
-    mkdir -p "$ARCH_OS_HOME"
-    touch "$ARCH_OS_CONF"
-    source "$ARCH_OS_CONF"
-
-    # Set default properties
-    [ -z "$ARCH_AUR_REVIEW" ] && ARCH_AUR_REVIEW="false"
-    [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
-    [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
-    [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
-    [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
-    [ -z "$NEWS_SHOW_URL" ] && NEWS_SHOW_URL="true"
-    [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
-    [ -z "$FILTER_RESULT_SIZE" ] && FILTER_RESULT_SIZE="20"
-    [ -z "$PACKAGE_INFO_WIDTH" ] && PACKAGE_INFO_WIDTH="80"
-
-    # Validate properties
-    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"             # Set to max 10
-    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"               # Set to min 0
-    [ "$FILTER_RESULT_SIZE" -gt 50 ] && FILTER_RESULT_SIZE="50"   # Set to max 50
-    [ "$FILTER_RESULT_SIZE" -lt 1 ] && FILTER_RESULT_SIZE="1"     # Set to min 1
-    [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500" # Set to max 500
-    [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"   # Set to min 20
-
-    { # Write properties
-        echo "ARCH_AUR_REVIEW=${ARCH_AUR_REVIEW}"
-        echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
-        echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
-        echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
-        echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
-        echo "NEWS_SHOW_URL=${NEWS_SHOW_URL}"
-        echo "ORPHANS_CONFIRM=${ORPHANS_CONFIRM}"
-        echo "FILTER_RESULT_SIZE=${FILTER_RESULT_SIZE}"
-        echo "PACKAGE_INFO_WIDTH=${PACKAGE_INFO_WIDTH}"
-    } >"$ARCH_OS_CONF"
-
-    # Source again
-    source "$ARCH_OS_CONF"
-}
-
-# ///////////////////////////////////////////////////////////////////
-# NEWS
-# ///////////////////////////////////////////////////////////////////
-
-get_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
-get_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
-
-print_news() {
-    if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
-        for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            gum_white "$(get_news_date "$i") │ $(get_news_title "$i")"
-        done
-        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_white "More Information: https://archlinux.org/news"
-        echo # Print new line
+print_filled_spaces() {
+    local total=24 && local input_string="$1" && local length="${#input_string}"
+    if [ "$length" -ge "$total" ]; then
+        echo "$input_string"
+    else
+        local padding=$((total - length))
+        printf '%s%*s\n' "$input_string" "$padding" ""
     fi
-    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -543,55 +598,7 @@ gum_warn() { gum_yellow --bold "> ${*}"; }
 gum_fail() { gum_red --bold "> ${*}"; }
 
 # ///////////////////////////////////////////////////////////////////
-# PRINT & NOTIFY
-# ///////////////////////////////////////////////////////////////////
-
-print_header() {
-    clear && gum_purple '
- █████  ██████   ██████ ██   ██      ██████  ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
-███████ ██████  ██      ███████     ██    ██ ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
-██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    ' && gum_white --bold "System Manager ${VERSION}" && echo
-}
-
-action_help() {
-    gum_title 'App'
-    gum_white 'arch-os [--kitty | -k]              Open main menu'
-    echo && gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] check        Check & print package updates'
-    gum_white 'arch-os [--kitty | -k] notify       Check, print & notify package updates'
-    gum_white 'arch-os [--kitty | -k] search       Search package'
-    gum_white 'arch-os [--kitty | -k] fetch        Fetch package updates'
-    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade'
-    gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages'
-    gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations'
-    gum_white 'arch-os [--kitty | -k] refresh      Refresh Pacman mirrorlist'
-    gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages'
-    gum_white 'arch-os [--kitty | -k] reset        Reset Pacman'
-    gum_white 'arch-os [--kitty | -k] system       System info'
-    gum_white 'arch-os [--kitty | -k] settings     Settings'
-    gum_white 'arch-os [--kitty | -k] help         Help'
-}
-
-notify() { notify-send --app-name "Arch OS" -i "${WORKING_DIR}/docs/logo.svg" "Arch OS" "$@"; }
-
-print_filled_spaces() {
-    local total=24
-    local input_string="$1"
-    local length="${#input_string}"
-
-    if [ "$length" -ge "$total" ]; then
-        echo "$input_string"
-    else
-        local padding=$((total - length))
-        printf '%s%*s\n' "$input_string" "$padding" ""
-    fi
-}
-
-# ///////////////////////////////////////////////////////////////////
-# KITTY & CONFIG
+# KITTY
 # ///////////////////////////////////////////////////////////////////
 
 kitty() {
