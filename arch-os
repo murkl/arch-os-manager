@@ -82,9 +82,9 @@ main() {
     # Init
     print_header
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ]; then
-        gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || gum_warn "Canceled"
+        ! gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" && gum_fail "Synchronize News failed!"
     fi
-    [ ! -f "$PACKAGES_DB" ] && sync_packages
+    [ ! -f "$PACKAGES_DB" ] && ! sync_packages && gum_fail "Synchronize Package Database failed!"
 
     # Show menu or execute user action
     local first_run="true"
@@ -187,7 +187,7 @@ action_search() { # Manage packages
     while (true); do
         gum_title "Package Information"
         # If pkg name is null (first run) show search promt
-        [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$FILTER_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && gum_warn "Canceled" && return 0
+        [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$FILTER_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && return 3
 
         # Fetch general package infos
         pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
@@ -241,17 +241,17 @@ action_search() { # Manage packages
         command -v /usr/bin/downgrade &>/dev/null && [ "$pkg_is_installed" = "true" ] && [ "$pkg_is_aur" = "false" ] && options+=("Downgrade")
         options+=("Exit")
         # Show menu
-        user_input=$(gum_choose --height=6 "${options[@]}") || return 0
+        user_input=$(gum_choose --height=6 "${options[@]}") || return 3
         case "$user_input" in # Set user action to selected action
         'Install')
             gum_info "Install Package: ${pkg_name}"
             local paru_args=() && [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-            ! paru -Sq "${paru_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 0
+            ! paru -Sq "${paru_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Remove')
             gum_warn "Remove Package: ${pkg_name}"
-            ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 0
+            ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Show PKGBUILD')
@@ -260,7 +260,7 @@ action_search() { # Manage packages
             ;;
         'Downgrade')
             gum_warn "Downgrade Package: ${pkg_name}"
-            ! sudo downgrade "$pkg_name" && gum_fail "Downgrading ${pkg_name} failed" && return 0
+            ! sudo downgrade "$pkg_name" && gum_fail "Downgrading ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Exit')
@@ -278,7 +278,7 @@ action_search() { # Manage packages
 action_fetch() { # List package updates
     print_news && gum_title "Fetch Package Updates"
     # Preload and return if user press ctrl + c
-    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_warn "Canceled" && return 0
+    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_fail "Failed" && return 2
     ! action_check_updates_available && gum_info "Your system is up to date"
     # Show pacdiff warning
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
@@ -294,21 +294,21 @@ action_upgrade() { # Update packages
     [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
     # Upgrade system
-    ! paru -Syuq "${paru_args[@]}" && gum_fail "Paru upgrade failed" && return 0
+    ! paru -Syuq "${paru_args[@]}" && gum_fail "System Upgrade failed" && return 2
     if [ "$FLATPAK_SUPPORT" = "true" ] && command -v flatpak &>/dev/null; then
         # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
-                ! gum_spin --title 'Upgrade Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_warn "Canceled" && return 0
+                ! gum_spin --title 'Upgrade Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 2
             else # Do Interactive flatpak update
-                gum_mesg "Upgrade Flatpak Apps" && ! flatpak update && gum_fail "Flatpak upgrade failed" && return 0
+                gum_mesg "Upgrade Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 2
             fi
             gum_mesg "Flatpak Upgrade finished"
         else # Up to date
             gum_mesg "Flatpak is up to date"
         fi
     fi
-    sync_packages # Resync packages
+    ! sync_packages && gum_fail "Synchronize Package Database failed!" # Resync packages
     # Show pacdiff warning
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     gum_info "System Upgrade successful"
@@ -323,18 +323,19 @@ action_orphans() { # Remove orphaned packages
     # Remove pacman orphans
     # shellcheck disable=SC2046
     if paru -Qtdq &>/dev/null; then
-        ! paru -Rns "${paru_args[@]}" $(paru -Qtdq) && gum_warn "Canceled" && return 0
+        ! paru -Rns "${paru_args[@]}" $(paru -Qtdq) && gum_fail "Remove System Orphans failed" && return 2
     else
         gum_mesg "No orphaned system packages found"
     fi
     # Remove pacman orphans (alternative)
-    #! paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null && gum_warn "Canceled" && return 0
+    #! paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null && gum_fail "Failed" && return 2
     # Remove unused flatpaks
     if [ "$FLATPAK_SUPPORT" = "true" ] && command -v flatpak &>/dev/null; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
-            ! gum_spin --title 'Remove Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_warn "Canceled" && return 0
+            ! gum_spin --title 'Remove Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 2
+            gum_mesg "Remove Flatpak Orphans finished"
         else # Do Interactive flatpak orphans
-            gum_mesg "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Flatpak orphans failed" && return 0
+            gum_mesg "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 2
         fi
     fi
     gum_info "Done"
@@ -345,7 +346,7 @@ action_merge() { # Merge updated config files
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         ! gum_confirm "Install Dependencies? (pacman-contrib, meld)" && return 3
         gum_title "Install Pacdiff Tools"
-        ! paru -Sq --needed pacman-contrib meld && gum_warn "Canceled" && return 0
+        ! paru -Sq --needed pacman-contrib meld && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configuration Updates"
@@ -354,7 +355,7 @@ action_merge() { # Merge updated config files
     [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
     # Merge files
     echo -e "$pacdiff_info" && echo
-    ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 0
+    ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 2
     gum_info "Done"
     return 0
 }
@@ -363,12 +364,12 @@ action_refresh() { # Refresh mirrorlist with reflector
     if ! command -v reflector &>/dev/null; then
         ! gum_confirm "Install Dependencies? (reflector)" && return 3
         gum_title "Install Reflector"
-        ! paru -Sq --needed reflector && gum_warn "Canceled" && return 0
+        ! paru -Sq --needed reflector && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Refresh Pacman Mirrorlist"
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_warn "Canceled" && return 0
+    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save ${ARCH_OS_HOME}/.mirrorlist.tmp &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 2
     cat "${ARCH_OS_HOME}/.mirrorlist.tmp"
     echo && ! gum_confirm "Save Mirrorlist?" && return 3
     # Save mirrorlist and set correct permissions
@@ -383,19 +384,19 @@ action_downgrade() { # Downgrade packages
         ! gum_confirm "Install Dependencies? (downgrade)" && return 3
         gum_title "Install Downgrade"
         local paru_args=() && [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-        ! paru -Sq --needed "${paru_args[@]}" downgrade && gum_warn "Canceled" && return 0
+        ! paru -Sq --needed "${paru_args[@]}" downgrade && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "$FILTER_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && gum_warn "Canceled" && return 0
-    [ -z "$user_input" ] && gum_warn "No package selected" && return 0
+    ! user_input=$(gum_filter --limit 25 --height "$FILTER_RESULT_SIZE" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && return 3
+    [ -z "$user_input" ] && gum_warn "No package selected" && return 2
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
     for item in "${user_input[@]}"; do gum_green "> ${item}"; done
     ! gum_confirm "Downgrade selected packages?" && return 3
-    ! sudo downgrade "${user_input[@]}" && gum_warn "Canceled" && return 0
+    ! sudo downgrade "${user_input[@]}" && gum_warn "Canceled" && return 2
     gum_info "Downgrade successful"
     return 0
 }
@@ -405,14 +406,14 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     gum_title "Reset Pacman"
     sudo rm -f /var/lib/pacman/db.lck # Remove pacman lock if exists
     # Keyring reset
-    ! sudo rm -rf /etc/pacman.d/gnupg && gum_warn "Canceled" && return 0
-    ! sudo pacman-key --init && gum_warn "Canceled" && return 0
-    ! sudo pacman-key --populate && gum_warn "Canceled" && return 0
+    ! sudo rm -rf /etc/pacman.d/gnupg && gum_fail "Failed" && return 2
+    ! sudo pacman-key --init && gum_fail "Failed" && return 2
+    ! sudo pacman-key --populate && gum_fail "Failed" && return 2
     # Update Arch keyring & system
     local paru_args=()
     [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
-    ! paru -Syq --noconfirm archlinux-keyring && paru -Suq "${paru_args[@]}" && gum_warn "Canceled" && return 0
+    ! paru -Syq --noconfirm archlinux-keyring && paru -Suq "${paru_args[@]}" && gum_warn "Canceled" && return 2
     gum_info "Done"
     return 0
 }
@@ -432,7 +433,7 @@ action_settings() { # Settings
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
-        gum_warn "Canceled" && return 0
+        gum_warn "Canceled" && return 2
     fi
 }
 
@@ -448,7 +449,8 @@ print_package_info() {
 }
 
 sync_packages() {
-    gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || gum_warn "Canceled"
+    gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1
+    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
