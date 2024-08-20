@@ -240,6 +240,8 @@ init_properties() {
 # ///////////////////////////////////////////////////////////////////
 
 action_help() {
+
+    gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_white 'arch-os [--kitty | -k]              Open main menu'
     gum_white 'arch-os [--kitty | -k] help         Open help page'
