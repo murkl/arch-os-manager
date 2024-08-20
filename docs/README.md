@@ -30,25 +30,20 @@ Run Arch OS Manager: `arch-os`
 ## Usage
 
 ```
-arch-os [--kitty | -k]             Open main menu
-```
-
-```
-
-arch-os [--kitty | -k] check       Check & print package updates
-arch-os [--kitty | -k] notify      Check, print & notify package updates
-arch-os [--kitty | -k] search      Search package
-arch-os [--kitty | -k] fetch       Fetch package updates
-arch-os [--kitty | -k] upgrade     System upgrade
-arch-os [--kitty | -k] orphans     Remove orphaned packages
-arch-os [--kitty | -k] merge       Merge updated configurations
-arch-os [--kitty | -k] refresh     Refresh Pacman mirrorlist
-arch-os [--kitty | -k] downgrade   Downgrade packages
-arch-os [--kitty | -k] reset       Reset Pacman
-arch-os [--kitty | -k] system      System info
-arch-os [--kitty | -k] settings    Settings
-arch-os [--kitty | -k] help        Help
-
+arch-os [--kitty | -k]            # Open main menu
+arch-os [--kitty | -k] help       # Open help page
+arch-os [--kitty | -k] settings   # Edit properties
+arch-os [--kitty | -k] check      # Print package updates (pacman, aur, flatpak)
+arch-os [--kitty | -k] notify     # Notify on new package updates (pacman, aur, flatpak)
+arch-os [--kitty | -k] search     # Search & manage package (pacman, aur)
+arch-os [--kitty | -k] fetch      # Fetch package updates (news, pacdiff, pacman, aur, flatpak)
+arch-os [--kitty | -k] upgrade    # System upgrade (news, pacdiff, pacman, aur, flatpak)
+arch-os [--kitty | -k] orphans    # Remove orphaned packages (pacman, aur, flatpak)
+arch-os [--kitty | -k] merge      # Merge updated configurations (using pacdiff and meld)
+arch-os [--kitty | -k] refresh    # Refresh pacman mirrorlist (using preconfigured reflector)
+arch-os [--kitty | -k] downgrade  # Downgrade packages (pacman only)
+arch-os [--kitty | -k] reset      # Reset pacman (refresh pacman keyring)
+arch-os [--kitty | -k] system     # System info (system & services logging)
 ```
 
 ## Settings
@@ -56,15 +51,17 @@ arch-os [--kitty | -k] help        Help
 Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/arch-os.conf`
 
 ```
-ARCH_AUR_REVIEW=false              # Disable AUR review (Enable: true)
-ARCH_UPGRADE_CONFIRM=true          # Enable confirm upgrade system packages (Disable: false)
-FLATPAK_SUPPORT=true               # Enable Flatpak Support (Disable: false)
-FLATPAK_UPGRADE_CONFIRM=false      # Disable flatpak upgrade confirm (Enable: true)
-NEWS_QUANTITY=3                    # Number of news to shown (Disable: 0)
-NEWS_SHOW_URL=true                 # Show 'More info url' below the news (Disable: false)
-ORPHANS_CONFIRM=false              # Disable confirm remove orphans (Enable: true)
-FILTER_RESULT_SIZE=20              # Max filter results
-PACKAGE_INFO_WIDTH=80              # Max info width (cut horizontal output)
+AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
+AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
+ARCH_AUR_REVIEW=false             # Disable AUR review (enable: true)
+ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
+FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
+FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: true)
+NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
+NEWS_SHOW_URL=true                # Show 'More Information' below the news (disable: false)
+ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true)
+FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
+PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
 
 ## Integrate GNOME Extension
