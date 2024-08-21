@@ -8,7 +8,7 @@ set -Eeo pipefail # Set script error handling
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.5.3"
+VERSION="1.5.4"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -244,7 +244,6 @@ init_properties() {
 # ///////////////////////////////////////////////////////////////////
 
 action_help() {
-
     gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_white 'arch-os [--kitty | -k]              Open main menu'
@@ -645,24 +644,27 @@ print_orphans_info() {
 
 gum() { /usr/bin/gum "$@"; }
 
+# Colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
+# Print
+gum_title() { gum_purple --bold "> ${*}"; }
+gum_mesg() { gum_white --bold "> ${*}"; }
+gum_info() { gum_green --bold "> ${*}"; }
+gum_warn() { gum_yellow --bold "> ${*}"; }
+gum_fail() { gum_red --bold "> ${*}"; }
+
+# Wrapper
 gum_style() { gum style "${@}"; }
 gum_filter() { gum filter --width="$PACKAGE_INFO_WIDTH" --prompt "> " --indicator "> " --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="$PACKAGE_INFO_WIDTH" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "> " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
-
-gum_title() { gum_purple --bold "> ${*}"; }
-gum_mesg() { gum_white --bold "> ${*}"; }
-gum_info() { gum_green --bold "> ${*}"; }
-gum_warn() { gum_yellow --bold "> ${*}"; }
-gum_fail() { gum_red --bold "> ${*}"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY
