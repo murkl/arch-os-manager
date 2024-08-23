@@ -374,7 +374,7 @@ action_search() { # Manage packages
         'Install')
             gum_info "Install Package: ${pkg_name}"
             local paru_args=() && [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-            ! paru -Sq "${paru_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
+            ! paru -Sq --disable-download-timeout "${paru_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Remove')
@@ -427,6 +427,7 @@ action_upgrade() { # Update packages
     gum_title "Upgrade System Packages"
     # Prepare args
     local paru_args=()
+    paru_args+=('--disable-download-timeout')
     [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
     # Upgrade system
@@ -487,7 +488,7 @@ action_merge() { # Merge updated config files
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         ! gum_confirm "Install Dependencies? (pacman-contrib, meld)" && return 3
         gum_title "Install Pacdiff Tools"
-        ! paru -Sq --needed pacman-contrib meld && gum_warn "Canceled" && return 2
+        ! paru -Sq --disable-download-timeout --needed pacman-contrib meld && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configuration Updates"
@@ -507,7 +508,7 @@ action_refresh() { # Refresh mirrorlist with reflector
     if ! command -v reflector &>/dev/null; then
         ! gum_confirm "Install Dependencies? (reflector)" && return 3
         gum_title "Install Reflector"
-        ! paru -Sq --needed reflector && gum_warn "Canceled" && return 2
+        ! paru -Sq --disable-download-timeout --needed reflector && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Refresh Pacman Mirrorlist"
@@ -529,7 +530,7 @@ action_downgrade() { # Downgrade packages
         ! gum_confirm "Install Dependencies? (downgrade)" && return 3
         gum_title "Install Downgrade"
         local paru_args=() && [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-        ! paru -Sq --needed "${paru_args[@]}" downgrade && gum_warn "Canceled" && return 2
+        ! paru -Sq --disable-download-timeout --needed "${paru_args[@]}" downgrade && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade Packages"
@@ -558,9 +559,10 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --populate && gum_fail "Failed" && return 2
     # Update Arch keyring & system
     local paru_args=()
+    paru_args+=('--disable-download-timeout')
     [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
-    ! paru -Syq --noconfirm archlinux-keyring && paru -Suq "${paru_args[@]}" && gum_warn "Canceled" && return 2
+    ! paru -Syq --disable-download-timeout --noconfirm archlinux-keyring && paru -Suq "${paru_args[@]}" && gum_warn "Canceled" && return 2
     gum_info "Done"
     return 0
 }
