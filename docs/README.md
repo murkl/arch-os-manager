@@ -23,9 +23,19 @@ Run Arch OS Manager: `arch-os`
 
 ## Install from GitHub
 
-1. Install Dependencies: `paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`
+1. Install Dependencies: `sudo pacman -S kitty gum libnotify pacman-contrib
+`
 2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
 3. Run Arch OS Manager: `./arch-os`
+
+## Optional Features
+
+Install these optional dependencies to equip the Arch OS Manager with all features:
+
+- `paru`: Add support for manage AUR packages
+- `flatpak`: Add support for manage Flatpak packages
+- `downgrade`: Add support for downgrade packages
+- `reflector`: Add support for refresh mirrorlist
 
 ## Usage
 
@@ -33,7 +43,7 @@ Run Arch OS Manager: `arch-os`
 arch-os [--kitty | -k]            # Open main menu
 arch-os [--kitty | -k] help       # Open help page
 arch-os [--kitty | -k] settings   # Edit properties
-arch-os [--kitty | -k] check      # Print package updates (pacman, aur, flatpak)
+arch-os [--kitty | -k] check      # Print package updates like checkupdates (pacman, aur, flatpak)
 arch-os [--kitty | -k] notify     # Notify on new package updates (pacman, aur, flatpak)
 arch-os [--kitty | -k] search     # Search & manage package (pacman, aur)
 arch-os [--kitty | -k] fetch      # Fetch package updates (news, pacdiff, pacman, aur, flatpak)
@@ -53,8 +63,10 @@ Edit settings with the build-in editor in Arch OS Manager or edit the config fil
 ```
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
-ARCH_AUR_REVIEW=false             # Disable AUR review (enable: true)
+AUR_SUPPORT=true                  # Enable AUR support (disable: false)
+AUR_REVIEW=false                  # Disable AUR review (enable: true)
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
+ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
 FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: true)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
@@ -107,7 +119,9 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 ## Credits
 
 - https://archlinux.org
+- https://github.com/RaphaelRochet/arch-update
 - https://github.com/Morganamilo/paru
 - https://github.com/kovidgoyal/kitty
 - https://github.com/charmbracelet/gum
-- https://github.com/RaphaelRochet/arch-update
+- https://github.com/archlinux-downgrade/downgrade
+- https://meldmerge.org

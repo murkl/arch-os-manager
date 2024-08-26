@@ -8,7 +8,7 @@ set -Eeo pipefail # Set script error handling
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.5.3"
+VERSION="1.5.4"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -29,12 +29,12 @@ COLOR_RED=1
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
-# Return Codes:
-# 0   = success (default)
-# 1   = fatal (uncatched)
-# 2   = error (catched)
-# 3   = exit (user)
-# 130 = exit (user)
+# RETURN CODES
+#   0 : success (default)
+#   1 : fatal   (uncatched)
+#   2 : error   (catched)
+#   3 : exit    (user)
+# 130 : exit    (user)
 
 trap_exit() {
     rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
@@ -57,11 +57,10 @@ main() {
     local user_input options selected_action skip_confirm first_run
 
     # Check dependencies
-    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found" >&2 && exit 1; fi
-    if ! command -v /usr/bin/paru &>/dev/null; then echo "ERROR: paru not found" >&2 && exit 1; fi
+    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found. Install with: sudo pacman -S kitty" >&2 && exit 1; fi
+    if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found. Install with: sudo pacman -S gum" >&2 && exit 1; fi
+    if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found. Install with: sudo pacman -S pacman-contrib" >&2 && exit 1; fi
+    if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found. Install with: sudo pacman -S libnotify" >&2 && exit 1; fi
 
     # Create & source properties
     init_properties
@@ -183,8 +182,10 @@ init_properties() {
     # Set default properties
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
     [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="30"
-    [ -z "$ARCH_AUR_REVIEW" ] && ARCH_AUR_REVIEW="false"
+    [ -z "$AUR_SUPPORT" ] && AUR_SUPPORT="true"
+    [ -z "$AUR_REVIEW" ] && AUR_REVIEW="false"
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
+    [ -z "$ARCH_DOWNLOAD_TIMEOUT" ] && ARCH_DOWNLOAD_TIMEOUT="false"
     [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
@@ -205,6 +206,10 @@ init_properties() {
     [ "$PACKAGE_INFO_WIDTH" -gt 500 ] && PACKAGE_INFO_WIDTH="500" # Set to max 500
     [ "$PACKAGE_INFO_WIDTH" -lt 20 ] && PACKAGE_INFO_WIDTH="20"   # Set to min 20
 
+    # Check binaries
+    [ "$AUR_SUPPORT" = "true" ] && ! command -v /usr/bin/paru &>/dev/null && gum_warn "AUR_SUPPORT was disabled (/usr/bin/paru not found)" && AUR_SUPPORT="false"
+    [ "$FLATPAK_SUPPORT" = "true" ] && ! command -v /usr/bin/flatpak &>/dev/null && gum_warn "FLATPAK_SUPPORT was disabled (/usr/bin/flatpak not found)" && FLATPAK_SUPPORT="false"
+
     # Toggle settings
     if [ "$AUTOSTART_NOTIFY" = "true" ]; then
         mkdir -p "${HOME}/.config/autostart"
@@ -222,8 +227,10 @@ init_properties() {
     { # Write properties
         echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}"
         echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}"
-        echo "ARCH_AUR_REVIEW=${ARCH_AUR_REVIEW}"
+        echo "AUR_SUPPORT=${AUR_SUPPORT}"
+        echo "AUR_REVIEW=${AUR_REVIEW}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
+        echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
         echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
         echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
         echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
@@ -244,14 +251,13 @@ init_properties() {
 # ///////////////////////////////////////////////////////////////////
 
 action_help() {
-
     gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_white 'arch-os [--kitty | -k]              Open main menu'
     gum_white 'arch-os [--kitty | -k] help         Open help page'
     gum_white 'arch-os [--kitty | -k] settings     Edit properties'
     echo && gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] check        Print package updates (pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] check        Print package updates like checkupdates (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
     gum_white 'arch-os [--kitty | -k] fetch        Fetch package updates (news, pacdiff, pacman, aur, flatpak)'
@@ -274,6 +280,7 @@ action_settings() { # Settings
     if gum_write --height="$((property_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
+        ! sync_package_db && gum_fail "Synchronize Package Database failed!"
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
@@ -296,8 +303,8 @@ action_system_info() { # System Info Logs
 action_check_updates_available() { # Check & print package updates
     local update_available="false"
     checkupdates && update_available="true"
-    paru -Qua && update_available="true"
-    if [ "$FLATPAK_SUPPORT" = "true" ] && command -v flatpak &>/dev/null; then
+    [ "$AUR_SUPPORT" = 'true' ] && package_manager -Qua && update_available="true"
+    if [ "$FLATPAK_SUPPORT" = "true" ]; then
         # Fetch flatpak updates
         local flatpak_updates && flatpak_updates=$(LANG=en_US.UTF-8 flatpak remote-ls --updates --columns=application,installed-size,download-size,version,branch)
         # If result is not null set update available
@@ -319,13 +326,13 @@ action_search() { # Manage packages
         [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "$FILTER_RESULT_SIZE" --placeholder "Search package..." <"$PACKAGES_DB") && return 3
 
         # Fetch general package infos
-        pkg_info_remote="$(LANG=en_US.UTF-8 paru -Si "$pkg_name" 2>/dev/null)" # Uninstalled
+        pkg_info_remote="$(LANG=en_US.UTF-8 package_manager -Si "$pkg_name" 2>/dev/null)" # Uninstalled
         pkg_is_aur="false" && [ "$(print_package_info "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
         pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
 
         # Get installed package info
         if [ "$pkg_is_installed" = "true" ]; then
-            pkg_info_local="$(LANG=en_US.UTF-8 paru -Qi "$pkg_name" 2>/dev/null)" # Installed
+            pkg_info_local="$(LANG=en_US.UTF-8 package_manager -Qi "$pkg_name" 2>/dev/null)" # Installed
         fi
 
         # Print general package info
@@ -374,18 +381,20 @@ action_search() { # Manage packages
         case "$user_input" in # Set user action to selected action
         'Install')
             gum_info "Install Package: ${pkg_name}"
-            local paru_args=() && [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-            ! paru -Sq "${paru_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
+            local pkg_manager_args=()
+            [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+            [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+            ! sudo_package_manager -Sq "${pkg_manager_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Remove')
             gum_warn "Remove Package: ${pkg_name}"
-            ! paru -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 2
+            ! sudo_package_manager -Rns "$pkg_name" && gum_fail "Removing ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Show PKGBUILD')
             print_header && gum_title "PKGBUILD" && echo
-            paru -Gp "$pkg_name"
+            package_manager -Gp "$pkg_name"
             ;;
         'Downgrade')
             gum_warn "Downgrade Package: ${pkg_name}"
@@ -409,8 +418,8 @@ action_search() { # Manage packages
 action_fetch() { # List package updates
     print_news_info && gum_title "Fetch Package Updates"
     local orphans_packages orphans_count
-    # Preload and return if user press ctrl + c
-    ! gum_spin --title 'Checking Package Informations...' -- bash -c "checkupdates; paru -Qua; wait; exit 0" && gum_fail "Failed" && return 2
+    # Preload and force return 0. Cancel if user press ctrl + c
+    ! gum_spin --title 'Checking Package Informations...' -- bash -c "${SELF} check; exit 0" && gum_fail "Failed" && return 2
     if ! action_check_updates_available; then
         gum_info "Your system is up to date"
     fi
@@ -427,12 +436,13 @@ action_upgrade() { # Update packages
     print_news_info && ! gum_confirm "Upgrade System Packages?" && return 3
     gum_title "Upgrade System Packages"
     # Prepare args
-    local paru_args=()
-    [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
+    local pkg_manager_args=()
+    [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Upgrade system
-    ! paru -Syuq "${paru_args[@]}" && gum_fail "System Upgrade failed" && return 2
-    if [ "$FLATPAK_SUPPORT" = "true" ] && command -v flatpak &>/dev/null; then
+    ! sudo_package_manager -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 2
+    if [ "$FLATPAK_SUPPORT" = "true" ]; then
         # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
@@ -459,18 +469,18 @@ action_upgrade() { # Update packages
 action_orphans() { # Remove orphaned packages
     ! gum_confirm "Remove Package Orphans?" && return 3
     gum_title "Remove Package Orphans"
-    local paru_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
+    local pkg_manager_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Remove pacman orphans
     # shellcheck disable=SC2046
-    if paru -Qtdq &>/dev/null; then
-        ! paru -Rns "${paru_args[@]}" $(paru -Qtdq) && gum_fail "Remove System Orphans failed" && return 2
+    if package_manager -Qtdq &>/dev/null; then
+        ! sudo_package_manager -Rns "${pkg_manager_args[@]}" $(package_manager -Qtdq) && gum_fail "Remove System Orphans failed" && return 2
     else
         gum_mesg "No orphaned system packages found"
     fi
     # Remove pacman orphans (alternative)
-    #! paru -Rsu --noconfirm $(paru -Qqd) 2>/dev/null && gum_fail "Failed" && return 2
+    #! sudo_package_manager -Rsu --noconfirm $(package_manager -Qqd) 2>/dev/null && gum_fail "Failed" && return 2
     # Remove unused flatpaks
-    if [ "$FLATPAK_SUPPORT" = "true" ] && command -v flatpak &>/dev/null; then
+    if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
             ! gum_spin --title 'Remove Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 2
             gum_mesg "Remove Flatpak Orphans finished"
@@ -486,9 +496,11 @@ action_orphans() { # Remove orphaned packages
 
 action_merge() { # Merge updated config files
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
-        ! gum_confirm "Install Dependencies? (pacman-contrib, meld)" && return 3
+        ! gum_confirm "Install Dependencies? (meld)" && return 3
         gum_title "Install Pacdiff Tools"
-        ! paru -Sq --needed pacman-contrib meld && gum_warn "Canceled" && return 2
+        local pkg_manager_args=()
+        [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+        ! sudo_package_manager -Sq --needed "${pkg_manager_args[@]}" meld && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configuration Updates"
@@ -508,7 +520,9 @@ action_refresh() { # Refresh mirrorlist with reflector
     if ! command -v reflector &>/dev/null; then
         ! gum_confirm "Install Dependencies? (reflector)" && return 3
         gum_title "Install Reflector"
-        ! paru -Sq --needed reflector && gum_warn "Canceled" && return 2
+        local pkg_manager_args=()
+        [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+        ! sudo_package_manager -Sq --needed "${pkg_manager_args[@]}" reflector && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Refresh Pacman Mirrorlist"
@@ -527,10 +541,13 @@ action_refresh() { # Refresh mirrorlist with reflector
 
 action_downgrade() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
+        [ "$AUR_SUPPORT" = "false" ] && gum_fail "AUR Helper is missing to install downgrade!" && return 2
         ! gum_confirm "Install Dependencies? (downgrade)" && return 3
         gum_title "Install Downgrade"
-        local paru_args=() && [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-        ! paru -Sq --needed "${paru_args[@]}" downgrade && gum_warn "Canceled" && return 2
+        local pkg_manager_args=()
+        [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+        [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+        ! sudo_package_manager -Sq --needed "${pkg_manager_args[@]}" downgrade && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade Packages"
@@ -558,10 +575,11 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --init && gum_fail "Failed" && return 2
     ! sudo pacman-key --populate && gum_fail "Failed" && return 2
     # Update Arch keyring & system
-    local paru_args=()
-    [ "$ARCH_AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
-    ! paru -Syq --noconfirm archlinux-keyring && paru -Suq "${paru_args[@]}" && gum_warn "Canceled" && return 2
+    local pkg_manager_args=()
+    [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
+    ! sudo_package_manager -Syq --noconfirm archlinux-keyring && sudo_package_manager -Suq "${pkg_manager_args[@]}" && gum_warn "Canceled" && return 2
     gum_info "Done"
     return 0
 }
@@ -570,8 +588,14 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
 # HELPER FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
-sync_package_db() { gum_spin --title 'Synchronize Package Database...' -- bash -c "pacman -Slq >${PACKAGES_DB}; paru -Slq >>${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1; }
+package_manager() { if [ "$AUR_SUPPORT" = "true" ]; then /usr/bin/paru "$@"; else /usr/bin/pacman "$@"; fi; }
+sudo_package_manager() { if [ "$AUR_SUPPORT" = "true" ]; then /usr/bin/paru "$@"; else sudo /usr/bin/pacman "$@"; fi; }
 sync_news_db() { gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || return 1; }
+
+sync_package_db() {
+    local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
+    gum_spin --title 'Synchronize Package Database...' -- bash -c "${pkg_manager} -Slq >${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1
+}
 
 # -------------------------------------------------------------------
 
@@ -632,7 +656,7 @@ print_pacdiff_info() {
 print_orphans_info() {
     if [ "$ORPHANS_SHOW_INFO" = "true" ]; then
         local orphans_packages orphans_count
-        orphans_packages="$(paru -Qtdq &>/dev/null && paru -Qtdq)"
+        orphans_packages="$(pkg_manager -Qtdq &>/dev/null && pkg_manager -Qtdq)"
         orphans_count="$(echo "$orphans_packages" | wc -w)"
         [ "$orphans_count" -gt 0 ] && echo && gum_warn "Orphaned Packages found!" && echo
     fi
@@ -645,24 +669,27 @@ print_orphans_info() {
 
 gum() { /usr/bin/gum "$@"; }
 
+# Colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
+# Print
+gum_title() { gum_purple --bold "> ${*}"; }
+gum_mesg() { gum_white --bold "> ${*}"; }
+gum_info() { gum_green --bold "> ${*}"; }
+gum_warn() { gum_yellow --bold "> ${*}"; }
+gum_fail() { gum_red --bold "> ${*}"; }
+
+# Wrapper
 gum_style() { gum style "${@}"; }
 gum_filter() { gum filter --width="$PACKAGE_INFO_WIDTH" --prompt "> " --indicator "> " --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="$PACKAGE_INFO_WIDTH" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "> " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
-
-gum_title() { gum_purple --bold "> ${*}"; }
-gum_mesg() { gum_white --bold "> ${*}"; }
-gum_info() { gum_green --bold "> ${*}"; }
-gum_warn() { gum_yellow --bold "> ${*}"; }
-gum_fail() { gum_red --bold "> ${*}"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY
@@ -681,7 +708,6 @@ initial_window_width 1080
 initial_window_height 720
 placement_strategy center
 window_padding_width 32
-font_family Fira Code Nerd Font
 font_size 10.0
 active_tab_font_style bold
 inactive_tab_font_style normal
