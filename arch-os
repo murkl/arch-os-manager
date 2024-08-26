@@ -185,6 +185,7 @@ init_properties() {
     [ -z "$AUR_SUPPORT" ] && AUR_SUPPORT="true"
     [ -z "$AUR_REVIEW" ] && AUR_REVIEW="false"
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
+    [ -z "$ARCH_DOWNLOAD_TIMEOUT" ] && ARCH_DOWNLOAD_TIMEOUT="false"
     [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
@@ -229,6 +230,7 @@ init_properties() {
         echo "AUR_SUPPORT=${AUR_SUPPORT}"
         echo "AUR_REVIEW=${AUR_REVIEW}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
+        echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
         echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
         echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
         echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
@@ -379,8 +381,10 @@ action_search() { # Manage packages
         case "$user_input" in # Set user action to selected action
         'Install')
             gum_info "Install Package: ${pkg_name}"
-            local paru_args=() && [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-            ! sudo_package_manager -Sq --disable-download-timeout "${paru_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
+            local pkg_manager_args=()
+            [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+            [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+            ! sudo_package_manager -Sq "${pkg_manager_args[@]}" "$pkg_name" && gum_fail "Installing ${pkg_name} failed" && return 2
             gum_info "Done"
             ;;
         'Remove')
@@ -432,12 +436,12 @@ action_upgrade() { # Update packages
     print_news_info && ! gum_confirm "Upgrade System Packages?" && return 3
     gum_title "Upgrade System Packages"
     # Prepare args
-    local paru_args=()
-    paru_args+=('--disable-download-timeout')
-    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
+    local pkg_manager_args=()
+    [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Upgrade system
-    ! sudo_package_manager -Syuq "${paru_args[@]}" && gum_fail "System Upgrade failed" && return 2
+    ! sudo_package_manager -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 2
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
@@ -465,11 +469,11 @@ action_upgrade() { # Update packages
 action_orphans() { # Remove orphaned packages
     ! gum_confirm "Remove Package Orphans?" && return 3
     gum_title "Remove Package Orphans"
-    local paru_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
+    local pkg_manager_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Remove pacman orphans
     # shellcheck disable=SC2046
     if package_manager -Qtdq &>/dev/null; then
-        ! sudo_package_manager -Rns "${paru_args[@]}" $(package_manager -Qtdq) && gum_fail "Remove System Orphans failed" && return 2
+        ! sudo_package_manager -Rns "${pkg_manager_args[@]}" $(package_manager -Qtdq) && gum_fail "Remove System Orphans failed" && return 2
     else
         gum_mesg "No orphaned system packages found"
     fi
@@ -494,7 +498,9 @@ action_merge() { # Merge updated config files
     if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         ! gum_confirm "Install Dependencies? (meld)" && return 3
         gum_title "Install Pacdiff Tools"
-        ! sudo_package_manager -Sq --disable-download-timeout --needed meld && gum_warn "Canceled" && return 2
+        local pkg_manager_args=()
+        [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+        ! sudo_package_manager -Sq --needed "${pkg_manager_args[@]}" meld && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Merge Configuration Updates"
@@ -514,7 +520,9 @@ action_refresh() { # Refresh mirrorlist with reflector
     if ! command -v reflector &>/dev/null; then
         ! gum_confirm "Install Dependencies? (reflector)" && return 3
         gum_title "Install Reflector"
-        ! sudo_package_manager -Sq --disable-download-timeout --needed reflector && gum_warn "Canceled" && return 2
+        local pkg_manager_args=()
+        [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+        ! sudo_package_manager -Sq --needed "${pkg_manager_args[@]}" reflector && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Refresh Pacman Mirrorlist"
@@ -536,8 +544,10 @@ action_downgrade() { # Downgrade packages
         [ "$AUR_SUPPORT" = "false" ] && gum_fail "AUR Helper is missing to install downgrade!" && return 2
         ! gum_confirm "Install Dependencies? (downgrade)" && return 3
         gum_title "Install Downgrade"
-        local paru_args=() && [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-        ! sudo_package_manager -Sq --disable-download-timeout --needed "${paru_args[@]}" downgrade && gum_warn "Canceled" && return 2
+        local pkg_manager_args=()
+        [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+        [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+        ! sudo_package_manager -Sq --needed "${pkg_manager_args[@]}" downgrade && gum_warn "Canceled" && return 2
         print_header # Clean install output & print new header
     fi
     gum_title "Downgrade Packages"
@@ -565,11 +575,11 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     ! sudo pacman-key --init && gum_fail "Failed" && return 2
     ! sudo pacman-key --populate && gum_fail "Failed" && return 2
     # Update Arch keyring & system
-    local paru_args=()
-    paru_args+=('--disable-download-timeout')
-    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && paru_args+=('--skipreview')
-    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && paru_args+=('--noconfirm')
-    ! sudo_package_manager -Syq --disable-download-timeout --noconfirm archlinux-keyring && sudo_package_manager -Suq "${paru_args[@]}" && gum_warn "Canceled" && return 2
+    local pkg_manager_args=()
+    [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
+    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
+    ! sudo_package_manager -Syq --noconfirm archlinux-keyring && sudo_package_manager -Suq "${pkg_manager_args[@]}" && gum_warn "Canceled" && return 2
     gum_info "Done"
     return 0
 }

@@ -66,6 +66,7 @@ AUTOSTART_DELAY=30                # Delay update check after boot in seconds (mi
 AUR_SUPPORT=true                  # Enable AUR support (disable: false)
 AUR_REVIEW=false                  # Disable AUR review (enable: true)
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
+ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
 FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: true)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
