@@ -23,7 +23,7 @@ Run Arch OS Manager: `arch-os`
 
 ## Install from GitHub
 
-1. Install Dependencies: `paru pacman-contrib kitty gum libnotify ttf-firacode-nerd`
+1. Install Dependencies: `kitty gum libnotify pacman-contrib`
 2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
 3. Run Arch OS Manager: `./arch-os`
 
@@ -53,7 +53,8 @@ Edit settings with the build-in editor in Arch OS Manager or edit the config fil
 ```
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
-ARCH_AUR_REVIEW=false             # Disable AUR review (enable: true)
+AUR_SUPPORT=true                  # Enable AUR support (disable: false)
+AUR_REVIEW=false                  # Disable AUR review (enable: true)
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
 FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: true)
@@ -107,7 +108,9 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 ## Credits
 
 - https://archlinux.org
+- https://github.com/RaphaelRochet/arch-update
 - https://github.com/Morganamilo/paru
 - https://github.com/kovidgoyal/kitty
 - https://github.com/charmbracelet/gum
-- https://github.com/RaphaelRochet/arch-update
+- https://github.com/archlinux-downgrade/downgrade
+- https://meldmerge.org
