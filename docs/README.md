@@ -23,15 +23,16 @@ Run Arch OS Manager: `arch-os`
 
 ## Install from GitHub
 
-1. Install Dependencies: `sudo pacman -S kitty gum libnotify pacman-contrib
-`
-2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
-3. Run Arch OS Manager: `./arch-os`
+1. Install Dependencies: `sudo pacman -S gum pacman-contrib`
+1. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
+1. Run Arch OS Manager: `./arch-os`
 
 ## Optional Features
 
 Install these optional dependencies to equip the Arch OS Manager with all features:
 
+- `kitty`: Add support for open Arch OS Manager in kitty
+- `libnotify`: Add suport for notify on updates
 - `paru`: Add support for manage AUR packages
 - `flatpak`: Add support for manage Flatpak packages
 - `downgrade`: Add support for downgrade packages
