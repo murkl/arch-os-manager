@@ -58,17 +58,15 @@ main() {
 
     # Check dependencies
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found. Install with: sudo pacman -S gum" >&2 && exit 1; fi
+    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found. Install with: sudo pacman -S kitty" >&2 && exit 1; fi
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found. Install with: sudo pacman -S pacman-contrib" >&2 && exit 1; fi
+    if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found. Install with: sudo pacman -S libnotify" >&2 && exit 1; fi
 
     # Create & source properties
     init_properties
 
     # Check and start kitty
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
-        if ! command -v /usr/bin/kitty &>/dev/null; then
-            gum_fail "ERROR: kitty not found. Install with: sudo pacman -S kitty"
-            exit 1
-        fi
         shift # Shift argument to next
         # Start kitty if not already present
         if [ "$TERM" != "xterm-kitty" ]; then
@@ -92,10 +90,6 @@ main() {
 
     # If 'notify' action
     if [ "$1" = "notify" ]; then
-        if ! command -v /usr/bin/notify-send &>/dev/null; then
-            gum_fail "ERROR: notify-send not found. Install with: sudo pacman -S libnotify"
-            exit 1
-        fi
         local update_result update_count update_txt
         update_result="$(action_check_updates_available)"
         update_count=$(echo "$update_result" | wc -l)
