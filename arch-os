@@ -29,12 +29,12 @@ COLOR_RED=1
 # TRAPS
 # ///////////////////////////////////////////////////////////////////
 
-# Return Codes:
-# 0   = success (default)
-# 1   = fatal (uncatched)
-# 2   = error (catched)
-# 3   = exit (user)
-# 130 = exit (user)
+# RETURN CODES
+#   0 : success (default)
+#   1 : fatal   (uncatched)
+#   2 : error   (catched)
+#   3 : exit    (user)
+# 130 : exit    (user)
 
 trap_exit() {
     rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
