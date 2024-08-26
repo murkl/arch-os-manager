@@ -8,7 +8,7 @@ set -Eeo pipefail # Set script error handling
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.5.4"
+VERSION="1.5.5"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -94,8 +94,8 @@ main() {
         update_result="$(action_check_updates_available)"
         update_count=$(echo "$update_result" | wc -l)
         if [ "$update_count" -gt 0 ]; then
-            [ "$update_count" = 1 ] && update_txt="${update_count} new Update available"
-            [ "$update_count" -gt 1 ] && update_txt="${update_count} new Updates available"
+            [ "$update_count" = 1 ] && update_txt="${update_count} Update available"
+            [ "$update_count" -gt 1 ] && update_txt="${update_count} Updates available"
             notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "System Upgrade" "$update_txt"
             echo "$update_result"
         fi
