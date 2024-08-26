@@ -43,7 +43,7 @@ Install these optional dependencies to equip the Arch OS Manager with all featur
 arch-os [--kitty | -k]            # Open main menu
 arch-os [--kitty | -k] help       # Open help page
 arch-os [--kitty | -k] settings   # Edit properties
-arch-os [--kitty | -k] check      # Print package updates (pacman, aur, flatpak)
+arch-os [--kitty | -k] check      # Print package updates like checkupdates (pacman, aur, flatpak)
 arch-os [--kitty | -k] notify     # Notify on new package updates (pacman, aur, flatpak)
 arch-os [--kitty | -k] search     # Search & manage package (pacman, aur)
 arch-os [--kitty | -k] fetch      # Fetch package updates (news, pacdiff, pacman, aur, flatpak)
