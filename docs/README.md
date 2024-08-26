@@ -36,6 +36,7 @@ Install these optional dependencies to equip the Arch OS Manager with all featur
 - `flatpak`: Add support for manage Flatpak packages
 - `downgrade`: Add support for downgrade packages
 - `reflector`: Add support for refresh mirrorlist
+- `meld`: Add support for merge pacdiff configs
 
 ## Usage
 
