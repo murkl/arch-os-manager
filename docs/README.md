@@ -27,15 +27,26 @@ Run Arch OS Manager: `arch-os`
 1. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
 1. Run Arch OS Manager: `./arch-os`
 
-## Optional Features
+## Features
 
-Install these optional dependencies to equip the Arch OS Manager with all features:
+- Search and manage packages
+- Fetch package and system infos
+- Upgrade system packages
+- Remove orphaned packages
+- Reset pacman keyring
+- Show system & service logs
+- Build-in settings editor
+- Build-in kitty support
+- Startup notify on available updates
+- Check and list updates in _checkupdates_ format
+
+Install these **optional** dependencies to equip Arch OS Manager with more features:
 
 - `paru`: Add support for manage AUR packages
 - `flatpak`: Add support for manage Flatpak packages
+- `reflector`: Add support for refresh pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
-- `reflector`: Add support for refresh mirrorlist
-- `meld`: Add support for merge pacdiff configs
+- `meld`: Add support for merge pacdiff configurations
 
 ## Usage
 
