@@ -29,22 +29,24 @@ Run Arch OS Manager: `arch-os`
 
 ## Features
 
+- Check and list updates in _checkupdates_ format
+- Startup notify on available updates
+- Show latest Arch Linux news
+- Notice on orphaned packages & pacdiff files
 - Search and manage packages
 - Fetch package and system infos
 - Upgrade system packages
 - Remove orphaned packages
-- Reset pacman keyring
+- Reset Pacman keyring
 - Show system & service logs
 - Build-in settings editor
 - Build-in kitty support
-- Startup notify on available updates
-- Check and list updates in _checkupdates_ format
 
 Install these **optional** dependencies to equip Arch OS Manager with more features:
 
 - `paru`: Add support for manage AUR packages
 - `flatpak`: Add support for manage Flatpak packages
-- `reflector`: Add support for refresh pacman mirrorlist
+- `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
 - `meld`: Add support for merge pacdiff configurations
 
