@@ -549,7 +549,7 @@ action_refresh() { # Refresh mirrorlist with reflector
 
 action_downgrade() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
-        [ "$AUR_SUPPORT" = "false" ] && gum_fail "AUR Helper is missing to install downgrade!" && return 2
+        [ "$AUR_SUPPORT" = "false" ] && gum_fail "AUR Helper is missing. The package 'downgrade' can not be installed!" && return 2
         ! gum_confirm "Install Dependencies? (downgrade)" && return 3
         gum_title "Install Downgrade"
         local pkg_manager_args=()
