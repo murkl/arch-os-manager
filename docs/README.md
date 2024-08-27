@@ -23,19 +23,32 @@ Run Arch OS Manager: `arch-os`
 
 ## Install from GitHub
 
-1. Install Dependencies: `sudo pacman -S kitty gum libnotify pacman-contrib
-`
-2. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
-3. Run Arch OS Manager: `./arch-os`
+1. Install Dependencies: `sudo pacman -S kitty gum libnotify pacman-contrib`
+1. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
+1. Run Arch OS Manager: `./arch-os`
 
-## Optional Features
+## Features
 
-Install these optional dependencies to equip the Arch OS Manager with all features:
+- Check and list updates in _checkupdates_ format
+- Startup notify on available updates
+- Show latest Arch Linux news
+- Notice on orphaned packages & pacdiff files
+- Search and manage packages
+- Fetch package and system infos
+- Upgrade system packages
+- Remove orphaned packages
+- Reset Pacman keyring
+- Show system & service logs
+- Built-in settings editor
+- Built-in kitty support
+
+Install these **optional** dependencies to equip Arch OS Manager with more features:
 
 - `paru`: Add support for manage AUR packages
 - `flatpak`: Add support for manage Flatpak packages
+- `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
-- `reflector`: Add support for refresh mirrorlist
+- `meld`: Add support for merge pacdiff configurations
 
 ## Usage
 
@@ -58,7 +71,7 @@ arch-os [--kitty | -k] system     # System info (system & services logging)
 
 ## Settings
 
-Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/arch-os.conf`
+Edit settings with the built-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/settings.conf`
 
 ```
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
@@ -77,6 +90,8 @@ PACDIFF_SHOW_INFO=true            # Enable pacdiff info (disable: false)
 FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
 PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
+
+**Note:** The built-in kitty is configured here: `~/.arch-os/config/kitty.conf`
 
 ## Integrate GNOME Extension
 
