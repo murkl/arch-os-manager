@@ -89,6 +89,8 @@ FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
 PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
 
+**Note:** The build-in kitty is configured here: `~/.arch-os/config/kitty.conf`
+
 ## Integrate GNOME Extension
 
 1. Install GNOME Extension: **[archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
