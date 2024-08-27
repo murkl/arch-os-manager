@@ -39,8 +39,8 @@ Run Arch OS Manager: `arch-os`
 - Remove orphaned packages
 - Reset Pacman keyring
 - Show system & service logs
-- Build-in settings editor
-- Build-in kitty support
+- Built-in settings editor
+- Built-in kitty support
 
 Install these **optional** dependencies to equip Arch OS Manager with more features:
 
@@ -71,7 +71,7 @@ arch-os [--kitty | -k] system     # System info (system & services logging)
 
 ## Settings
 
-Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/settings.conf`
+Edit settings with the built-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/settings.conf`
 
 ```
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
@@ -91,7 +91,7 @@ FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
 PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
 
-**Note:** The build-in kitty is configured here: `~/.arch-os/config/kitty.conf`
+**Note:** The built-in kitty is configured here: `~/.arch-os/config/kitty.conf`
 
 ## Integrate GNOME Extension
 
