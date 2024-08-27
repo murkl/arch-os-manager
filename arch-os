@@ -18,34 +18,12 @@ PACKAGES_DB="${ARCH_OS_HOME}/database/packages.db"
 NEWS_DB="${ARCH_OS_HOME}/database/news.db"
 
 # COLORS
-# https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
+# Color chart: https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
+COLOR_PURPLE=212
 COLOR_WHITE=7
 COLOR_GREEN=2
-COLOR_PURPLE=212
 COLOR_YELLOW=3
 COLOR_RED=1
-
-# ///////////////////////////////////////////////////////////////////
-# TRAPS
-# ///////////////////////////////////////////////////////////////////
-
-# RETURN CODES
-#   0 : success (default)
-#   1 : fatal   (uncatched)
-#   2 : error   (catched)
-#   3 : exit    (user)
-# 130 : exit    (user)
-
-trap_exit() {
-    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    [ "$1" != "3" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Quit' --negative '' ''
-    clear && return "$1"
-}
-
-trap_error() {
-    [ "$1" != "2" ] && [ "$1" != "3" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
-    return "$1"
-}
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN
@@ -169,14 +147,43 @@ main() {
 }
 
 # ///////////////////////////////////////////////////////////////////
+# TRAPS
+# ///////////////////////////////////////////////////////////////////
+
+# RETURN CODES
+#   0 : success (default)
+#   1 : fatal   (uncatched)
+#   2 : error   (catched)
+#   3 : exit    (user)
+# 130 : exit    (user)
+
+trap_exit() {
+    rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
+    [ "$1" != "3" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Quit' --negative '' ''
+    clear && return "$1"
+}
+
+trap_error() {
+    [ "$1" != "2" ] && [ "$1" != "3" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    return "$1"
+}
+
+# ///////////////////////////////////////////////////////////////////
 # PROPERTIES
 # ///////////////////////////////////////////////////////////////////
 
 init_properties() {
 
-    # Init properties
+    # Create home dirs
     mkdir -p "${ARCH_OS_HOME}/config"
     mkdir -p "${ARCH_OS_HOME}/database"
+
+    # Migrate from < 1.5.5
+    [ -f "${HOME}/.arch-os/arch-os.conf" ] && mv -f "${HOME}/.arch-os/arch-os.conf" "${ARCH_OS_HOME}/settings.conf"
+    [ -f "${HOME}/.arch-os/kitty.conf" ] && mv -f "${HOME}/.arch-os/kitty.conf" "${ARCH_OS_HOME}/config/kitty.conf"
+    [ -f "${HOME}/.arch-os/packages.db" ] && mv -f "${HOME}/.arch-os/packages.db" "${ARCH_OS_HOME}/database/packages.db"
+    [ -f "${HOME}/.arch-os/news.db" ] && mv -f "${HOME}/.arch-os/news.db" "${ARCH_OS_HOME}/database/news.db"
+
     touch "$ARCH_OS_CONF"
     source "$ARCH_OS_CONF"
 
@@ -256,8 +263,8 @@ action_help() {
     gum_title 'App'
     gum_white 'arch-os [--kitty | -k]              Open main menu'
     gum_white 'arch-os [--kitty | -k] help         Open help page'
-    gum_white 'arch-os [--kitty | -k] settings     Edit properties'
-    echo && gum_title 'Actions'
+    gum_white 'arch-os [--kitty | -k] settings     Edit properties' && echo
+    gum_title 'Actions'
     gum_white 'arch-os [--kitty | -k] check        Print package updates like checkupdates (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
