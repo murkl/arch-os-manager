@@ -12,10 +12,10 @@ VERSION="1.5.5"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
-ARCH_OS_CONF="${ARCH_OS_HOME}/arch-os.conf"
-KITTY_CONF="${ARCH_OS_HOME}/kitty.conf"
-PACKAGES_DB="${ARCH_OS_HOME}/packages.db"
-NEWS_DB="${ARCH_OS_HOME}/news.db"
+ARCH_OS_CONF="${ARCH_OS_HOME}/settings.conf"
+KITTY_CONF="${ARCH_OS_HOME}/config/kitty.conf"
+PACKAGES_DB="${ARCH_OS_HOME}/database/packages.db"
+NEWS_DB="${ARCH_OS_HOME}/database/news.db"
 
 # COLORS
 # https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -175,7 +175,8 @@ main() {
 init_properties() {
 
     # Init properties
-    mkdir -p "$ARCH_OS_HOME"
+    mkdir -p "${ARCH_OS_HOME}/config"
+    mkdir -p "${ARCH_OS_HOME}/database"
     touch "$ARCH_OS_CONF"
     source "$ARCH_OS_CONF"
 
