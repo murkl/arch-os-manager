@@ -58,7 +58,7 @@ arch-os [--kitty | -k] system     # System info (system & services logging)
 
 ## Settings
 
-Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/arch-os.conf`
+Edit settings with the build-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/settings.conf`
 
 ```
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
