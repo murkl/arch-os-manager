@@ -8,7 +8,7 @@ set -Eeo pipefail # Set script error handling
 # ///////////////////////////////////////////////////////////////////
 
 # VERSION
-VERSION="1.5.5"
+VERSION="1.5.6"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -664,9 +664,9 @@ print_pacdiff_info() {
 print_orphans_info() {
     if [ "$ORPHANS_SHOW_INFO" = "true" ]; then
         local orphans_packages orphans_count
-        orphans_packages="$(pkg_manager -Qtdq &>/dev/null && pkg_manager -Qtdq)"
+        orphans_packages="$(package_manager -Qtdq &>/dev/null && package_manager -Qtdq)"
         orphans_count="$(echo "$orphans_packages" | wc -w)"
-        [ "$orphans_count" -gt 0 ] && echo && gum_warn "Orphaned Packages found!" && echo
+        [ "$orphans_count" -gt "0" ] && echo && gum_warn "Orphaned Packages found!" && echo
     fi
     return 0
 }
