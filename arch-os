@@ -323,19 +323,16 @@ show_system_info() {
 show_system_check() {
     if [ "$ARCH_SHOW_SYSTEM_CHECK" = "true" ]; then
         gum_title "System Check"
-
         # Check pacdiff
         local pacdiff_info pacdiff_count
         pacdiff_info="$(pacdiff -o)"
         [ -n "$pacdiff_info" ] && pacdiff_count="$(echo "$pacdiff_info" | wc -l)"
         [ -z "$pacdiff_info" ] && pacdiff_count="0"
-
         if [ "$pacdiff_count" -gt "0" ]; then
             gum_warn "Pending Merges     →  ${pacdiff_count}"
         else
             gum_info "Pending Merges     →  ${pacdiff_count}"
         fi
-
         # Check orphans
         local orphans_packages orphans_count
         orphans_packages="$(package_manager -Qtdq &>/dev/null && package_manager -Qtdq)"
@@ -345,7 +342,6 @@ show_system_check() {
         else
             gum_info "Orphaned Packages  →  ${orphans_count}"
         fi
-
         # Unknown pkgs
         local unknown_pkgs=()
         pacman -Qm | while read -r pkg; do ! grep -q "^$pkg$" "$PACKAGES_DB" && unknown_pkgs+=("$pkg"); done
@@ -354,7 +350,6 @@ show_system_check() {
         else
             gum_warn "Unknown Packages   →  ${#unknown_pkgs[*]} (${unknown_pkgs[*]})"
         fi
-
         echo # Print new line
     fi
 }
