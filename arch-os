@@ -67,7 +67,11 @@ main() {
 
     # If 'version' action (does not work in kitty)
     if [ "$1" = "version" ]; then
-        echo "${VERSION}"
+        print_header
+        gum_title "Gum" && gum --version && echo
+        gum_title "Kitty" && kitty --version && echo
+        [ "$AUR_SUPPORT" = "true" ] && gum_title "Paru" && paru --version && echo
+        gum_title "Pacman" && pacman --version
         exit 0
     fi
 
