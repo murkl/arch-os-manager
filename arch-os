@@ -7,6 +7,11 @@ set -Eeo pipefail # Set script error handling
 #                - Arch Linux Helper Script TUI -
 # ///////////////////////////////////////////////////////////////////
 
+# SOURCE:   https://github.com/murkl/arch-os-manager
+# AUTOR:    murkl
+# ORIGIN:   Germany
+# LICENCE:  GPL 2.0
+
 # VERSION
 VERSION="1.5.7"
 
