@@ -17,15 +17,37 @@
 
 ## Install from AUR
 
-**[➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
+**[ ➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
 
-Run Arch OS Manager: `arch-os`
+- Run Arch OS Manager:
+
+```
+arch-os
+```
+
+- **Note:** Add parameter `-k` to start with built-in kitty
 
 ## Install from GitHub
 
-1. Install Dependencies: `sudo pacman -S kitty gum libnotify pacman-contrib`
-1. Clone GitHub Repo: `git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager`
-1. Run Arch OS Manager: `./arch-os`
+- Install Dependencies:
+
+```
+sudo pacman -S kitty gum libnotify pacman-contrib
+```
+
+- Clone GitHub Repo:
+
+```
+git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
+```
+
+- Run Arch OS Manager:
+
+```
+./arch-os
+```
+
+- **Note:** Add parameter `-k` to start with built-in kitty
 
 ## Features
 
@@ -99,20 +121,20 @@ PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 
 ## Integrate GNOME Extension
 
-1. Install GNOME Extension: **[archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
-2. Set `Check command`:
+- Install GNOME Extension: **[archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
+- Set `Check command`:
 
 ```
 dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
 ```
 
-3. Set `Update command`:
+- Set `Update command`:
 
 ```
 dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
 ```
 
-4. Set `Package Manager` (optional):
+- Set `Package Manager` (optional):
 
 ```
 dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
