@@ -15,7 +15,7 @@
 set -Eeo pipefail
 
 # SCRIPT VERSION
-VERSION="1.5.7"
+VERSION="1.5.8"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -449,15 +449,20 @@ action_system_info() { # System Info
     show_system_check || return $?
     gum_title "Options"
     local options user_input logs
-    options=("Open Logs" "Done")
+    options=("Open System Log" "Open Pacman Log" "Done")
     user_input=$(gum_choose --height=6 --selected="$user_input" "${options[@]}") || exit 130
     case "$user_input" in # Set user action to selected action
-    'Open Logs')
+    'Open System Log')
         print_header && gum_title "System Error Logs"
         logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf "$ARCH_OS_BLACKLIST")
         gum_red "$logs"
         echo && gum_title "Service Error Logs"
         systemctl --failed
+        ;;
+    'Open Pacman Log')
+        print_header && gum_title "Pacman Logs"
+        gum pager --soft-wrap --show-line-numbers "$(tail -n 999 /var/log/pacman.log)"
+        gum_mesg "Done"
         ;;
     'Done') gum_mesg "Done" && return 0 ;;
     *) gum_fail "Settings '${user_input}' not available" && exit 2 ;;
