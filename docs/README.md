@@ -53,20 +53,20 @@ Install these **optional** dependencies to equip Arch OS Manager with more featu
 ## Usage
 
 ```
-arch-os [--kitty | -k]            # Open main menu
-arch-os [--kitty | -k] help       # Open help page
-arch-os [--kitty | -k] settings   # Edit properties
-arch-os [--kitty | -k] check      # Print package updates like checkupdates (pacman, aur, flatpak)
-arch-os [--kitty | -k] notify     # Notify on new package updates (pacman, aur, flatpak)
-arch-os [--kitty | -k] search     # Search & manage package (pacman, aur)
-arch-os [--kitty | -k] fetch      # Fetch package updates (news, pacdiff, pacman, aur, flatpak)
-arch-os [--kitty | -k] upgrade    # System upgrade (news, pacdiff, pacman, aur, flatpak)
-arch-os [--kitty | -k] orphans    # Remove orphaned packages (pacman, aur, flatpak)
-arch-os [--kitty | -k] merge      # Merge updated configurations (using pacdiff and meld)
-arch-os [--kitty | -k] refresh    # Refresh pacman mirrorlist (using preconfigured reflector)
-arch-os [--kitty | -k] downgrade  # Downgrade packages (pacman only)
-arch-os [--kitty | -k] reset      # Reset pacman (refresh pacman keyring)
-arch-os [--kitty | -k] system     # System info (system & services logging)
+arch-os [--kitty | -k]              Open main menu
+arch-os [--kitty | -k] check        Print package updates like checkupdates
+arch-os [--kitty | -k] notify       Notify on new package updates
+arch-os [--kitty | -k] settings     Edit settings
+arch-os [--kitty | -k] version      Print Arch OS Manager version
+arch-os [--kitty | -k] help         Open help page
+arch-os [--kitty | -k] info         Show system info (system / package info & logs)
+arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
+arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)
+arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
+arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)
+arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)
+arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)
+arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)
 ```
 
 ## Settings
@@ -80,13 +80,13 @@ AUR_SUPPORT=true                  # Enable AUR support (disable: false)
 AUR_REVIEW=false                  # Disable AUR review (enable: true)
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
+ARCH_SHOW_SYSTEM_CHECK=true       # Show Arch OS system check (disable: false)
+ARCH_SHOW_SYSTEM_INFO=true        # Show system packages info (disable: false)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
 FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: true)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
 NEWS_SHOW_URL=true                # Show 'More Information' below the news (disable: false)
 ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true)
-ORPHANS_SHOW_INFO=true            # Enable orphans info (disable: false)
-PACDIFF_SHOW_INFO=true            # Enable pacdiff info (disable: false)
 FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
 PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
