@@ -71,7 +71,7 @@ arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)
 
 ## Settings
 
-Edit settings with the built-in editor in Arch OS Manager or edit the config file manually: `~/.arch-os/settings.conf`
+Edit the settings with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
@@ -91,7 +91,11 @@ FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
 PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
 ```
 
-**Note:** The built-in kitty is configured here: `~/.arch-os/config/kitty.conf`
+### Configurations
+
+- Arch OS Manager config: `~/.arch-os/config/settings.conf`
+- Built-in kitty config: `~/.arch-os/config/kitty.conf`
+- System logs blacklist: `~/.arch-os/config/blacklist.conf`
 
 ## Integrate GNOME Extension
 
