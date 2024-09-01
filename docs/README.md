@@ -56,11 +56,11 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Show latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search and manage packages
-- Fetch package and system infos
+- Show system info, packages & logs
 - Upgrade system packages
 - Remove orphaned packages
 - Reset Pacman keyring
-- Show system & service logs
+- Built-in log blacklist filter
 - Built-in settings editor
 - Built-in kitty support
 
