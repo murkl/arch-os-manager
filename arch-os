@@ -66,12 +66,21 @@ main() {
     fi
 
     # If 'version' action (does not work in kitty)
+    if [ "$1" = "help" ]; then
+        print_header
+        action_help
+        gum_confirm --affirmative "Quit" --negative '' ''
+        exit 0
+    fi
+
+    # If 'version' action (does not work in kitty)
     if [ "$1" = "version" ]; then
         print_header
         gum_title "Gum" && gum --version && echo
         gum_title "Kitty" && kitty --version && echo
         [ "$AUR_SUPPORT" = "true" ] && gum_title "Paru" && paru --version && echo
         gum_title "Pacman" && pacman --version
+        gum_confirm --affirmative "Quit" --negative '' ''
         exit 0
     fi
 
