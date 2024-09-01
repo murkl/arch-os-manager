@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
-set -Eeo pipefail # Set script error handling
 
 # ///////////////////////////////////////////////////////////////////
 #                         ARCH OS MANAGER
@@ -12,7 +11,10 @@ set -Eeo pipefail # Set script error handling
 # ORIGIN:   Germany
 # LICENCE:  GPL 2.0
 
-# VERSION
+# SCRIPT CONFIG
+set -Eeo pipefail
+
+# SCRIPT VERSION
 VERSION="1.5.7"
 
 # HOME
