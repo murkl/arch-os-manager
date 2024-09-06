@@ -234,7 +234,6 @@ init_properties() {
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
     [ -z "$ARCH_DOWNLOAD_TIMEOUT" ] && ARCH_DOWNLOAD_TIMEOUT="false"
     [ -z "$ARCH_SHOW_SYSTEM_INFO" ] && ARCH_SHOW_SYSTEM_INFO="true"
-    [ -z "$ARCH_SHOW_SYSTEM_CHECK" ] && ARCH_SHOW_SYSTEM_CHECK="true"
     [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
@@ -278,7 +277,6 @@ init_properties() {
         echo "AUR_REVIEW=${AUR_REVIEW}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
         echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
-        echo "ARCH_SHOW_SYSTEM_CHECK=${ARCH_SHOW_SYSTEM_CHECK}"
         echo "ARCH_SHOW_SYSTEM_INFO=${ARCH_SHOW_SYSTEM_INFO}"
         echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
         echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
@@ -303,9 +301,9 @@ show_news_info() {
         print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
         print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            gum_mesg "$(print_news_date "$i") | $(print_news_title "$i")"
+            gum_white "   $(print_news_date "$i") | $(print_news_title "$i")"
         done
-        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_mesg "More Information: https://archlinux.org/news"
+        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_mesg "   More Information: https://archlinux.org/news"
         echo # Print new line
     fi
     return 0
@@ -315,20 +313,15 @@ show_news_info() {
 
 show_system_info() {
     if [ "$ARCH_SHOW_SYSTEM_INFO" = "true" ]; then
-        gum_title "System Info"
+
+        gum_title "System Information"
+
+        # Package info
         gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
         [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$(paru -Qm | wc -l)"
         # flatpak list --columns=application | tail -n +1 | wc -l
         [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
-        echo # Print new line
-    fi
-}
 
-# -------------------------------------------------------------------
-
-show_system_check() {
-    if [ "$ARCH_SHOW_SYSTEM_CHECK" = "true" ]; then
-        gum_title "System Check"
         # Check pending updates
         local pending_updates=0
         [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
@@ -348,6 +341,7 @@ show_system_check() {
         else
             gum_key_value_green "Pending Merges" "${pacdiff_count}"
         fi
+
         # Check orphans
         local orphans_packages orphans_count
         orphans_packages="$(package_manager -Qtdq &>/dev/null && package_manager -Qtdq)"
@@ -357,6 +351,7 @@ show_system_check() {
         else
             gum_key_value_green "Orphaned Packages" "${orphans_count}"
         fi
+
         # Unknown pkgs
         local unknown_pkgs=()
         pacman -Qm | while read -r pkg; do ! grep -q "^$pkg$" "$PACKAGES_DB" && unknown_pkgs+=("$pkg"); done
@@ -365,6 +360,7 @@ show_system_check() {
         else
             gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
         fi
+
         echo # Print new line
     fi
 }
@@ -373,8 +369,10 @@ show_system_check() {
 
 show_upgrade_info() {
     gum_title "Package Updates"
+
     # Preload and force return 0. Cancel if user press ctrl + c
     ! gum_spin --title 'Checking Package Informations...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 2
+
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
         gum_info "Your system is up to date"
@@ -382,31 +380,18 @@ show_upgrade_info() {
         return 0
     fi
 
-    format_header() {
-        gum join --align left \
-            "$(gum_white --bold --width 15 --align left " $1")" \
-            "$(gum_white --bold --width 40 --align left " $2")" \
-            "$(gum_white --bold --width 15 --align left " $3")" \
-            "$(gum_white --bold --width 15 --align left " $4")"
-    }
-
     format_row() {
         gum join --align left \
-            "$(gum_white --width 15 --align left " $1")" \
-            "$(gum_white --bold --width 40 --align left " $2")" \
-            "$(gum_white --width 15 --align left " $3")" \
-            "$(gum_green --bold --width 15 --align left " $4")"
+            "$(gum_white --width 45 --align left --bold "   $1")" \
+            "$(gum_white --width 15 --align left "$2")" \
+            "$(gum_white --width 15 --align left "$3")" \
+            "$(gum_white --width 10 --align left --bold " → ")" \
+            "$(gum_green --width 15 --align left --bold "$4")"
     }
-
-    # Tabellenkopf erstellen und ausgeben
-    echo && format_header "Manager" "Package" "Version" "Update"
-
-    # Print seperator
-    echo -n ' ' && printf '%.0s-' {1..85} && echo
 
     # checkupdates ausführen und Ergebnisse verarbeiten
     while IFS=',' read -r manager package version update; do
-        format_row "$manager" "$package" "$version" "$update"
+        format_row "$package" "$manager" "$version" "$update"
     done <"$UPDATES_DB"
     echo
 }
@@ -484,7 +469,6 @@ action_system_info() { # System Info
     show_news_info || return $?
     show_upgrade_info || return $?
     show_system_info || return $?
-    show_system_check || return $?
     gum_title "Options"
     local options user_input logs
     options=("Show System Log" "Show Pacman Log" "Done")
@@ -586,7 +570,6 @@ action_upgrade() { # Update packages
     gum_info "System Upgrade finished"
     echo # Print new line
     show_system_info || return $?
-    show_system_check || return $?
     return 0
 }
 
