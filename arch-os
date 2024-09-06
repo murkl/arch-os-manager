@@ -368,10 +368,10 @@ show_system_info() {
 # -------------------------------------------------------------------
 
 show_upgrade_info() {
-    gum_title "Package Updates"
+    gum_title "Package Information"
 
     # Preload and force return 0. Cancel if user press ctrl + c
-    ! gum_spin --title 'Checking Package Informations...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 2
+    ! gum_spin --title 'Checking Package Updates...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 2
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
