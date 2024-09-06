@@ -76,11 +76,11 @@ Install these **optional** dependencies to equip Arch OS Manager with more featu
 
 ```
 arch-os [--kitty | -k]              Open main menu
+arch-os [--kitty | -k] help         Open help page
+arch-os [--kitty | -k] version      Print Arch OS Manager version
+arch-os [--kitty | -k] settings     Edit settings
 arch-os [--kitty | -k] check        Print package updates like checkupdates
 arch-os [--kitty | -k] notify       Notify on new package updates
-arch-os [--kitty | -k] settings     Edit settings
-arch-os [--kitty | -k] version      Print Arch OS Manager version
-arch-os [--kitty | -k] help         Open help page
 arch-os [--kitty | -k] info         Show system info (system / package info & logs)
 arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
 arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)

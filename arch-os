@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
+set -Eeo pipefail
 
 # ///////////////////////////////////////////////////////////////////
 #                         ARCH OS MANAGER
@@ -10,9 +11,6 @@
 # AUTOR:    murkl
 # ORIGIN:   Germany
 # LICENCE:  GPL 2.0
-
-# SCRIPT CONFIG
-set -Eeo pipefail
 
 # SCRIPT VERSION
 VERSION="1.5.8"
@@ -28,6 +26,7 @@ ARCH_OS_KITTY_CONF="${ARCH_OS_HOME}/config/kitty.conf"
 # DATABASE
 PACKAGES_DB="${ARCH_OS_HOME}/database/packages.db"
 NEWS_DB="${ARCH_OS_HOME}/database/news.db"
+UPDATES_DB="${ARCH_OS_HOME}/database/updates.db"
 
 # COLORS
 # Color chart: https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -304,7 +303,7 @@ show_news_info() {
         print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
         print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            gum_mesg "$(print_news_date "$i") │ $(print_news_title "$i")"
+            gum_mesg "$(print_news_date "$i") | $(print_news_title "$i")"
         done
         [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_mesg "More Information: https://archlinux.org/news"
         echo # Print new line
@@ -317,10 +316,10 @@ show_news_info() {
 show_system_info() {
     if [ "$ARCH_SHOW_SYSTEM_INFO" = "true" ]; then
         gum_title "System Info"
-        gum_mesg "Arch Packages      →  $(pacman -Qn | wc -l)"
-        [ "$AUR_SUPPORT" = "true" ] && gum_mesg "AUR Packages       →  $(paru -Qm | wc -l)"
+        gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
+        [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$(paru -Qm | wc -l)"
         # flatpak list --columns=application | tail -n +1 | wc -l
-        [ "$FLATPAK_SUPPORT" = "true" ] && gum_mesg "Flatpak Packages   →  $(flatpak list --app | wc -l)"
+        [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
         echo # Print new line
     fi
 }
@@ -330,32 +329,41 @@ show_system_info() {
 show_system_check() {
     if [ "$ARCH_SHOW_SYSTEM_CHECK" = "true" ]; then
         gum_title "System Check"
+        # Check pending updates
+        local pending_updates=0
+        [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
+        if [ "$pending_updates" -gt "0" ]; then
+            gum_key_value_yellow "Pending Updates" "${pending_updates}"
+        else
+            gum_key_value_green "Pending Updates" "${pending_updates}"
+        fi
+
         # Check pacdiff
         local pacdiff_info pacdiff_count
         pacdiff_info="$(pacdiff -o)"
         [ -n "$pacdiff_info" ] && pacdiff_count="$(echo "$pacdiff_info" | wc -l)"
         [ -z "$pacdiff_info" ] && pacdiff_count="0"
         if [ "$pacdiff_count" -gt "0" ]; then
-            gum_warn "Pending Merges     →  ${pacdiff_count}"
+            gum_key_value_red "Pending Merges" "${pacdiff_count}"
         else
-            gum_info "Pending Merges     →  ${pacdiff_count}"
+            gum_key_value_green "Pending Merges" "${pacdiff_count}"
         fi
         # Check orphans
         local orphans_packages orphans_count
         orphans_packages="$(package_manager -Qtdq &>/dev/null && package_manager -Qtdq)"
         orphans_count="$(echo "$orphans_packages" | wc -w)"
         if [ "$orphans_count" -gt "0" ]; then
-            gum_warn "Orphaned Packages  →  ${orphans_count}"
+            gum_key_value_yellow "Orphaned Packages" "${orphans_count}"
         else
-            gum_info "Orphaned Packages  →  ${orphans_count}"
+            gum_key_value_green "Orphaned Packages" "${orphans_count}"
         fi
         # Unknown pkgs
         local unknown_pkgs=()
         pacman -Qm | while read -r pkg; do ! grep -q "^$pkg$" "$PACKAGES_DB" && unknown_pkgs+=("$pkg"); done
-        if [ -z "${unknown_pkgs[*]}" ]; then
-            gum_info "Unknown Packages   →  ${#unknown_pkgs[*]}"
+        if [ -n "${unknown_pkgs[*]}" ]; then
+            gum_key_value_yellow "Unknown Packages" "${#unknown_pkgs[*]} (${unknown_pkgs[*]})"
         else
-            gum_warn "Unknown Packages   →  ${#unknown_pkgs[*]} (${unknown_pkgs[*]})"
+            gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
         fi
         echo # Print new line
     fi
@@ -364,13 +372,43 @@ show_system_check() {
 # -------------------------------------------------------------------
 
 show_upgrade_info() {
-    gum_title "Upgrade Info"
+    gum_title "Package Updates"
     # Preload and force return 0. Cancel if user press ctrl + c
-    ! gum_spin --title 'Checking Package Informations...' -- bash -c "${SELF} check; exit 0" && gum_fail "Failed" && return 2
-    if ! action_check_updates_available; then
+    ! gum_spin --title 'Checking Package Informations...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 2
+    # Check if updates available
+    if ! [ -s "$UPDATES_DB" ]; then
         gum_info "Your system is up to date"
+        echo # Print new line
+        return 0
     fi
-    echo # Print new line
+
+    format_header() {
+        gum join --align left \
+            "$(gum_white --bold --width 15 --align left " $1")" \
+            "$(gum_white --bold --width 40 --align left " $2")" \
+            "$(gum_white --bold --width 15 --align left " $3")" \
+            "$(gum_white --bold --width 15 --align left " $4")"
+    }
+
+    format_row() {
+        gum join --align left \
+            "$(gum_white --width 15 --align left " $1")" \
+            "$(gum_white --bold --width 40 --align left " $2")" \
+            "$(gum_white --width 15 --align left " $3")" \
+            "$(gum_green --bold --width 15 --align left " $4")"
+    }
+
+    # Tabellenkopf erstellen und ausgeben
+    echo && format_header "Manager" "Package" "Version" "Update"
+
+    # Print seperator
+    echo -n ' ' && printf '%.0s-' {1..85} && echo
+
+    # checkupdates ausführen und Ergebnisse verarbeiten
+    while IFS=',' read -r manager package version update; do
+        format_row "$manager" "$package" "$version" "$update"
+    done <"$UPDATES_DB"
+    echo
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -403,7 +441,7 @@ action_settings() { # Settings
     gum_title "Settings"
     local options user_input
     options=("Edit Properties" "Edit Blacklist" "Done")
-    user_input=$(gum_choose --height=7 --selected="$user_input" "${options[@]}") || return 3
+    user_input=$(gum_choose --height=7 "${options[@]}") || return 3
     case "$user_input" in # Set user action to selected action
     'Edit Properties')
         print_header && gum_title "Edit Properties"
@@ -435,7 +473,7 @@ action_settings() { # Settings
             gum_warn "Canceled" && return 2
         fi
         ;;
-    'Done') gum_mesg "Done" && return 0 ;;
+    'Done') return 3 ;;
     *) gum_fail "Settings '${user_input}' not available" && exit 2 ;;
     esac
 }
@@ -444,24 +482,24 @@ action_settings() { # Settings
 
 action_system_info() { # System Info
     show_news_info || return $?
-    show_system_info || return $?
     show_upgrade_info || return $?
+    show_system_info || return $?
     show_system_check || return $?
     gum_title "Options"
     local options user_input logs
-    options=("Open System Log" "Open Pacman Log" "Done")
-    user_input=$(gum_choose --height=6 --selected="$user_input" "${options[@]}") || exit 130
+    options=("Show System Log" "Show Pacman Log" "Done")
+    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || exit 130
     case "$user_input" in # Set user action to selected action
-    'Open System Log')
+    'Show System Log')
         print_header && gum_title "System Error Logs"
         logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf "$ARCH_OS_BLACKLIST")
         gum_red "$logs"
         echo && gum_title "Service Error Logs"
         systemctl --failed
         ;;
-    'Open Pacman Log')
+    'Show Pacman Log')
         print_header && gum_title "Pacman Logs"
-        gum pager --soft-wrap --show-line-numbers "$(tail -n 999 /var/log/pacman.log)"
+        gum pager --soft-wrap --show-line-numbers "$(tail -n 999 /var/log/pacman.log | tac)"
         gum_mesg "Done"
         ;;
     'Done') gum_mesg "Done" && return 0 ;;
@@ -473,18 +511,48 @@ action_system_info() { # System Info
 # -------------------------------------------------------------------
 
 action_check_updates_available() { # Check & print package updates
-    local update_available="false"
-    checkupdates && update_available="true"
-    [ "$AUR_SUPPORT" = 'true' ] && package_manager -Qua && update_available="true"
-    if [ "$FLATPAK_SUPPORT" = "true" ]; then
-        # Fetch flatpak updates
-        local flatpak_updates && flatpak_updates=$(LANG=en_US.UTF-8 flatpak remote-ls --updates --columns=application,installed-size,download-size,version,branch)
-        # If result is not null set update available
-        [ -n "$flatpak_updates" ] && update_available="true"
-        # Format output and use tput if text decoration is not supported (b=big, g=green, r=reset) (regarding to checkupdates format)
-        [ -n "$flatpak_updates" ] && echo "$flatpak_updates" | awk -v b="$(tput bold 2>/dev/null)" -v g="$(tput setaf 2 2>/dev/null)" -v r="$(tput sgr0 2>/dev/null)" '{printf "%s%s%s %s%s%s%s -> %s%s%s%s\n", b, $1, r, b, g, $4, r, b, g, ($5 == "" ? "latest" : $5), r}'
+
+    # Remove database file
+    rm -f "$UPDATES_DB"
+
+    # Pacman updates
+    while IFS= read -r line; do
+        echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "pacman," $1 "," $2 "," $4}' >>"$UPDATES_DB"
+    done < <(checkupdates)
+
+    # AUR updates
+    if [ "$AUR_SUPPORT" = 'true' ]; then
+        while read -r line; do
+            echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "aur," $1 "," $2 "," $4}' >>"$UPDATES_DB"
+        done < <(paru -Qua)
     fi
-    [ "$update_available" = "false" ] && return 1
+
+    # Flatpak updates
+    if [ "$FLATPAK_SUPPORT" = "true" ]; then
+        while read -r line; do
+            echo "$line" | awk '{print "flatpak," $1 "," $2 "," ($3 == "" ? "latest" : $3)}' >>"$UPDATES_DB"
+        done < <(flatpak remote-ls --updates --columns=application,version,branch | tail -n +1)
+    fi
+
+    # Check if updates available
+    [ ! -s "$UPDATES_DB" ] && return 1
+
+    # Print updates in checkupdates format
+    # g = green
+    # b = bold
+    # r = reset
+    #shellcheck disable=SC2034
+    while IFS=',' read -r manager package_name current_version new_version; do
+        echo "${package_name} ${current_version} ${new_version}" |
+            awk -v r="$(tput sgr0 2>/dev/null)" \
+                -v b="$(tput bold 2>/dev/null)" \
+                -v g="$(tput setaf 2 2>/dev/null)" \
+                '{ printf "%s%s%s %s%s%s%s -> %s%s%s%s\n", 
+                    b, $1, r,     # Package
+                    b, g, $2, r,  # Current version
+                    b, g, $3, r   # New version
+                 }'
+    done <"$UPDATES_DB"
     return 0
 }
 
@@ -583,7 +651,7 @@ action_search() { # Manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        user_input=$(gum_choose --height=8 "${options[@]}") || return 3
+        user_input=$(gum_choose --selected="Done" --height=8 "${options[@]}") || return 3
         case "$user_input" in # Set user action to selected action
         'Install')
             gum_info "Install Package: ${pkg_name}"
@@ -758,7 +826,9 @@ print_header() {
 }
 
 print_filled_space() {
-    local total=24 && local input_string="$1" && local length="${#input_string}"
+    local total=24
+    [ -n "$2" ] && total="$1" && shift # Check if total spaces is set
+    local input_string="$1" && local length="${#input_string}"
     if [ "$length" -ge "$total" ]; then
         echo "$input_string"
     else
@@ -816,6 +886,11 @@ gum_write() { gum write --width="$PACKAGE_INFO_WIDTH" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
+
+# Key & value
+gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" "  • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
+gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" "  • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" "  • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS
