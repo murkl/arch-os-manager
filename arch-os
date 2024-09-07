@@ -67,15 +67,16 @@ main() {
     # Check number of arguments
     if [ $# -gt 1 ]; then
         print_header && action_help && echo && gum_fail "Max. 1 argument supported"
-        gum_confirm --affirmative "Quit" --negative '' ''
+        echo && gum_continue
         clear && exit 2
     fi
 
-    # If 'version' action (does not work in kitty)
+    # If 'help' action (does not work in kitty)
     if [ "$1" = "help" ]; then
         print_header
         action_help
-        gum_confirm --affirmative "Quit" --negative '' ''
+        #echo && gum_continue
+        echo && gum_continue
         exit 0
     fi
 
@@ -89,7 +90,7 @@ main() {
         [ "$AUR_SUPPORT" = "true" ] && gum_title "Paru" && paru --version && echo
         gum_title "Checkupdates" && checkupdates --version && echo
         pacman --version # Pacman
-        gum_confirm --affirmative "Quit" --negative '' ''
+        echo && gum_continue
         exit 0
     fi
 
@@ -173,8 +174,8 @@ main() {
         first_run="false" # Set first run
         [ "$skip_confirm" = "true" ] && [ -n "$user_action" ] && exit 3
         [ "$skip_confirm" = "true" ] && continue
-        [ -n "$user_action" ] && ! gum_confirm --affirmative "Menu" --negative 'Quit' '' && exit 3
-        [ -z "$user_action" ] && ! gum_confirm --affirmative "< Menu" --negative 'Quit' '' && exit 3
+        echo && gum_continue
+        [ -n "$user_action" ] && exit 3
         unset user_action
     done
 }
@@ -192,7 +193,7 @@ main() {
 
 trap_exit() {
     rm -f "${ARCH_OS_HOME}/.mirrorlist.tmp"
-    [ "$1" != "3" ] && [ "$1" != "130" ] && gum_confirm --affirmative 'Quit' --negative '' ''
+    [ "$1" != "3" ] && [ "$1" != "130" ] && echo && gum_continue
     clear && return "$1"
 }
 
@@ -301,12 +302,43 @@ show_news_info() {
         print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
         print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            gum_white "   $(print_news_date "$i") | $(print_news_title "$i")"
+            gum_mesg "$(print_news_date "$i") | $(print_news_title "$i")"
         done
-        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_mesg "   More Information: https://archlinux.org/news"
+        [ "$NEWS_SHOW_URL" = "true" ] && echo && gum_mesg "More Information: https://archlinux.org/news"
         echo # Print new line
     fi
     return 0
+}
+
+# -------------------------------------------------------------------
+
+show_upgrade_info() {
+    gum_title "Package Information"
+
+    # Preload and force return 0. Cancel if user press ctrl + c
+    ! gum_spin --title 'Checking Package Updates...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 2
+
+    # Check if updates available
+    if ! [ -s "$UPDATES_DB" ]; then
+        gum_info "Your system is up to date"
+        echo # Print new line
+        return 0
+    fi
+
+    format_row() {
+        gum join --align left \
+            "$(gum_white --width 45 --align left --bold "   $1")" \
+            "$(gum_white --width 15 --align left "$2")" \
+            "$(gum_white --width 15 --align left "$3")" \
+            "$(gum_white --width 10 --align left --bold " → ")" \
+            "$(gum_green --width 15 --align left --bold "$4")"
+    }
+
+    # Print updates
+    while IFS=',' read -r manager package version update; do
+        format_row "$package" "$manager" "$version" "$update"
+    done <"$UPDATES_DB"
+    echo # Print new line
 }
 
 # -------------------------------------------------------------------
@@ -360,139 +392,12 @@ show_system_info() {
         else
             gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
         fi
-
-        echo # Print new line
     fi
-}
-
-# -------------------------------------------------------------------
-
-show_upgrade_info() {
-    gum_title "Package Information"
-
-    # Preload and force return 0. Cancel if user press ctrl + c
-    ! gum_spin --title 'Checking Package Updates...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 2
-
-    # Check if updates available
-    if ! [ -s "$UPDATES_DB" ]; then
-        gum_info "Your system is up to date"
-        echo # Print new line
-        return 0
-    fi
-
-    format_row() {
-        gum join --align left \
-            "$(gum_white --width 45 --align left --bold "   $1")" \
-            "$(gum_white --width 15 --align left "$2")" \
-            "$(gum_white --width 15 --align left "$3")" \
-            "$(gum_white --width 10 --align left --bold " → ")" \
-            "$(gum_green --width 15 --align left --bold "$4")"
-    }
-
-    # checkupdates ausführen und Ergebnisse verarbeiten
-    while IFS=',' read -r manager package version update; do
-        format_row "$package" "$manager" "$version" "$update"
-    done <"$UPDATES_DB"
-    echo
 }
 
 # ///////////////////////////////////////////////////////////////////
 # ACTION FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
-
-action_help() {
-    gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
-    gum_title 'App'
-    gum_white 'arch-os [--kitty | -k]              Open main menu'
-    gum_white 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
-    gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates'
-    gum_white 'arch-os [--kitty | -k] settings     Edit settings'
-    gum_white 'arch-os [--kitty | -k] version      Print Arch OS Manager version'
-    gum_white 'arch-os [--kitty | -k] help         Open help page' && echo
-    gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] info         Show system info (system / package info & logs)'
-    gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
-    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)'
-    gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
-    gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
-    gum_white 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
-    gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
-    gum_white 'arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)'
-}
-
-# -------------------------------------------------------------------
-
-action_settings() { # Settings
-    gum_title "Settings"
-    local options user_input
-    options=("Edit Properties" "Edit Blacklist" "Done")
-    user_input=$(gum_choose --height=7 "${options[@]}") || return 3
-    case "$user_input" in # Set user action to selected action
-    'Edit Properties')
-        print_header && gum_title "Edit Properties"
-        local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
-        # Open editor with count of properties + 2
-        # BUG: gum write does not accept height greater than 7
-        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-            # If success: save/move file and re-init properties
-            mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
-            ! sync_news_db && gum_fail "Synchronize News Database failed"
-            ! sync_package_db && gum_fail "Synchronize Package Database failed"
-            gum_info "Saved: ${ARCH_OS_CONF}" && return 0
-        else
-            rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
-            gum_warn "Canceled" && return 2
-        fi
-        ;;
-    'Edit Blacklist')
-        print_header && gum_title "Edit Blacklist"
-        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
-        # Open editor with count of properties + 2
-        # BUG: gum write does not accept height greater than 7
-        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
-            # If success: save/move file and re-init properties
-            mv "${ARCH_OS_BLACKLIST}.new" "${ARCH_OS_BLACKLIST}" && init_properties
-            gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
-        else
-            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
-            gum_warn "Canceled" && return 2
-        fi
-        ;;
-    'Done') return 3 ;;
-    *) gum_fail "Settings '${user_input}' not available" && exit 2 ;;
-    esac
-}
-
-# -------------------------------------------------------------------
-
-action_system_info() { # System Info
-    show_news_info || return $?
-    show_upgrade_info || return $?
-    show_system_info || return $?
-    gum_title "Options"
-    local options user_input logs
-    options=("Show System Log" "Show Pacman Log" "Done")
-    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || exit 130
-    case "$user_input" in # Set user action to selected action
-    'Show System Log')
-        print_header && gum_title "System Error Logs"
-        logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf "$ARCH_OS_BLACKLIST")
-        gum_red "$logs"
-        echo && gum_title "Service Error Logs"
-        systemctl --failed
-        ;;
-    'Show Pacman Log')
-        print_header && gum_title "Pacman Logs"
-        gum pager --soft-wrap --show-line-numbers "$(tail -n 999 /var/log/pacman.log | tac)"
-        gum_mesg "Done"
-        ;;
-    'Done') gum_mesg "Done" && return 0 ;;
-    *) gum_fail "Settings '${user_input}' not available" && exit 2 ;;
-    esac
-    return 0
-}
-
-# -------------------------------------------------------------------
 
 action_check_updates_available() { # Check & print package updates
 
@@ -542,9 +447,20 @@ action_check_updates_available() { # Check & print package updates
 
 # -------------------------------------------------------------------
 
+action_system_info() { # System Info
+    show_news_info || return $?
+    show_upgrade_info || return $?
+    show_system_info || return $?
+    return 0
+}
+
+# -------------------------------------------------------------------
+
 action_upgrade() { # Update packages
     show_news_info || return $?
-    ! gum_confirm "Start System Upgrade?" && return 3
+    show_upgrade_info || return $?
+    show_system_info || return $?
+    echo && ! gum_confirm "Start System Upgrade?" && return 3
     gum_title "Upgrade System Packages"
     # Prepare args
     local pkg_manager_args=()
@@ -660,11 +576,11 @@ action_search() { # Manage packages
             ;;
         'Done')
             gum_mesg "Done"
-            return 0
+            return 3
             ;;
         *) gum_fail "Action '${user_input}' not available" && exit 1 ;;
         esac
-        gum_confirm --affirmative "< Back" --negative '' '' || exit 3
+        echo && gum_continue
         print_header
     done
     return 0
@@ -794,6 +710,97 @@ action_reset() { # Keyring reset (if update failed, try to reset & reinit keyrin
     return 0
 }
 
+# -------------------------------------------------------------------
+
+action_system_logs() { # System Logs
+    # TODO
+    local options user_input logs
+    options=("Show System Log" "Show Pacman Log" "Done")
+    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || exit 130
+    case "$user_input" in
+    'Show System Log')
+        print_header && gum_title "System Error Logs"
+        logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf "$ARCH_OS_BLACKLIST")
+        gum_red "$logs"
+        echo && gum_title "Service Error Logs"
+        systemctl --failed
+        ;;
+    'Show Pacman Log')
+        print_header && gum_title "Pacman Logs"
+        gum pager --soft-wrap --show-line-numbers "$(tail -n 999 /var/log/pacman.log | tac)"
+        gum_mesg "Done"
+        ;;
+    'Done') gum_mesg "Done" && return 0 ;;
+    *) gum_fail "Option '${user_input}' not available" && exit 2 ;;
+    esac
+    return 0
+}
+
+# -------------------------------------------------------------------
+
+action_settings() { # Settings
+    gum_title "Settings"
+    local options user_input
+    options=("Edit Properties" "Edit Blacklist" "Done")
+    user_input=$(gum_choose --height=7 "${options[@]}") || return 3
+    case "$user_input" in # Set user action to selected action
+    'Edit Properties')
+        print_header && gum_title "Edit Properties"
+        local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
+        # Open editor with count of properties + 2
+        # BUG: gum write does not accept height greater than 7
+        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+            # If success: save/move file and re-init properties
+            mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
+            ! sync_news_db && gum_fail "Synchronize News Database failed"
+            ! sync_package_db && gum_fail "Synchronize Package Database failed"
+            gum_info "Saved: ${ARCH_OS_CONF}" && return 0
+        else
+            rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
+            gum_warn "Canceled" && return 2
+        fi
+        ;;
+    'Edit Blacklist')
+        print_header && gum_title "Edit Blacklist"
+        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
+        # Open editor with count of properties + 2
+        # BUG: gum write does not accept height greater than 7
+        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+            # If success: save/move file and re-init properties
+            mv "${ARCH_OS_BLACKLIST}.new" "${ARCH_OS_BLACKLIST}" && init_properties
+            gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
+        else
+            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
+            gum_warn "Canceled" && return 2
+        fi
+        ;;
+    'Done') return 3 ;;
+    *) gum_fail "Settings '${user_input}' not available" && exit 2 ;;
+    esac
+}
+
+# -------------------------------------------------------------------
+
+action_help() {
+    gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
+    gum_title 'App'
+    gum_white 'arch-os [--kitty | -k]              Open main menu'
+    gum_white 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
+    gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates'
+    gum_white 'arch-os [--kitty | -k] settings     Edit settings'
+    gum_white 'arch-os [--kitty | -k] version      Print Arch OS Manager version'
+    gum_white 'arch-os [--kitty | -k] help         Open help page' && echo
+    gum_title 'Actions'
+    gum_white 'arch-os [--kitty | -k] info         Show system info (system / package info & logs)'
+    gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
+    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
+    gum_white 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
+    gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
+    gum_white 'arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)'
+}
+
 # ///////////////////////////////////////////////////////////////////
 # PRINT FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
@@ -861,6 +868,7 @@ gum_warn() { gum_yellow --bold " • ${*}"; }
 gum_fail() { gum_red --bold " • ${*}"; }
 gum_mesg_bold() { gum_white --bold " • ${*}"; }
 gum_mesg() { gum_white " • ${*}"; }
+gum_content() { gum_white "   ${*}"; }
 
 # Wrapper
 gum_style() { gum style "${@}"; }
@@ -869,11 +877,12 @@ gum_write() { gum write --width="$PACKAGE_INFO_WIDTH" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
+gum_continue() { gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue ..." | cat >/dev/null; }
 
 # Key & value
-gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" "  • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
-gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" "  • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
-gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" "  • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
+gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS
@@ -886,6 +895,8 @@ kitty() {
 
 # https://sw.kovidgoyal.net/kitty/conf/
 kitty_conf_template='
+scrollback_pager_history_size 0
+scrollback_lines 0
 hide_window_decorations yes
 remember_window_size false
 initial_window_width 1080
