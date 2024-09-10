@@ -332,7 +332,6 @@ show_info_news() {
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
             gum_mesg "$(print_news_date "$i") | $(print_news_title "$i")"
         done
-        echo # Print new line
     fi
     return 0
 }
@@ -389,7 +388,6 @@ show_info_system() {
     else
         gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
     fi
-    echo # Print new line
 }
 
 # -------------------------------------------------------------------
@@ -400,7 +398,6 @@ show_info_updates() {
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
         gum_info "Your system is up to date"
-        echo # Print new line
         return 0
     fi
 
@@ -425,7 +422,6 @@ show_info_updates() {
     while IFS=',' read -r manager package version update; do
         format_row "$pkg_length" "$manager_length" "$version_length" "$update_length" "$package" "$manager" "$version" "$update"
     done <"$UPDATES_DB"
-    #echo # Print new line
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -533,8 +529,9 @@ show_page_upgrade() { # Update packages
     ! sync_news_db && gum_fail "Synchronize News Database failed"
     # Show infos
     show_info_news || return $?
-    show_info_system || return $?
-    show_info_updates || return $?
+    echo && show_info_system || return $?
+    echo && show_info_updates || return $?
+    [ ! -s "$UPDATES_DB" ] && gum_confirm_continue && return 2
     echo && ! gum_confirm "Start System Upgrade?" && return 2
     clear_screen && print_header && gum_title "Upgrade System Packages"
     # Prepare args
