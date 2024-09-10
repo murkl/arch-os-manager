@@ -79,9 +79,7 @@ arch-os [--kitty | -k]              Open main menu
 arch-os [--kitty | -k] help         Open help page
 arch-os [--kitty | -k] version      Print Arch OS Manager version
 arch-os [--kitty | -k] settings     Edit settings
-arch-os [--kitty | -k] check        Print package updates like checkupdates
-arch-os [--kitty | -k] notify       Notify on new package updates
-arch-os [--kitty | -k] info         Show system info (system / package info & logs)
+arch-os [--kitty | -k] logs         Show system logs
 arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
 arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)
 arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
@@ -89,6 +87,8 @@ arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff 
 arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)
 arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)
 arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)
+arch-os [--kitty | -k] notify       Notify on new package updates
+arch-os [--kitty | -k] check        Print package updates like checkupdates
 ```
 
 ## Settings
@@ -96,20 +96,16 @@ arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)
 Edit the settings with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
-AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
-AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
-AUR_SUPPORT=true                  # Enable AUR support (disable: false)
-AUR_REVIEW=false                  # Disable AUR review (enable: true)
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
-ARCH_SHOW_SYSTEM_INFO=true        # Show system packages info (disable: false)
+AUR_SUPPORT=true                  # Enable AUR support (disable: false)
+AUR_REVIEW=false                  # Disable AUR review (enable: true)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
 FLATPAK_UPGRADE_CONFIRM=false     # Disable confirm flatpak upgrade (enable: true)
-NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
-NEWS_SHOW_URL=true                # Show 'More Information' below the news (disable: false)
 ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true)
-FILTER_RESULT_SIZE=20             # Max filter results (max: 50)
-PACKAGE_INFO_WIDTH=80             # Max info width (cut horizontal output)
+AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
+AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
+NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
 ```
 
 ### Configurations
