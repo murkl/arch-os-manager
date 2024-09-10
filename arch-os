@@ -33,8 +33,7 @@ ARCH_OS_TMP="$(mktemp -d "${ARCH_OS_HOME}/.XXXXXX.tmp")"
 MIRRORLIST_TMP="${ARCH_OS_TMP}/mirrorlist.tmp"
 
 # STATE
-PACKAGE_MANAGER="/usr/bin/pacman"
-HEADER_STATE="false"
+HEADER_PRINTED="false"
 
 # COLORS
 # Color chart: https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
@@ -123,8 +122,8 @@ main() {
         'settings') { print_header && show_page_settings; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'help') { print_header && show_page_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'version') { print_header && show_page_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'notify') action_notify_updates || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'check') action_check_updates_available || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'notify') action_notify_updates || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
+        'check') action_check_updates_available || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
         *) print_header && show_page_help && echo && gum_red --bold "Action '${selected_action}' not available!" ;;
         esac
 
@@ -208,8 +207,6 @@ init_properties() {
     # Check binaries
     [ "$AUR_SUPPORT" = "true" ] && ! command -v /usr/bin/paru &>/dev/null && gum_warn "AUR_SUPPORT was disabled (/usr/bin/paru not found)" && AUR_SUPPORT="false"
     [ "$FLATPAK_SUPPORT" = "true" ] && ! command -v /usr/bin/flatpak &>/dev/null && gum_warn "FLATPAK_SUPPORT was disabled (/usr/bin/flatpak not found)" && FLATPAK_SUPPORT="false"
-    [ "$AUR_SUPPORT" = "false" ] && PACKAGE_MANAGER="/usr/bin/pacman"
-    [ "$AUR_SUPPORT" = "true" ] && PACKAGE_MANAGER="/usr/bin/paru"
 
     # Toggle settings
     if [ "$AUTOSTART_NOTIFY" = "true" ]; then
@@ -248,15 +245,16 @@ init_properties() {
 
 sync_updates_db() {
     rm -f "$UPDATES_DB" # Remove database file
+    touch "$UPDATES_DB"
     # Pacman updates
     while IFS= read -r line; do
         echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "pacman," $1 "," $2 "," $4}' >>"$UPDATES_DB"
-    done < <(checkupdates)
+    done < <(/usr/bin/checkupdates)
     # AUR updates
-    if [ "$AUR_SUPPORT" = 'true' ]; then
+    if [ "$AUR_SUPPORT" = 'true' ] && /usr/bin/paru -Qua &>/dev/null; then
         while read -r line; do
             echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "aur," $1 "," $2 "," $4}' >>"$UPDATES_DB"
-        done < <($PACKAGE_MANAGER -Qua)
+        done < <(/usr/bin/paru -Qua)
     fi
     # Flatpak updates
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
@@ -269,13 +267,14 @@ sync_updates_db() {
 
 sync_news_db() {
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ]; then
-        gum_spin --title 'Synchronize News Database...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || return 1
+        gum_spin --title 'Synchronize News Database ...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || return 1
     fi
     return 0
 }
 
 sync_package_db() {
-    gum_spin --title 'Synchronize Package Database...' -- bash -c "${PACKAGE_MANAGER} -Slq >${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1
+    local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
+    gum_spin --title 'Synchronize Package Database ...' -- bash -c "${pkg_manager} -Slq >${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -310,7 +309,7 @@ action_check_updates_available() { # Check & print package updates
 action_notify_updates() {
     local update_result update_count update_txt
     update_result="$(action_check_updates_available)"
-    update_count=$(echo "$update_result" | wc -l)
+    update_count=0 && [ -n "$update_result" ] && update_count=$(echo "$update_result" | wc -l)
     if [ "$update_count" -gt 0 ]; then
         [ "$update_count" = 1 ] && update_txt="${update_count} Update available"
         [ "$update_count" -gt 1 ] && update_txt="${update_count} Updates available"
@@ -340,48 +339,12 @@ show_info_news() {
 
 # -------------------------------------------------------------------
 
-show_info_upgrade() {
-    gum_title "Package Information"
-
-    # Preload and force return 0. Cancel if user press ctrl + c
-    ! gum_spin --title 'Checking Package Updates...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Failed" && return 3
-
-    # Check if updates available
-    if ! [ -s "$UPDATES_DB" ]; then
-        gum_info "Your system is up to date"
-        echo # Print new line
-        return 0
-    fi
-
-    format_row() {
-        local package="$1"
-        local current_version="$2"
-        local new_version="$3"
-
-        # Farben definieren
-        local reset="\033[0m"
-        local bold="\033[1m"
-        local green="\033[32m"
-
-        printf " • ${bold}%-40s ${reset}%-15s %-25s ${bold}%-10s ${green}%-25s${reset}\n" \
-            "$1" "$2" "$3" "→" "$4"
-    }
-
-    # Updates ausgeben
-    while IFS=',' read -r manager package version update; do
-        format_row "$package" "$manager" "$version" "$update"
-    done <"$UPDATES_DB"
-    echo # Print new line
-}
-
-# -------------------------------------------------------------------
-
 show_info_system() {
     gum_title "System Information"
 
     # Package info
     gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
-    [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$($PACKAGE_MANAGER -Qm | wc -l)"
+    [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$(/usr/bin/paru -Qm | wc -l)"
     # flatpak list --columns=application | tail -n +1 | wc -l
     [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
 
@@ -400,14 +363,15 @@ show_info_system() {
     [ -n "$pacdiff_info" ] && pacdiff_count="$(echo "$pacdiff_info" | wc -l)"
     [ -z "$pacdiff_info" ] && pacdiff_count="0"
     if [ "$pacdiff_count" -gt "0" ]; then
-        gum_key_value_red "Pending Merges" "${pacdiff_count}"
+        gum_key_value_yellow "Pending Merges" "${pacdiff_count}"
     else
         gum_key_value_green "Pending Merges" "${pacdiff_count}"
     fi
 
     # Check orphans
     local orphans_packages orphans_count
-    orphans_packages="$($PACKAGE_MANAGER -Qtdq &>/dev/null && $PACKAGE_MANAGER -Qtdq)"
+    local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
+    orphans_packages="$($pkg_manager -Qtdq &>/dev/null && $pkg_manager -Qtdq)"
     orphans_count="$(echo "$orphans_packages" | wc -w)"
     if [ "$orphans_count" -gt "0" ]; then
         gum_key_value_yellow "Orphaned Packages" "${orphans_count}"
@@ -419,10 +383,49 @@ show_info_system() {
     local unknown_pkgs=()
     while read -r pkg; do if ! grep -q "$pkg" "$PACKAGES_DB"; then unknown_pkgs+=("$pkg"); fi; done < <(pacman -Qqm)
     if [ -n "${unknown_pkgs[*]}" ]; then
-        gum_key_value_yellow "Unknown Packages" "${unknown_pkgs[*]}"
+        unknown_pkgs=$(printf "%s, " "${unknown_pkgs[@]}")
+        unknown_pkgs=${unknown_pkgs%, }
+        local IFS=', ' && gum_key_value_yellow "Unknown Packages" "${unknown_pkgs}"
     else
         gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
     fi
+    echo # Print new line
+}
+
+# -------------------------------------------------------------------
+
+show_info_updates() {
+    gum_title "Package Information"
+
+    # Check if updates available
+    if ! [ -s "$UPDATES_DB" ]; then
+        gum_info "Your system is up to date"
+        echo # Print new line
+        return 0
+    fi
+
+    # Check max length
+    local manager_length=0 pkg_length=0 version_length=0 update_length=0
+    while IFS=',' read -r manager package version update; do
+        [ "${#manager}" -gt "$manager_length" ] && manager_length="${#manager}"
+        [ "${#package}" -gt "$pkg_length" ] && pkg_length="${#package}"
+        [ "${#version}" -gt "$version_length" ] && version_length="${#version}"
+        [ "${#update}" -gt "$update_length" ] && update_length="${#update}"
+    done <"$UPDATES_DB"
+
+    format_row() {
+        local reset="\033[0m"
+        local bold="\033[1m"
+        local green="\033[32m"
+        printf " • ${bold}%-${1}s  ${reset}(%-${2}s)  %-${3}s  ${bold}%-3s  ${green}%-${4}s${reset}\n" \
+            "$5" "$6" "$7" "→" "$8"
+    }
+
+    # Print updates
+    while IFS=',' read -r manager package version update; do
+        format_row "$pkg_length" "$manager_length" "$version_length" "$update_length" "$package" "$manager" "$version" "$update"
+    done <"$UPDATES_DB"
+    #echo # Print new line
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -437,13 +440,14 @@ show_page_search() { # Manage packages
         [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "20" --placeholder "Search package..." <"$PACKAGES_DB") && return 2
 
         # Fetch general package infos
-        pkg_info_remote="$(LANG=en_US.UTF-8 $PACKAGE_MANAGER -Si "$pkg_name" 2>/dev/null)" # Uninstalled
+        local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
+        pkg_info_remote="$(LANG=en_US.UTF-8 $pkg_manager -Si "$pkg_name" 2>/dev/null)" # Uninstalled
         pkg_is_aur="false" && [ "$(print_package_value "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
-        pkg_is_installed="false" && pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
+        pkg_is_installed="false" && /usr/bin/pacman -Q "$pkg_name" &>/dev/null && pkg_is_installed="true"
 
         # Get installed package info
         if [ "$pkg_is_installed" = "true" ]; then
-            pkg_info_local="$(LANG=en_US.UTF-8 $PACKAGE_MANAGER -Qi "$pkg_name" 2>/dev/null)" # Installed
+            pkg_info_local="$(LANG=en_US.UTF-8 $pkg_manager -Qi "$pkg_name" 2>/dev/null)" # Installed
         fi
 
         # Print general package info
@@ -495,15 +499,16 @@ show_page_search() { # Manage packages
             local pkg_manager_args=()
             [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
             [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
-            if sudo $PACKAGE_MANAGER -Sq "${pkg_manager_args[@]}" "$pkg_name"; then gum_info "Done"; else gum_fail "Installing ${pkg_name} failed"; fi
+            [ "$AUR_SUPPORT" = "true" ] && if /usr/bin/paru -Sq "${pkg_manager_args[@]}" "$pkg_name"; then gum_info "Done"; else gum_fail "Installing ${pkg_name} failed"; fi
+            [ "$AUR_SUPPORT" = "false" ] && if sudo /usr/bin/pacman -Sq "${pkg_manager_args[@]}" "$pkg_name"; then gum_info "Done"; else gum_fail "Installing ${pkg_name} failed"; fi
             ;;
         'Remove')
             ! gum_confirm "Remove?" && clear_screen && continue
-            if sudo $PACKAGE_MANAGER -Rns "$pkg_name"; then gum_info "Done"; else gum_fail "Removing ${pkg_name} failed"; fi
+            if sudo /usr/bin/pacman -Rns "$pkg_name"; then gum_info "Done"; else gum_fail "Removing ${pkg_name} failed"; fi
             ;;
         'Show PKGBUILD')
             clear_screen && print_header && gum_title "PKGBUILD"
-            $PACKAGE_MANAGER -Gp "$pkg_name"
+            /usr/bin/paru -Gp "$pkg_name"
             ;;
         'Downgrade')
             ! gum_confirm "Downgrade?" && clear_screen && continue
@@ -523,10 +528,13 @@ show_page_search() { # Manage packages
 show_page_upgrade() { # Update packages
     # Init
     [ ! -f "$PACKAGES_DB" ] && ! sync_package_db && gum_fail "Synchronize Package Database failed"
+    # Preload update infos and force return 0. Cancel if user press ctrl + c
+    ! gum_spin --title 'Checking Package Updates ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
     ! sync_news_db && gum_fail "Synchronize News Database failed"
+    # Show infos
     show_info_news || return $?
-    show_info_upgrade || return $?
     show_info_system || return $?
+    show_info_updates || return $?
     echo && ! gum_confirm "Start System Upgrade?" && return 2
     clear_screen && print_header && gum_title "Upgrade System Packages"
     # Prepare args
@@ -535,14 +543,15 @@ show_page_upgrade() { # Update packages
     [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Upgrade system
-    ! sudo $PACKAGE_MANAGER -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
+    [ "$AUR_SUPPORT" = "true" ] && ! /usr/bin/paru -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
+    [ "$AUR_SUPPORT" = "false" ] && ! sudo /usr/bin/pacman -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
-                ! gum_spin --title 'Upgrade Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
+                ! gum_spin --title 'Upgrading Flatpak Apps ...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
             else # Do Interactive flatpak update
-                gum_mesg_bold "Upgrade Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
+                gum_mesg_bold "Upgrading Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
             fi
             gum_mesg_bold "Flatpak Upgrade finished"
         else # Up to date
@@ -550,6 +559,7 @@ show_page_upgrade() { # Update packages
         fi
     fi
     ! sync_package_db && gum_fail "Synchronize Package Database failed" # Resync packages
+    ! gum_spin --title 'Checking Package Updates ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
     gum_info "System Upgrade finished"
     echo # Print new line
     show_info_system || return $?
@@ -564,17 +574,17 @@ show_page_orphans() { # Remove orphaned packages
     local pkg_manager_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Remove pacman orphans
     # shellcheck disable=SC2046
-    if $PACKAGE_MANAGER -Qtdq &>/dev/null; then
-        ! sudo $PACKAGE_MANAGER -Rns "${pkg_manager_args[@]}" $($PACKAGE_MANAGER -Qtdq) && gum_fail "Remove System Orphans failed" && return 3
+    if /usr/bin/pacman -Qtdq &>/dev/null; then
+        ! sudo /usr/bin/pacman -Rns "${pkg_manager_args[@]}" $(/usr/bin/pacman -Qtdq) && gum_fail "Remove System Orphans failed" && return 3
     else
         gum_mesg_bold "No orphaned system packages found"
     fi
     # Remove pacman orphans (alternative)
-    #! sudo $PACKAGE_MANAGER -Rsu --noconfirm $($PACKAGE_MANAGER -Qqd) 2>/dev/null && gum_fail "Failed" && return 3
+    #! sudo /usr/bin/pacman -Rsu --noconfirm $(/usr/bin/pacman -Qqd) 2>/dev/null && gum_fail "Failed" && return 3
     # Remove unused flatpaks
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
-            ! gum_spin --title 'Remove Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 3
+            ! gum_spin --title 'Removing Flatpak Orphans ...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 3
             gum_mesg_bold "Remove Flatpak Orphans finished"
         else # Do Interactive flatpak orphans
             gum_mesg_bold "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 3
@@ -587,12 +597,12 @@ show_page_orphans() { # Remove orphaned packages
 # -------------------------------------------------------------------
 
 show_page_merge() { # Merge updated config files
-    if ! command -v pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
+    if ! command -v /usr/bin/pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         gum_title "Install Pacdiff Tools"
         ! gum_confirm "" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
-        ! sudo $PACKAGE_MANAGER -Sq --needed "${pkg_manager_args[@]}" meld && gum_warn "Canceled" && return 3
+        ! sudo /usr/bin/pacman -Sq --needed "${pkg_manager_args[@]}" meld && gum_warn "Canceled" && return 3
         # Hide meld app
         if gum_confirm "Hide App Icon in GNOME Menu?"; then
             echo -e '[Desktop Entry]\nType=Application\nHidden=true' >"${HOME}/.local/share/applications/org.gnome.Meld.desktop"
@@ -614,18 +624,18 @@ show_page_merge() { # Merge updated config files
 # -------------------------------------------------------------------
 
 show_page_reflector() { # Refresh mirrorlist with reflector
-    if ! command -v reflector &>/dev/null; then
+    if ! command -v /usr/bin/reflector &>/dev/null; then
         gum_title "Install Reflector"
         ! gum_confirm "" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
-        ! sudo $PACKAGE_MANAGER -Sq --needed "${pkg_manager_args[@]}" reflector && gum_warn "Canceled" && return 3
+        ! sudo /usr/bin/pacman -Sq --needed "${pkg_manager_args[@]}" reflector && gum_warn "Canceled" && return 3
         clear_screen && print_header # Clean install output & print new header
     fi
     gum_title "Refresh Pacman Mirrorlist"
     ! gum_confirm "" && return 2
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
+    ! gum_spin --title 'Waiting for Reflector ...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
     cat "$MIRRORLIST_TMP"
     echo && ! gum_confirm "Save Mirrorlist?" && return 2
     # Save mirrorlist and set correct permissions
@@ -645,7 +655,7 @@ show_page_downgrade() { # Downgrade packages
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
-        ! sudo $PACKAGE_MANAGER -Sq --needed "${pkg_manager_args[@]}" downgrade && gum_warn "Canceled" && return 3
+        ! /usr/bin/paru -Sq --needed "${pkg_manager_args[@]}" downgrade && gum_warn "Canceled" && return 3
         clear_screen && print_header # Clean install output & print new header
     fi
     gum_title "Downgrade Packages"
@@ -675,9 +685,8 @@ show_page_reset_keyring() { # Keyring reset (if update failed, try to reset & re
     # Update Arch keyring & system
     local pkg_manager_args=()
     [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
-    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
-    ! sudo $PACKAGE_MANAGER -Syq --noconfirm archlinux-keyring && sudo $PACKAGE_MANAGER -Suq "${pkg_manager_args[@]}" && gum_warn "Canceled" && return 3
+    ! sudo /usr/bin/pacman -Syq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}" && gum_warn "Canceled" && return 3
     gum_info "Done"
     return 0
 }
@@ -774,9 +783,9 @@ show_page_version() {
     gum_title "Gum" && gum --version && echo
     gum_title "Notify" && notify-send --version && echo
     [ "$FLATPAK_SUPPORT" = "true" ] && gum_title "Flatpak" && flatpak --version && echo
-    [ "$AUR_SUPPORT" = "true" ] && gum_title "Paru" && $PACKAGE_MANAGER --version && echo
-    gum_title "Checkupdates" && checkupdates --version && echo
-    pacman --version # Pacman
+    [ "$AUR_SUPPORT" = "true" ] && gum_title "Paru" && /usr/bin/paru --version && echo
+    gum_title "Checkupdates" && /usr/bin/checkupdates --version && echo
+    /usr/bin/pacman --version # Pacman
     return 0
 }
 
@@ -784,10 +793,10 @@ show_page_version() {
 # HELPER FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
-clear_screen() { clear && printf '\e[3J' && HEADER_STATE="false"; } # Clear and remove scrollback buffer
+clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear and remove scrollback buffer
 
 print_header() {
-    if [ "$HEADER_STATE" = "false" ]; then
+    if [ "$HEADER_PRINTED" = "false" ]; then
         clear && printf '\e[3J' && gum_purple '
  █████  ██████   ██████ ██   ██      ██████  ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
@@ -795,7 +804,7 @@ print_header() {
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
     ' && gum_white --bold "System Manager ${VERSION}" && echo
-        HEADER_STATE="true"
+        HEADER_PRINTED="true"
     fi
 }
 
@@ -846,6 +855,7 @@ gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue ..." | cat >/dev/null; }
+gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 
 # Key & value
 gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
