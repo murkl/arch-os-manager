@@ -326,15 +326,20 @@ show_upgrade_info() {
     fi
 
     format_row() {
-        gum join --align left \
-            "$(gum_white --width 45 --align left --bold "   $1")" \
-            "$(gum_white --width 15 --align left "$2")" \
-            "$(gum_white --width 15 --align left "$3")" \
-            "$(gum_white --width 10 --align left --bold " → ")" \
-            "$(gum_green --width 15 --align left --bold "$4")"
+        local package="$1"
+        local current_version="$2"
+        local new_version="$3"
+
+        # Farben definieren
+        local reset="\033[0m"
+        local bold="\033[1m"
+        local green="\033[32m"
+
+        printf "   ${bold}%-40s ${reset}%-15s %-25s ${bold}%-10s ${green}%-25s${reset}\n" \
+            "$1" "$2" "$3" "→" "$4"
     }
 
-    # Print updates
+    # Updates ausgeben
     while IFS=',' read -r manager package version update; do
         format_row "$package" "$manager" "$version" "$update"
     done <"$UPDATES_DB"
@@ -386,9 +391,10 @@ show_system_info() {
 
         # Unknown pkgs
         local unknown_pkgs=()
-        pacman -Qm | while read -r pkg; do ! grep -q "^$pkg$" "$PACKAGES_DB" && unknown_pkgs+=("$pkg"); done
+        while read -r pkg; do if ! grep -q "$pkg" "$PACKAGES_DB"; then unknown_pkgs+=("$pkg"); fi; done < <(pacman -Qqm)
+        #pacman -Qqm | while read -r pkg; do if ! paru -Si "$pkg" &>/dev/null; then echo "$pkg"; fi; done
         if [ -n "${unknown_pkgs[*]}" ]; then
-            gum_key_value_yellow "Unknown Packages" "${#unknown_pkgs[*]} (${unknown_pkgs[*]})"
+            gum_key_value_yellow "Unknown Packages" "${unknown_pkgs[*]}"
         else
             gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
         fi
