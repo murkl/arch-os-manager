@@ -142,10 +142,10 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
-<p><img width="75%" style="vertical-align: top;" src="./screenshots/upgrade.png"></p>
-<p><img width="75%" style="vertical-align: top;" src="./screenshots/search.png"></p>
-<p><img width="75%" style="vertical-align: top;" src="./screenshots/refresh.png"></p>
-<p><img width="75%" style="vertical-align: top;" src="./screenshots/help.png"></p>
+<p><img width="100%" style="vertical-align: top;" src="./screenshots/upgrade.png"></p>
+<p><img width="100%" style="vertical-align: top;" src="./screenshots/search.png"></p>
+<p><img width="100%" style="vertical-align: top;" src="./screenshots/refresh.png"></p>
+<p><img width="100%" style="vertical-align: top;" src="./screenshots/help.png"></p>
 
 </div>
 
