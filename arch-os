@@ -59,6 +59,9 @@ main() {
     trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                       # Set exit trap
 
+    # Create & source properties
+    init_properties
+
     # Check user argument and start kitty
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
         shift # Shift argument to next
@@ -74,9 +77,6 @@ main() {
         print_header && show_help && echo && gum_red --bold "Max. 1 argument supported!" && gum_confirm_continue
         exit 3
     fi
-
-    # Create & source properties
-    init_properties
 
     # User action argument
     local user_action="$1"
