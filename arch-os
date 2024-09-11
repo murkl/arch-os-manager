@@ -13,7 +13,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.5.8"
+VERSION="1.5.9"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -29,7 +29,7 @@ NEWS_DB="${ARCH_OS_HOME}/database/news.db"
 UPDATES_DB="${ARCH_OS_HOME}/database/updates.db"
 
 # TEMP
-ARCH_OS_TMP="$(mktemp -d "${ARCH_OS_HOME}/.tmp.XXXXXX")"
+ARCH_OS_TMP="$(mktemp -d "/tmp/arch-os.XXXXXXX")"
 MIRRORLIST_TMP="${ARCH_OS_TMP}/mirrorlist"
 
 # STATE
