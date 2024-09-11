@@ -144,12 +144,8 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <img width="45%" style="vertical-align: top;" src="./screenshots/upgrade.png">
 <img width="45%" style="vertical-align: top;" src="./screenshots/search.png">
-<img width="45%" style="vertical-align: top;" src="./screenshots/help.png">
-<img width="45%" style="vertical-align: top;" src="./screenshots/logs.png">
-<img width="45%" style="vertical-align: top;" src="./screenshots/merge.png">
 <img width="45%" style="vertical-align: top;" src="./screenshots/refresh.png">
-<img width="45%" style="vertical-align: top;" src="./screenshots/downgrade.png">
-<img width="45%" style="vertical-align: top;" src="./screenshots/main.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/help.png">
 
 </div>
 

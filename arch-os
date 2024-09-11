@@ -393,7 +393,7 @@ show_info_system() {
 # -------------------------------------------------------------------
 
 show_info_updates() {
-    gum_title "Package Information"
+    gum_title "Update Information"
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -488,7 +488,7 @@ show_page_search() { # Manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        user_input=$(gum_choose --selected="Done" --height=8 "${options[@]}") || return 2
+        user_input=$(gum_choose --selected="Done" --height=6 "${options[@]}") || return 2
         case "$user_input" in # Set user action to selected action
         'Install')
             ! gum_confirm "Install?" && clear_screen && continue
