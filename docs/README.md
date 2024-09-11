@@ -64,7 +64,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Built-in settings editor
 - Built-in kitty support
 
-Install these **optional** dependencies to equip Arch OS Manager with more features:
+Install these **optional** dependencies to equip Arch OS Manager with additional features:
 
 - `paru`: Add support for manage AUR packages
 - `flatpak`: Add support for manage Flatpak packages
