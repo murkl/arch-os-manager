@@ -13,7 +13,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.5.9"
+VERSION="1.6.0"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -648,7 +648,7 @@ show_upgrade() { # Update packages
 
     # Resync db
     ! sync_package_db && gum_fail "Synchronize Package Database failed" # Resync packages
-    ! gum_spin --title 'Checking Package Updates ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
+    ! gum_spin --title 'Synchronize Update Database ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
     gum_info "System Upgrade finished"
     echo # Print new line
     show_health_info || return $?
