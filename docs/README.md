@@ -17,37 +17,37 @@
 
 ## Install from AUR
 
-**[ ➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
+1. Install Package **[ ➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
 
-- Run Arch OS Manager:
+2. Run Arch OS Manager:
 
 ```
 arch-os
 ```
 
-- **Note:** Add parameter `-k` to start with built-in kitty
+**Note:** Add parameter `-k` to start with built-in kitty
 
 ## Install from GitHub
 
-- Install Dependencies:
+1. Install Dependencies:
 
 ```
 sudo pacman -S kitty gum libnotify pacman-contrib
 ```
 
-- Clone GitHub Repo:
+2. Clone GitHub Repo:
 
 ```
 git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ```
 
-- Run Arch OS Manager:
+3. Run Arch OS Manager:
 
 ```
 ./arch-os
 ```
 
-- **Note:** Add parameter `-k` to start with built-in kitty
+**Note:** Add parameter `-k` to start with built-in kitty
 
 ## Features
 
@@ -116,20 +116,21 @@ NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
 
 ## Integrate GNOME Extension
 
-- Install GNOME Extension: **[archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
-- Set `Check command`:
+1. Install GNOME Extension **[➜ archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
+
+2. Set `Check command`:
 
 ```
 dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
 ```
 
-- Set `Update command`:
+3. Set `Update command`:
 
 ```
 dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
 ```
 
-- Set `Package Manager` (optional):
+4. Set `Package Manager` (optional):
 
 ```
 dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
@@ -141,14 +142,14 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
-<img width="48%" style="vertical-align: top;" src="./screenshots/main.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/search.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/fetch.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/upgrade.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/merge.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/refresh.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/downgrade.png">
-<img width="48%" style="vertical-align: top;" src="./screenshots/help.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/upgrade.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/search.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/help.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/logs.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/merge.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/refresh.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/downgrade.png">
+<img width="45%" style="vertical-align: top;" src="./screenshots/main.png">
 
 </div>
 

@@ -415,7 +415,7 @@ show_info_updates() {
         local bold="\033[1m"
         local green="\033[32m"
         printf " • ${bold}%-${1}s  ${reset}(%-${2}s)  %-${3}s  ${bold}%-3s  ${green}%-${4}s${reset}\n" \
-            "$5" "$6" "$7" "→" "$8"
+            "$5" "$6" "$7" "➜" "$8"
     }
 
     # Print updates
@@ -531,7 +531,10 @@ show_page_upgrade() { # Update packages
     show_info_news || return $?
     echo && show_info_system || return $?
     echo && show_info_updates || return $?
-    [ ! -s "$UPDATES_DB" ] && gum_confirm_continue && return 2
+    if [ ! -s "$UPDATES_DB" ]; then
+        gum_confirm_continue
+        return 2
+    fi
     echo && ! gum_confirm "Start System Upgrade?" && return 2
     clear_screen && print_header && gum_title "Upgrade System Packages"
     # Prepare args
@@ -855,9 +858,9 @@ gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor 
 gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 
 # Key & value
-gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
-gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
-gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") →  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
+gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS
