@@ -529,8 +529,8 @@ show_page_upgrade() { # Update packages
     ! sync_news_db && gum_fail "Synchronize News Database failed"
     # Show infos
     show_info_news || return $?
-    echo && show_info_system || return $?
     echo && show_info_updates || return $?
+    echo && show_info_system || return $?
     if [ ! -s "$UPDATES_DB" ]; then
         gum_confirm_continue
         return 2
@@ -849,7 +849,7 @@ gum_content() { gum_white "   ${*}"; }
 
 # Wrapper
 gum_style() { gum style "${@}"; }
-gum_filter() { gum filter --width="80" --prompt " > " --indicator " > " --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_filter() { gum filter --width="80" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="80" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
