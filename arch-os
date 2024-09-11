@@ -449,7 +449,7 @@ show_system_info() { # System info
 
     # Sync db
     [ ! -f "$PACKAGES_DB" ] && ! sync_package_db && gum_fail "Synchronize Package Database failed"
-    ! gum_spin --title 'Checking Package Updates ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
+    ! gum_spin --title 'Synchronize Update Database ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
 
     # Show system logs
     gum_title "System Logs"
