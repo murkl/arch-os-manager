@@ -29,8 +29,8 @@ NEWS_DB="${ARCH_OS_HOME}/database/news.db"
 UPDATES_DB="${ARCH_OS_HOME}/database/updates.db"
 
 # TEMP
-ARCH_OS_TMP="$(mktemp -d "${ARCH_OS_HOME}/.XXXXXX.tmp")"
-MIRRORLIST_TMP="${ARCH_OS_TMP}/mirrorlist.tmp"
+ARCH_OS_TMP="$(mktemp -d "${ARCH_OS_HOME}/.tmp.XXXXXX")"
+MIRRORLIST_TMP="${ARCH_OS_TMP}/mirrorlist"
 
 # STATE
 HEADER_PRINTED="false"
@@ -89,9 +89,10 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             clear_screen && print_header
             local user_input options
-            options=("Search Package" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "System Logs" "Settings" "Help" "Quit")
+            options=("System Logs" "Search Package" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
+            'System Logs') selected_action='logs' ;;
             'Search Package') selected_action='search' ;;
             'Upgrade System') selected_action='upgrade' ;;
             'Remove Orphans') selected_action='orphans' ;;
@@ -99,7 +100,6 @@ main() {
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
             'Reset Pacman') selected_action='reset' ;;
-            'System Logs') selected_action='logs' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
             'Quit') clear_screen && exit 2 ;;
@@ -111,14 +111,14 @@ main() {
         # Execute action
         local skip_confirm="false"
         case "$selected_action" in # Execute action
+        'logs') { print_header && show_page_logs; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'search') { print_header && show_page_search; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'upgrade') { print_header && show_page_upgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'orphans') { print_header && show_page_orphans; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'merge') { print_header && show_page_merge; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'refresh') { print_header && show_page_reflector; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'refresh') { print_header && show_page_refresh; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'downgrade') { print_header && show_page_downgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'reset') { print_header && show_page_reset_keyring; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'logs') { print_header && show_page_logs; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'settings') { print_header && show_page_settings; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'help') { print_header && show_page_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'version') { print_header && show_page_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -246,16 +246,19 @@ init_properties() {
 sync_updates_db() {
     rm -f "$UPDATES_DB" # Remove database file
     touch "$UPDATES_DB"
+
     # Pacman updates
     while IFS= read -r line; do
         echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "pacman," $1 "," $2 "," $4}' >>"$UPDATES_DB"
     done < <(/usr/bin/checkupdates)
+
     # AUR updates
     if [ "$AUR_SUPPORT" = 'true' ] && /usr/bin/paru -Qua &>/dev/null; then
         while read -r line; do
             echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "aur," $1 "," $2 "," $4}' >>"$UPDATES_DB"
         done < <(/usr/bin/paru -Qua)
     fi
+
     # Flatpak updates
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         while read -r line; do
@@ -306,7 +309,7 @@ action_check_updates_available() { # Check & print package updates
 
 # -------------------------------------------------------------------
 
-action_notify_updates() {
+action_notify_updates() { # Notify on new updates
     local update_result update_count update_txt
     update_result="$(action_check_updates_available)"
     update_count=0 && [ -n "$update_result" ] && update_count=$(echo "$update_result" | wc -l)
@@ -324,7 +327,7 @@ action_notify_updates() {
 # SHOW INFO FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
-show_info_news() {
+show_info_news() { # Show Arch Linux News
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
         # Helper functions
         print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
@@ -338,8 +341,8 @@ show_info_news() {
 
 # -------------------------------------------------------------------
 
-show_info_system() {
-    gum_title "System Information"
+show_info_health() { # Show system health information
+    gum_title "System Health"
 
     # Package info
     gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
@@ -392,7 +395,7 @@ show_info_system() {
 
 # -------------------------------------------------------------------
 
-show_info_updates() {
+show_info_updates() { # Show package updates
     gum_title "Update Information"
 
     # Check if updates available
@@ -428,7 +431,51 @@ show_info_updates() {
 # SHOW PAGE FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
-show_page_search() { # Manage packages
+show_page_logs() { # System Logs
+    local options user_input logs
+    gum_title "System Logs"
+    # Show logs (remove blacklist entries and trim spaces with awk)
+    logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf <(awk '{$1=$1; print}' "$ARCH_OS_BLACKLIST"))
+    if [ -n "$logs" ]; then
+        gum_red "$logs"
+    else
+        gum_info "No System Logs available"
+    fi
+    echo && gum_title "Service Logs"
+    if systemctl --failed | grep -q 'failed'; then
+        systemctl --failed
+    else
+        gum_info "No Service Logs available"
+    fi
+    # Show menu
+    echo && gum_title "Options"
+    options=("Edit Blacklist" "Done")
+    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || return 2
+    case "$user_input" in
+    'Edit Blacklist')
+        clear_screen && print_header && gum_title "Edit Blacklist"
+        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
+        # Open editor with count of properties + 2
+        # BUG: gum write does not accept height greater than 7
+        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+            # If success: save/move file, remove spaces and re-init properties
+            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
+            rm -f "${ARCH_OS_BLACKLIST}.new"
+            gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
+        else
+            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
+            gum_warn "Canceled" && return 3
+        fi
+        ;;
+    'Done') return 2 ;;
+    *) gum_fail "Option '${user_input}' not available" && return 3 ;;
+    esac
+    return 0
+}
+
+# -------------------------------------------------------------------
+
+show_page_search() { # Search & manage packages
     local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
         print_header && gum_title "Package Information"
@@ -530,7 +577,7 @@ show_page_upgrade() { # Update packages
     # Show infos
     show_info_news || return $?
     echo && show_info_updates || return $?
-    echo && show_info_system || return $?
+    echo && show_info_health || return $?
     if [ ! -s "$UPDATES_DB" ]; then
         gum_confirm_continue
         return 2
@@ -562,7 +609,7 @@ show_page_upgrade() { # Update packages
     ! gum_spin --title 'Checking Package Updates ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
     gum_info "System Upgrade finished"
     echo # Print new line
-    show_info_system || return $?
+    show_info_health || return $?
     return 0
 }
 
@@ -623,7 +670,7 @@ show_page_merge() { # Merge updated config files
 
 # -------------------------------------------------------------------
 
-show_page_reflector() { # Refresh mirrorlist with reflector
+show_page_refresh() { # Refresh mirrorlist with reflector
     if ! command -v /usr/bin/reflector &>/dev/null; then
         gum_title "Install Reflector"
         ! gum_confirm "" && return 2
@@ -693,50 +740,6 @@ show_page_reset_keyring() { # Keyring reset (if update failed, try to reset & re
 
 # -------------------------------------------------------------------
 
-show_page_logs() { # System Logs
-    local options user_input logs
-    gum_title "System Logs"
-    # Show logs (remove blacklist entries and trim spaces with awk)
-    logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf <(awk '{$1=$1; print}' "$ARCH_OS_BLACKLIST"))
-    if [ -n "$logs" ]; then
-        gum_red "$logs"
-    else
-        gum_info "No System Logs available"
-    fi
-    echo && gum_title "Service Logs"
-    if systemctl --failed | grep -q 'failed'; then
-        systemctl --failed
-    else
-        gum_info "No Service Logs available"
-    fi
-    # Show menu
-    echo && gum_title "Options"
-    options=("Edit Blacklist" "Done")
-    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || return 2
-    case "$user_input" in
-    'Edit Blacklist')
-        clear_screen && print_header && gum_title "Edit Blacklist"
-        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
-        # Open editor with count of properties + 2
-        # BUG: gum write does not accept height greater than 7
-        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
-            # If success: save/move file, remove spaces and re-init properties
-            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
-            rm -f "${ARCH_OS_BLACKLIST}.new"
-            gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
-        else
-            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
-            gum_warn "Canceled" && return 3
-        fi
-        ;;
-    'Done') return 2 ;;
-    *) gum_fail "Option '${user_input}' not available" && return 3 ;;
-    esac
-    return 0
-}
-
-# -------------------------------------------------------------------
-
 show_page_settings() { # Settings
     gum_title "Edit Settings"
     local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
@@ -756,7 +759,7 @@ show_page_settings() { # Settings
 
 # -------------------------------------------------------------------
 
-show_page_help() {
+show_page_help() { # Print help page
     gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_white 'arch-os [--kitty | -k]              Open main menu'
@@ -766,6 +769,7 @@ show_page_help() {
     gum_white 'arch-os [--kitty | -k] version      Print Arch OS Manager version'
     gum_white 'arch-os [--kitty | -k] help         Open help page' && echo
     gum_title 'Actions'
+    gum_white 'arch-os [--kitty | -k] logs         Show system logs'
     gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
     gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
@@ -773,12 +777,11 @@ show_page_help() {
     gum_white 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
     gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
     gum_white 'arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)'
-    gum_white 'arch-os [--kitty | -k] logs         Show system logs'
 }
 
 # -------------------------------------------------------------------
 
-show_page_version() {
+show_page_version() { # Print version page
     gum_title "Kitty" && kitty --version && echo
     gum_title "Gum" && gum --version && echo
     gum_title "Notify" && notify-send --version && echo
@@ -807,6 +810,8 @@ print_header() {
         HEADER_PRINTED="true"
     fi
 }
+
+# -------------------------------------------------------------------
 
 print_filled_space() {
     local total=24
@@ -924,4 +929,8 @@ done
 WORKING_DIR=$(cd -P "$(dirname "$working_src")" >/dev/null 2>&1 && pwd)
 SELF="$WORKING_DIR/$(basename "$0")"
 
+# -------------------------------------------------------------------
+
 main "$@" # Start main function
+
+# -------------------------------------------------------------------
