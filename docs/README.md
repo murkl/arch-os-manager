@@ -79,7 +79,7 @@ arch-os [--kitty | -k]              Open main menu
 arch-os [--kitty | -k] help         Open help page
 arch-os [--kitty | -k] version      Print Arch OS Manager version
 arch-os [--kitty | -k] settings     Edit settings
-arch-os [--kitty | -k] logs         Show system logs
+arch-os [--kitty | -k] info         Show system logs
 arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
 arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)
 arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
@@ -142,11 +142,11 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
-<p><img src="./screenshots/uptodate.png"></p>
+<p><img src="./screenshots/info.png"></p>
 <p><img src="./screenshots/upgrade.png"></p>
+<p><img src="./screenshots/uptodate.png"></p>
 <p><img src="./screenshots/search.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
-<p><img src="./screenshots/help.png"></p>
 
 </div>
 
