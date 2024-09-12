@@ -204,7 +204,7 @@ init_properties() {
     source "$ARCH_OS_CONF"
 
     # Create blacklist.conf
-    [ ! -f "$ARCH_OS_BLACKLIST" ] && echo "# Add log message to hide in system log (line by line)..." >"$ARCH_OS_BLACKLIST"
+    touch "$ARCH_OS_BLACKLIST"
 
     # Set default properties
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
@@ -346,8 +346,10 @@ action_notify_updates() { # Notify on new updates
 # INFO FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
-print_system_log_info() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk '{$1=$1; print}' "$ARCH_OS_BLACKLIST"); }
+print_system_log_info() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
 print_service_info() { systemctl --failed | grep -q 'failed' && systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; }
+
+# -------------------------------------------------------------------
 
 show_news_info() { # Show Arch Linux News
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
@@ -516,7 +518,7 @@ show_system_info() { # System info
         local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
         # Open editor with count of properties + 2
         # BUG: gum write does not accept height greater than 7
-        if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
             # If success: save/move file, remove spaces and re-init properties
             awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
             rm -f "${ARCH_OS_BLACKLIST}.new"
