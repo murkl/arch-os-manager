@@ -59,10 +59,31 @@ main() {
     trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                       # Set exit trap
 
-    # Create & source properties
-    init_properties
+    # Create working dirs
+    mkdir -p "$ARCH_OS_HOME"
+    mkdir -p "$ARCH_OS_TMP"
+    mkdir -p "${ARCH_OS_HOME}/config"
+    mkdir -p "${ARCH_OS_HOME}/database"
+    mkdir -p "${HOME}/.config/autostart"
 
-    # Check user argument and start kitty
+    # Create & source properties
+    init_properties &>/dev/null
+
+    # Sync database & exit
+    if [ "$1" = '--sync' ]; then
+        shift && [ $# -eq 0 ] && sync_news_db && sync_package_db && sync_updates_db && exit 2
+        for arg in "$@"; do
+            case "$arg" in
+            'news') sync_news_db ;;
+            'packages') sync_package_db ;;
+            'updates') sync_updates_db ;;
+            *) exit 3 ;;
+            esac
+        done
+        exit 2
+    fi
+
+    # Start kitty & exit
     if [ "$1" = '--kitty' ] || [ "$1" = '-k' ]; then
         shift # Shift argument to next
         # Start kitty if not already present
@@ -151,12 +172,13 @@ main() {
 
 trap_exit() {
     rm -rf "$ARCH_OS_TMP"
-    [ "$1" != "2" ] && [ "$1" != "3" ] && [ "$1" != "130" ] && gum_confirm_continue
-    return "$1"
+    [ "$1" != 2 ] && [ "$1" != 3 ] && [ "$1" != 130 ] && gum_confirm_continue
+    [ "$1" = 2 ] && exit 0
+    exit "$1"
 }
 
 trap_error() {
-    [ "$1" != "2" ] && [ "$1" != "3" ] && [ "$1" != "130" ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
+    [ "$1" != 2 ] && [ "$1" != 3 ] && [ "$1" != 130 ] && gum_fail "${BASH_COMMAND} failed ($1) in function '${2}' (line ${3})"
     return "$1"
 }
 
@@ -166,19 +188,16 @@ trap_error() {
 
 init_properties() {
 
-    # Create working dirs
-    mkdir -p "$ARCH_OS_HOME"
-    mkdir -p "$ARCH_OS_TMP"
-    mkdir -p "${ARCH_OS_HOME}/config"
-    mkdir -p "${ARCH_OS_HOME}/database"
-
     # Migrate: < 1.5.5
     [ -f "${ARCH_OS_HOME}/arch-os.conf" ] && mv -f "${ARCH_OS_HOME}/arch-os.conf" "${ARCH_OS_HOME}/settings.conf"
     [ -f "${ARCH_OS_HOME}/kitty.conf" ] && mv -f "${ARCH_OS_HOME}/kitty.conf" "${ARCH_OS_HOME}/config/kitty.conf"
     [ -f "${ARCH_OS_HOME}/packages.db" ] && mv -f "${ARCH_OS_HOME}/packages.db" "${ARCH_OS_HOME}/database/packages.db"
     [ -f "${ARCH_OS_HOME}/news.db" ] && mv -f "${ARCH_OS_HOME}/news.db" "${ARCH_OS_HOME}/database/news.db"
+
     # Migrate: < 1.5.7
     [ -f "${ARCH_OS_HOME}/settings.conf" ] && mv -f "${ARCH_OS_HOME}/settings.conf" "${ARCH_OS_HOME}/config/settings.conf"
+
+    # -------------------------------------------------------------------
 
     # Source config
     touch "$ARCH_OS_CONF"
@@ -212,7 +231,6 @@ init_properties() {
 
     # Toggle settings
     if [ "$AUTOSTART_NOTIFY" = "true" ]; then
-        mkdir -p "${HOME}/.config/autostart"
         {
             echo "[Desktop Entry]"
             echo "Type=Application"
@@ -273,14 +291,17 @@ sync_updates_db() {
 
 sync_news_db() {
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ]; then
-        gum_spin --title 'Synchronize News Database ...' -- bash -c "curl -sf https://archlinux.org/feeds/news/ >${NEWS_DB}" || return 1
+        curl -sf https://archlinux.org/feeds/news/ >"$NEWS_DB"
     fi
     return 0
 }
 
 sync_package_db() {
     local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
-    gum_spin --title 'Synchronize Package Database ...' -- bash -c "${pkg_manager} -Slq >${PACKAGES_DB}; sort ${PACKAGES_DB} | uniq > ${PACKAGES_DB}.trim; mv ${PACKAGES_DB}.trim ${PACKAGES_DB}" || return 1
+    $pkg_manager -Slq >"$PACKAGES_DB"
+    sort "$PACKAGES_DB" | uniq >"${PACKAGES_DB}.trim"
+    mv "${PACKAGES_DB}.trim" "$PACKAGES_DB"
+    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -288,14 +309,9 @@ sync_package_db() {
 # ///////////////////////////////////////////////////////////////////
 
 action_check_updates_available() { # Check & print package updates
-
     # Check if updates available
     sync_updates_db && [ ! -s "$UPDATES_DB" ] && return 3
-
-    # Print updates in checkupdates format
-    # g = green
-    # b = bold
-    # r = reset
+    # Print updates in checkupdates format (g = green | b = bold | r = reset)
     while IFS=',' read -r manager package_name current_version new_version; do
         echo "${package_name} ${current_version} ${new_version}" |
             awk -v r="$(tput sgr0 2>/dev/null)" \
@@ -330,6 +346,9 @@ action_notify_updates() { # Notify on new updates
 # INFO FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
+print_system_log_info() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk '{$1=$1; print}' "$ARCH_OS_BLACKLIST"); }
+print_service_info() { systemctl --failed | grep -q 'failed' && systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; }
+
 show_news_info() { # Show Arch Linux News
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
 
@@ -339,7 +358,7 @@ show_news_info() { # Show Arch Linux News
 
         # Print news
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            gum_mesg "$(print_news_date "$i") | $(print_news_title "$i")"
+            gum_content "$(print_news_date "$i") | $(print_news_title "$i")"
         done
     fi
     return 0
@@ -370,13 +389,13 @@ show_update_info() { # Show package updates
         local reset="\033[0m"
         local bold="\033[1m"
         local green="\033[32m"
-        printf " • ${bold}%-${1}s  ${reset}(%-${2}s)  %-${3}s  ${bold}%-3s  ${green}%-${4}s${reset}\n" \
-            "$5" "$6" "$7" "➜" "$8"
+        printf " • ${bold}%-${2}s  ${reset}%-${4}s  %-3s  ${bold}${green}%-${6}s  ${reset}${bold}%-s  ${reset}%-${8}s\n" \
+            "$1" "$3" "➜" "$5" "∷" "$7" # ⟲ ⥄ ⇦ ➤ ➜ ≣
     }
 
     # Print updates
     while IFS=',' read -r manager package version update; do
-        format_row "$pkg_length" "$manager_length" "$version_length" "$update_length" "$package" "$manager" "$version" "$update"
+        format_row "$package" "$pkg_length" "$version" "$version_length" "$update" "$update_length" "$manager" "$manager_length"
     done <"$UPDATES_DB"
 }
 
@@ -436,6 +455,22 @@ show_health_info() { # Show system health information
     else
         gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
     fi
+
+    # System Failure
+    log_count=$(print_system_log_info | wc -l)
+    if [ "$log_count" -gt "0" ]; then
+        gum_key_value_yellow "System Failure" "${log_count}"
+    else
+        gum_key_value_green "System Failure" "${log_count}"
+    fi
+
+    # Service Failure
+    service_count=$(print_service_info | wc -l)
+    if [ "$service_count" -gt "0" ]; then
+        gum_key_value_red "Service Failure" "${service_count}"
+    else
+        gum_key_value_green "Service Failure" "${service_count}"
+    fi
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -443,31 +478,32 @@ show_health_info() { # Show system health information
 # ///////////////////////////////////////////////////////////////////
 
 show_system_info() { # System info
-    local options user_input logs
+    local options user_input system_logs system_services
+    gum_title "System Information"
 
     # Sync db
-    [ ! -f "$PACKAGES_DB" ] && ! sync_package_db && gum_fail "Synchronize Package Database failed"
-    ! gum_spin --title 'Synchronize Update Database ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
+    local sync_actions=() && sync_actions+=(updates) && [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
+
+    ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database failed" && return 3
 
     # Show system logs
-    gum_title "System Logs"
-    # Show logs (remove blacklist entries and trim spaces with awk)
-    logs=$(journalctl -p 3 -b --quiet --no-pager | grep -vf <(awk '{$1=$1; print}' "$ARCH_OS_BLACKLIST"))
-    if [ -n "$logs" ]; then
-        gum_red "$logs"
+    system_logs=$(print_system_log_info)
+    if [ -n "$system_logs" ]; then
+        echo -e "$system_logs" | while read -r line; do gum_log_fail "$line"; done
     else
-        gum_info "No System Logs available"
+        gum_log_info "No System Logs available"
     fi
 
-    # Show service logs
-    echo && gum_title "Service Logs"
-    if systemctl --failed | grep -q 'failed'; then
-        systemctl --failed
+    # Show service health
+    echo && gum_title "Service Information"
+    system_services=$(print_service_info)
+    if [ -n "$system_services" ]; then
+        echo -e "$system_services" | while read -r line; do gum_log_fail "${line} failed"; done
     else
-        gum_info "No Service Logs available"
+        gum_log_info "Services are healthy"
     fi
 
-    # Show health
+    # Show system health
     echo && show_health_info
 
     # Show menu
@@ -480,7 +516,7 @@ show_system_info() { # System info
         local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
         # Open editor with count of properties + 2
         # BUG: gum write does not accept height greater than 7
-        if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+        if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
             # If success: save/move file, remove spaces and re-init properties
             awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
             rm -f "${ARCH_OS_BLACKLIST}.new"
@@ -605,10 +641,8 @@ show_search() { # Search & manage packages
 show_upgrade() { # Update packages
 
     # Sync db
-    [ ! -f "$PACKAGES_DB" ] && ! sync_package_db && gum_fail "Synchronize Package Database failed"
-    # Preload update infos and force return 0. Cancel if user press ctrl + c
-    ! gum_spin --title 'Checking Package Updates ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
-    ! sync_news_db && gum_fail "Synchronize News Database failed"
+    local sync_actions=() && sync_actions+=(updates) && sync_actions+=(news) && [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
+    ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database failed" && return 3
 
     # Show infos
     show_news_info || return $?
@@ -636,17 +670,18 @@ show_upgrade() { # Update packages
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
                 ! gum_spin --title 'Upgrading Flatpak Apps ...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
             else # Do Interactive flatpak update
-                gum_mesg_bold "Upgrading Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
+                gum_mesg "Upgrading Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
             fi
-            gum_mesg_bold "Flatpak Upgrade finished"
+            gum_mesg "Flatpak Upgrade finished"
         else # Up to date
-            gum_mesg_bold "Flatpak is up to date"
+            gum_mesg "Flatpak is up to date"
         fi
     fi
 
-    # Resync db
-    ! sync_package_db && gum_fail "Synchronize Package Database failed" # Resync packages
-    ! gum_spin --title 'Synchronize Update Database ...' -- bash -c "${SELF} check &> /dev/null; exit 0" && gum_fail "Synchronize Update Database failed" && return 3
+    # Resync packages & updates db
+    ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
+
+    # Finish
     gum_info "System Upgrade finished"
     echo # Print new line
     show_health_info || return $?
@@ -659,14 +694,14 @@ show_upgrade() { # Update packages
 
 show_orphans() { # Remove orphaned packages
     gum_title "Remove Package Orphans"
-    ! gum_confirm "" && return 2
+    ! gum_confirm "Continue?" && return 2
     local pkg_manager_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Remove pacman orphans
     # shellcheck disable=SC2046
     if /usr/bin/pacman -Qtdq &>/dev/null; then
         ! sudo /usr/bin/pacman -Rns "${pkg_manager_args[@]}" $(/usr/bin/pacman -Qtdq) && gum_fail "Remove System Orphans failed" && return 3
     else
-        gum_mesg_bold "No orphaned system packages found"
+        gum_mesg "No orphaned system packages found"
     fi
     # Remove pacman orphans (alternative)
     #! sudo /usr/bin/pacman -Rsu --noconfirm $(/usr/bin/pacman -Qqd) 2>/dev/null && gum_fail "Failed" && return 3
@@ -674,9 +709,9 @@ show_orphans() { # Remove orphaned packages
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
             ! gum_spin --title 'Removing Flatpak Orphans ...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 3
-            gum_mesg_bold "Remove Flatpak Orphans finished"
+            gum_mesg "Remove Flatpak Orphans finished"
         else # Do Interactive flatpak orphans
-            gum_mesg_bold "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 3
+            gum_mesg "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 3
         fi
     fi
     gum_info "Done"
@@ -690,7 +725,7 @@ show_orphans() { # Remove orphaned packages
 show_merge() { # Merge updated config files
     if ! command -v /usr/bin/pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         gum_title "Install Pacdiff Tools"
-        ! gum_confirm "" && return 2
+        ! gum_confirm "Continue?" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         ! sudo /usr/bin/pacman -Sq --needed "${pkg_manager_args[@]}" meld && gum_warn "Canceled" && return 3
@@ -701,7 +736,7 @@ show_merge() { # Merge updated config files
         clear_screen && print_header # Clean install output & print new header
     fi
     gum_title "Merge Configuration Updates"
-    ! gum_confirm "" && return 2
+    ! gum_confirm "Continue?" && return 2
     local pacdiff_info && pacdiff_info="$(pacdiff -o)"
     # Check if up to date and return
     [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
@@ -719,14 +754,14 @@ show_merge() { # Merge updated config files
 show_refresh() { # Refresh mirrorlist with reflector
     if ! command -v /usr/bin/reflector &>/dev/null; then
         gum_title "Install Reflector"
-        ! gum_confirm "" && return 2
+        ! gum_confirm "Continue?" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         ! sudo /usr/bin/pacman -Sq --needed "${pkg_manager_args[@]}" reflector && gum_warn "Canceled" && return 3
         clear_screen && print_header # Clean install output & print new header
     fi
     gum_title "Refresh Pacman Mirrorlist"
-    ! gum_confirm "" && return 2
+    ! gum_confirm "Continue?" && return 2
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector ...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
     cat "$MIRRORLIST_TMP"
@@ -746,7 +781,7 @@ show_downgrade() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         [ "$AUR_SUPPORT" = "false" ] && gum_fail "AUR Helper is missing. The package 'downgrade' can not be installed" && return 3
         gum_title "Install Downgrade"
-        ! gum_confirm "" && return 2
+        ! gum_confirm "Continue?" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
@@ -773,7 +808,7 @@ show_downgrade() { # Downgrade packages
 
 show_reset_keyring() { # Keyring reset (if update failed, try to reset & reinit keyring)
     gum_title "Reset Pacman Keyring"
-    ! gum_confirm "" && return 2
+    ! gum_confirm "Continue?" && return 2
     sudo rm -f /var/lib/pacman/db.lck # Remove pacman lock if exists
     # Keyring reset
     ! sudo rm -rf /etc/pacman.d/gnupg && gum_fail "Failed" && return 3
@@ -797,11 +832,10 @@ show_settings() { # Settings
     local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
     # Open editor with count of properties + 2
     # BUG: gum write does not accept height greater than 7
-    if gum_write --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+    if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
-        ! sync_news_db && gum_fail "Synchronize News Database failed"
-        ! sync_package_db && gum_fail "Synchronize Package Database failed"
+        ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync news packages" && gum_fail "Synchronize Database failed" && return 3
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
@@ -885,7 +919,16 @@ print_filled_space() {
 # GUM FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
+# Wrapper
 gum() { /usr/bin/gum "$@"; }
+gum_style() { gum style "${@}"; }
+gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_write() { gum write --width="120" --char-limit 0 "${@}"; }
+gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
+gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
+gum_spin() { gum spin --spinner dot "${@}"; }
+gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue ..." | cat >/dev/null; }
+gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 
 # Colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
@@ -895,28 +938,22 @@ gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 # Print
-gum_title() { gum_purple --bold "// ${*}"; }
-gum_info() { gum_green --bold " • ${*}"; }
-gum_warn() { gum_yellow --bold " • ${*}"; }
-gum_fail() { gum_red --bold " • ${*}"; }
-gum_mesg_bold() { gum_white --bold " • ${*}"; }
-gum_mesg() { gum_white " • ${*}"; }
-gum_content() { gum_white "   ${*}"; }
+gum_title() { gum join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
+gum_info() { gum join "$(gum_green --bold " • ")" "$(gum_green --bold "${*}")"; }
+gum_warn() { gum join "$(gum_yellow --bold " • ")" "$(gum_yellow --bold "${*}")"; }
+gum_fail() { gum join "$(gum_red --bold " • ")" "$(gum_red --bold "${*}")"; }
+gum_mesg() { gum join "$(gum_white --bold " • ")" "$(gum_white --bold "${*}")"; }
+gum_content() { gum join "$(gum_white " • ")" "$(gum_white "${*}")"; }
 
-# Wrapper
-gum_style() { gum style "${@}"; }
-gum_filter() { gum filter --width="80" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
-gum_write() { gum write --width="80" --char-limit 0 "${@}"; }
-gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
-gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
-gum_spin() { gum spin --spinner dot "${@}"; }
-gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue ..." | cat >/dev/null; }
-gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
+# Log
+gum_log_info() { gum join "$(gum_green --bold " • ")" "$(gum_white "${*}")"; }
+gum_log_fail() { gum join "$(gum_red --bold " • ")" "$(gum_white --bold "${*}")"; }
 
 # Key & value
-gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
-gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
-gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • $(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
+gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_GREEN}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_YELLOW}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_RED}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_RED}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS
@@ -930,7 +967,7 @@ kitty() {
 # https://sw.kovidgoyal.net/kitty/conf/
 kitty_conf_template='
 hide_window_decorations yes
-remember_window_size false
+remember_window_size true
 initial_window_width 1080
 initial_window_height 720
 placement_strategy center
