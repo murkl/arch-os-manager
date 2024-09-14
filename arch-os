@@ -356,6 +356,9 @@ print_service_info() { systemctl --failed | grep -q 'failed' && systemctl --fail
 show_news_info() { # Show Arch Linux News
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
 
+        # Sync db
+        ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news" && gum_fail "Synchronize Database (news) failed" && return 3
+
         # Helper functions
         print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
         print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
@@ -372,6 +375,9 @@ show_news_info() { # Show Arch Linux News
 
 show_update_info() { # Show package updates
     gum_title "Update Information"
+
+    # Sync db
+    ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync updates" && gum_fail "Synchronize Database (updates) failed" && return 3
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -400,6 +406,12 @@ show_update_info() { # Show package updates
 
 show_health_info() { # Show system health information
     gum_title "System Health"
+
+    # Sync db
+    local sync_actions=()
+    [ "$1" = "--sync-updates" ] && sync_actions+=(updates)
+    [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
+    [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database (updates, packages) failed" && return 3
 
     # Package info
     gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
@@ -478,11 +490,6 @@ show_system_info() { # System info
     local options user_input system_logs system_services
     gum_title "System Information"
 
-    # Sync db
-    local sync_actions=() && sync_actions+=(updates) && [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
-
-    ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database failed" && return 3
-
     # Show system logs
     system_logs=$(print_system_log_info)
     if [ -n "$system_logs" ]; then
@@ -501,7 +508,7 @@ show_system_info() { # System info
     fi
 
     # Show system health
-    echo && show_health_info
+    echo && show_health_info --sync-updates
 
     # Show menu
     echo && gum_title "Options"
@@ -544,6 +551,10 @@ show_search() { # Search & manage packages
     local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
         print_header && gum_title "Package Information"
+
+        # Sync db
+        [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages" && gum_fail "Synchronize Database (packages) failed" && return 3
+
         # If pkg name is null (first run) show search promt
         [ -z "$pkg_name" ] && ! pkg_name=$(gum_filter --limit 1 --height "20" --placeholder "Search package..." <"$PACKAGES_DB") && return 2
 
@@ -637,10 +648,6 @@ show_search() { # Search & manage packages
 
 show_upgrade() { # Update packages
 
-    # Sync db
-    local sync_actions=() && sync_actions+=(updates) && sync_actions+=(news) && [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
-    ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database failed" && return 3
-
     # Show infos
     show_news_info || return $?
     echo && show_update_info || return $?
@@ -665,7 +672,7 @@ show_upgrade() { # Update packages
         # Check if flatpak updates available
         if [ -n "$(flatpak remote-ls --updates)" ]; then
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
-                ! gum_spin --title 'Upgrading Flatpak Apps ...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
+                ! gum_spin --title 'Upgrading Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
             else # Do Interactive flatpak update
                 gum_mesg "Upgrading Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
             fi
@@ -676,7 +683,7 @@ show_upgrade() { # Update packages
     fi
 
     # Resync packages & updates db
-    ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
+    ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
 
     # Finish
     gum_info "System Upgrade finished"
@@ -704,7 +711,7 @@ show_orphans() { # Remove orphaned packages
     # Remove unused flatpaks
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
-            ! gum_spin --title 'Removing Flatpak Orphans ...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 3
+            ! gum_spin --title 'Removing Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 3
             gum_mesg "Remove Flatpak Orphans finished"
         else # Do Interactive flatpak orphans
             gum_mesg "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 3
@@ -728,6 +735,8 @@ show_merge() { # Merge updated config files
         # Hide meld app
         if gum_confirm "Hide App Icon in GNOME Menu?"; then
             echo -e '[Desktop Entry]\nType=Application\nHidden=true' >"${HOME}/.local/share/applications/org.gnome.Meld.desktop"
+        else
+            rm -f "${HOME}/.local/share/applications/org.gnome.Meld.desktop"
         fi
         clear_screen && print_header # Clean install output & print new header
     fi
@@ -759,7 +768,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     gum_title "Refresh Pacman Mirrorlist"
     ! gum_confirm "Continue?" && return 2
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    ! gum_spin --title 'Waiting for Reflector ...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
+    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
     cat "$MIRRORLIST_TMP"
     echo && ! gum_confirm "Save Mirrorlist?" && return 2
     # Save mirrorlist and set correct permissions
@@ -787,7 +796,7 @@ show_downgrade() { # Downgrade packages
     gum_title "Downgrade Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "20" --placeholder "Type to filter and toggle with CTRL + Space ..." "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "20" --placeholder "Type to filter and toggle with CTRL + Space..." "${options[@]}") && return 2
     [ -z "$user_input" ] && gum_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
@@ -831,7 +840,7 @@ show_settings() { # Settings
     if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
-        ! gum_spin --title 'Synchronize Database ...' -- bash -c "${SELF} --sync news packages" && gum_fail "Synchronize Database failed" && return 3
+        ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news packages" && gum_fail "Synchronize Database failed" && return 3
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
@@ -923,7 +932,7 @@ gum_write() { gum write --width="120" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
-gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue ..." | cat >/dev/null; }
+gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null; }
 gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 
 # Colors
