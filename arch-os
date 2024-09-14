@@ -111,7 +111,7 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             clear_screen && print_header
             local user_input options
-            options=("System Info" "Search Package" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Reset Pacman" "Settings" "Help" "Quit")
+            options=("System Info" "Search Package" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'System Info') selected_action='info' ;;
@@ -121,6 +121,7 @@ main() {
             'Merge Configurations') selected_action='merge' ;;
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
+            'Clear Cache') selected_action='cache' ;;
             'Reset Pacman') selected_action='reset' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
@@ -141,6 +142,7 @@ main() {
         'merge') { print_header && show_merge; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'refresh') { print_header && show_refresh; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'downgrade') { print_header && show_downgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'cache') { print_header && show_clear_cache; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'reset') { print_header && show_reset_keyring; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'settings') { print_header && show_settings; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -846,6 +848,18 @@ show_downgrade() { # Downgrade packages
 }
 
 # ///////////////////////////////////////////////////////////////////
+# CLEAR CACHE
+# ///////////////////////////////////////////////////////////////////
+
+show_clear_cache() { # Clear package manager cache
+    gum_title "Clear Package Manager Cache"
+    ! gum_confirm "Continue?" && return 2
+    local pkg_manager="sudo /usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
+    $pkg_manager -Scc
+    return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
 # RESET KEYRING
 # ///////////////////////////////////////////////////////////////////
 
@@ -896,18 +910,19 @@ show_help() { # Print help page
     gum_white 'arch-os [--kitty | -k]              Open main menu'
     gum_white 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
     gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates'
-    gum_white 'arch-os [--kitty | -k] settings     Edit settings'
-    gum_white 'arch-os [--kitty | -k] version      Print Arch OS Manager version'
+    gum_white 'arch-os [--kitty | -k] settings     Edit settings in built-in ediitor'
+    gum_white 'arch-os [--kitty | -k] version      Print version info'
     gum_white 'arch-os [--kitty | -k] help         Open help page' && echo
     gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] info         Show system logs'
+    gum_white 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
     gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
-    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)'
+    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
     gum_white 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
     gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
-    gum_white 'arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)'
+    gum_white 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
+    gum_white 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)'
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -994,7 +1009,7 @@ gum_log_info() { gum join "$(gum_green --bold " • ")" "$(gum_white "${*}")"; }
 gum_log_fail() { gum join "$(gum_red --bold " • ")" "$(gum_white --bold "${*}")"; }
 
 # Unread
-gum_unread() { gum join "$(gum_white --bold " • ${1} : ")" "$(gum_yellow --bold "${2}")"; }
+gum_unread() { gum join "$(gum_yellow --bold " • ${1} : ")" "$(gum_yellow --bold "${2}")"; }
 
 # Key & value
 gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }

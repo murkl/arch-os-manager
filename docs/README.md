@@ -52,8 +52,9 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ## Features
 
 - Check and list updates in _checkupdates_ format
+- System health info
 - Startup notify on available updates
-- Show latest Arch Linux news
+- Notify & show latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search and manage packages
 - Show system info, packages & logs
@@ -75,20 +76,24 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 ## Usage
 
 ```
+// App
 arch-os [--kitty | -k]              Open main menu
+arch-os [--kitty | -k] check        Print package updates like checkupdates
+arch-os [--kitty | -k] notify       Notify on new package updates
+arch-os [--kitty | -k] settings     Edit settings in built-in ediitor
+arch-os [--kitty | -k] version      Print version info
 arch-os [--kitty | -k] help         Open help page
-arch-os [--kitty | -k] version      Print Arch OS Manager version
-arch-os [--kitty | -k] settings     Edit settings
-arch-os [--kitty | -k] info         Show system logs
+
+// Actions
+arch-os [--kitty | -k] info         Show system info (logs, services, health)
 arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
-arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)
+arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)
 arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
 arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)
 arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)
 arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)
-arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)
-arch-os [--kitty | -k] notify       Notify on new package updates
-arch-os [--kitty | -k] check        Print package updates like checkupdates
+arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)
+arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)
 ```
 
 ## Settings
