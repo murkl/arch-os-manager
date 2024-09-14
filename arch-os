@@ -27,6 +27,7 @@ ARCH_OS_KITTY_CONF="${ARCH_OS_HOME}/config/kitty.conf"
 PACKAGES_DB="${ARCH_OS_HOME}/database/packages.db"
 NEWS_DB="${ARCH_OS_HOME}/database/news.db"
 UPDATES_DB="${ARCH_OS_HOME}/database/updates.db"
+STATE_DB="${ARCH_OS_HOME}/database/state.db"
 
 # TEMP
 ARCH_OS_TMP="$(mktemp -d "/tmp/arch-os.XXXXXXX")"
@@ -66,8 +67,8 @@ main() {
     mkdir -p "${ARCH_OS_HOME}/database"
     mkdir -p "${HOME}/.config/autostart"
 
-    # Create & source properties
-    init_properties &>/dev/null
+    # Init state & init properties
+    init_state && init_properties &>/dev/null
 
     # Sync database & exit
     if [ "$1" = '--sync' ]; then
@@ -183,6 +184,26 @@ trap_error() {
 }
 
 # ///////////////////////////////////////////////////////////////////
+# STATE FUNCTIONS
+# ///////////////////////////////////////////////////////////////////
+
+init_state() {
+    touch "$STATE_DB" && source "$STATE_DB" && perist_state && return 0
+    return 1
+}
+
+perist_state() {
+    { # Write state.db
+        echo "LATEST_UPDATE_CHECK=\"${LATEST_UPDATE_CHECK}\""
+        echo "LATEST_SYSTEM_UPGRADE=\"${LATEST_SYSTEM_UPGRADE}\""
+        echo "LATEST_NEWS_DATE=\"${LATEST_NEWS_DATE}\""
+    } >"$STATE_DB" && return 0
+    return 1
+}
+
+print_timestamp() { date +"%Y-%m-%d %H:%M:%S"; }
+
+# ///////////////////////////////////////////////////////////////////
 # PROPERTIES FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
@@ -288,6 +309,9 @@ sync_updates_db() {
             echo "$line" | awk '{print "flatpak," $1 "," $2 "," ($3 == "" ? "latest" : $3)}' >>"$UPDATES_DB"
         done < <(flatpak remote-ls --updates --columns=application,version,branch | tail -n +1)
     fi
+
+    # Persist state
+    LATEST_UPDATE_CHECK="$(print_timestamp)" && perist_state
     return 0
 }
 
@@ -356,17 +380,29 @@ print_service_info() { systemctl --failed | grep -q 'failed' && systemctl --fail
 show_news_info() { # Show Arch Linux News
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ] && gum_title "Arch Linux News"; then
 
+        # Helper functions
+        print_news_date() { echo -n "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$1]/pubDate)" - | date -f - "+%Y/%m/%d"; }
+        print_news_title() { echo -n "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$1]/title)" -; }
+        print_news_url() { echo -n "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$1]/link)" - | xargs; }
+
         # Sync db
         ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news" && gum_fail "Synchronize Database (news) failed" && return 3
 
-        # Helper functions
-        print_news_date() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/pubDate)" - | date -f - "+%Y/%m/%d"; }
-        print_news_title() { echo "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$i]/title)" -; }
+        # Check unread news
+        local unread_news="false" && [ "$LATEST_NEWS_DATE" != "$(print_news_date 1)" ] && unread_news="true"
 
         # Print news
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
+            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && gum_content_strong "$(print_news_date "$i") | $(print_news_title "$i")" && continue
             gum_content "$(print_news_date "$i") | $(print_news_title "$i")"
         done
+
+        if [ $unread_news = "true" ]; then
+            echo && gum_title "Unread News"
+            gum_unread "$(print_news_date 1)" "$(print_news_url 1)"
+            ! gum_confirm "Have you read the News?" && return 0
+            LATEST_NEWS_DATE="$(print_news_date 1)" && perist_state
+        fi
     fi
     return 0
 }
@@ -686,6 +722,8 @@ show_upgrade() { # Update packages
     ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
 
     # Finish
+    # Persist state
+    LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && perist_state
     gum_info "System Upgrade finished"
     echo # Print new line
     show_health_info || return $?
@@ -949,10 +987,14 @@ gum_warn() { gum join "$(gum_yellow --bold " • ")" "$(gum_yellow --bold "${*}"
 gum_fail() { gum join "$(gum_red --bold " • ")" "$(gum_red --bold "${*}")"; }
 gum_mesg() { gum join "$(gum_white --bold " • ")" "$(gum_white --bold "${*}")"; }
 gum_content() { gum join "$(gum_white " • ")" "$(gum_white "${*}")"; }
+gum_content_strong() { gum join "$(gum_green " • ")" "$(gum_white --bold "${*}")"; }
 
 # Log
 gum_log_info() { gum join "$(gum_green --bold " • ")" "$(gum_white "${*}")"; }
 gum_log_fail() { gum join "$(gum_red --bold " • ")" "$(gum_white --bold "${*}")"; }
+
+# Unread
+gum_unread() { gum join "$(gum_white --bold " • ${1} : ")" "$(gum_yellow --bold "${2}")"; }
 
 # Key & value
 gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
