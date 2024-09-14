@@ -371,11 +371,12 @@ action_notify_updates() { # Notify on new updates
 }
 
 # ///////////////////////////////////////////////////////////////////
-# INFO FUNCTIONS
+#  PRINT INFO FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
 
-print_system_log_info() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
-print_service_info() { systemctl --failed | grep -q 'failed' && systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; }
+print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
+print_service_running() { systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line}"; done; }
+print_service_failed() { if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; fi; }
 
 # -------------------------------------------------------------------
 
@@ -457,6 +458,12 @@ show_health_info() { # Show system health information
     # flatpak list --columns=application | tail -n +1 | wc -l
     [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
 
+    # Services count
+    gum_key_value_white "Running Services" "$(systemctl list-units --type=service --state=running --plain --no-legend | wc -l)"
+
+    # Gnome extensions count
+    command -v /usr/bin/gnome-extensions &>/dev/null && gum_key_value_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
+
     # Check pending updates
     local pending_updates=0
     [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
@@ -504,7 +511,7 @@ show_health_info() { # Show system health information
     fi
 
     # System Failure
-    log_count=$(print_system_log_info | wc -l)
+    log_count=$(print_system_error_logs | wc -l)
     if [ "$log_count" -gt "0" ]; then
         gum_key_value_yellow "System Failure" "${log_count}"
     else
@@ -512,7 +519,7 @@ show_health_info() { # Show system health information
     fi
 
     # Service Failure
-    service_count=$(print_service_info | wc -l)
+    service_count=$(print_service_failed | wc -l)
     if [ "$service_count" -gt "0" ]; then
         gum_key_value_red "Service Failure" "${service_count}"
     else
@@ -529,7 +536,7 @@ show_system_info() { # System info
     gum_title "System Information"
 
     # Show system logs
-    system_logs=$(print_system_log_info)
+    system_logs=$(print_system_error_logs)
     if [ -n "$system_logs" ]; then
         echo -e "$system_logs" | while read -r line; do gum_log_fail "$line"; done
     else
@@ -538,11 +545,12 @@ show_system_info() { # System info
 
     # Show service health
     echo && gum_title "Service Information"
-    system_services=$(print_service_info)
-    if [ -n "$system_services" ]; then
-        echo -e "$system_services" | while read -r line; do gum_log_fail "${line} failed"; done
-    else
-        gum_log_info "Services are healthy"
+    print_service_running | while read -r line; do gum_log_info "${line}"; done
+
+    # Failed services
+    services_failed=$(print_service_failed)
+    if [ -n "$services_failed" ]; then
+        echo -e "$services_failed" | while read -r line; do gum_log_fail "${line}"; done
     fi
 
     # Show system health
@@ -1013,9 +1021,9 @@ gum_unread() { gum join "$(gum_yellow --bold " • ${1} : ")" "$(gum_yellow --bo
 
 # Key & value
 gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
-gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_GREEN}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
-gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_YELLOW}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
-gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_RED}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_RED}" "${2}")"; }
+gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_GREEN}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_YELLOW}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_RED}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_RED}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS
