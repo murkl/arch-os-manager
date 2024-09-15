@@ -86,8 +86,8 @@ arch-os [--kitty | -k] version      Print version info
 arch-os [--kitty | -k] help         Open help page
 
 // Actions
-arch-os [--kitty | -k] info         Show system info (logs, services, health)
 arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
+arch-os [--kitty | -k] info         Show system info (logs, services, health)
 arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)
 arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
 arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)

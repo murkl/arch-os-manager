@@ -111,11 +111,11 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             clear_screen && print_header
             local user_input options
-            options=("System Info" "Search Package" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
+            options=("Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
-            'System Info') selected_action='info' ;;
             'Search Package') selected_action='search' ;;
+            'System Info') selected_action='info' ;;
             'Upgrade System') selected_action='upgrade' ;;
             'Remove Orphans') selected_action='orphans' ;;
             'Merge Configurations') selected_action='merge' ;;
@@ -135,8 +135,8 @@ main() {
         # Execute action
         local skip_confirm="false"
         case "$selected_action" in # Execute action
-        'info') { print_header && show_system_info; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'search') { print_header && show_search; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'info') { print_header && show_system_info; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'upgrade') { print_header && show_upgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'orphans') { print_header && show_orphans; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'merge') { print_header && show_merge; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -529,62 +529,6 @@ show_health_info() { # Show system health information
 }
 
 # ///////////////////////////////////////////////////////////////////
-# SYSTEM INFO
-# ///////////////////////////////////////////////////////////////////
-
-show_system_info() { # System info
-    local options user_input system_logs
-    gum_title "System Information"
-
-    # Show system logs
-    system_logs=$(print_system_error_logs)
-    if [ -n "$system_logs" ]; then
-        local log_counter=0
-        echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
-    else
-        gum_log_info "No System Logs available"
-    fi
-
-    # Show service health
-    echo && gum_title "Service Information"
-    print_service_running | while read -r line; do gum_log_info "${line}"; done
-
-    # Failed services
-    services_failed=$(print_service_failed)
-    if [ -n "$services_failed" ]; then
-        echo -e "$services_failed" | while read -r line; do gum_log_fail "${line}"; done
-    fi
-
-    # Show system health
-    echo && show_health_info --sync-updates
-
-    # Show menu
-    echo && gum_title "Options"
-    options=("Edit Blacklist" "Done")
-    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || return 2
-    case "$user_input" in
-    'Edit Blacklist')
-        clear_screen && print_header && gum_title "Edit Blacklist"
-        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
-        # Open editor with count of properties + 2
-        # BUG: gum write does not accept height greater than 7
-        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
-            # If success: save/move file, remove spaces and re-init properties
-            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
-            rm -f "${ARCH_OS_BLACKLIST}.new"
-            gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
-        else
-            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
-            gum_warn "Canceled" && return 3
-        fi
-        ;;
-    'Done') return 2 ;;
-    *) gum_fail "Option '${user_input}' not available" && return 3 ;;
-    esac
-    return 0
-}
-
-# ///////////////////////////////////////////////////////////////////
 # SEARCH
 # ///////////////////////////////////////////////////////////////////
 
@@ -628,7 +572,7 @@ show_search() { # Search & manage packages
             gum_info "Search: ${user_input}"
 
             # Filter results
-            local filter_pkgs_results && filter_pkgs_results="$(list_results "$user_input")"
+            local filter_pkgs_results && filter_pkgs_results=$(list_results "$user_input" | tac)
             [ -z "$filter_pkgs_results" ] && gum_warn "No Results" && return 3
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
@@ -727,6 +671,62 @@ show_search() { # Search & manage packages
         gum_confirm_continue
         clear_screen
     done
+    return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
+# SYSTEM INFO
+# ///////////////////////////////////////////////////////////////////
+
+show_system_info() { # System info
+    local options user_input system_logs
+    gum_title "System Information"
+
+    # Show system logs
+    system_logs=$(print_system_error_logs)
+    if [ -n "$system_logs" ]; then
+        local log_counter=0
+        echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
+    else
+        gum_log_info "No System Logs available"
+    fi
+
+    # Show service health
+    echo && gum_title "Service Information"
+    print_service_running | while read -r line; do gum_log_info "${line}"; done
+
+    # Failed services
+    services_failed=$(print_service_failed)
+    if [ -n "$services_failed" ]; then
+        echo -e "$services_failed" | while read -r line; do gum_log_fail "${line}"; done
+    fi
+
+    # Show system health
+    echo && show_health_info --sync-updates
+
+    # Show menu
+    echo && gum_title "Options"
+    options=("Edit Blacklist" "Done")
+    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || return 2
+    case "$user_input" in
+    'Edit Blacklist')
+        clear_screen && print_header && gum_title "Edit Blacklist"
+        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
+        # Open editor with count of properties + 2
+        # BUG: gum write does not accept height greater than 7
+        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+            # If success: save/move file, remove spaces and re-init properties
+            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
+            rm -f "${ARCH_OS_BLACKLIST}.new"
+            gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
+        else
+            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
+            gum_warn "Canceled" && return 3
+        fi
+        ;;
+    'Done') return 2 ;;
+    *) gum_fail "Option '${user_input}' not available" && return 3 ;;
+    esac
     return 0
 }
 
@@ -964,8 +964,8 @@ show_help() { # Print help page
     gum_white 'arch-os [--kitty | -k] version      Print version info'
     gum_white 'arch-os [--kitty | -k] help         Open help page' && echo
     gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
     gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
+    gum_white 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
     gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
     gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
