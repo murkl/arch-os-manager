@@ -50,6 +50,9 @@ COLOR_RED=1
 
 main() {
 
+    # Init properties
+    init_properties
+
     # Install
     [ "$1" = '--install' ] && {
         install_script_dependencies && exit 0
@@ -74,7 +77,7 @@ main() {
     mkdir -p "${HOME}/.config/autostart"
 
     # Init state & init properties
-    init_state && init_properties
+    init_state && persist_properties
 
     # Sync database & exit
     if [ "$1" = '--sync' ]; then
@@ -238,6 +241,7 @@ init_properties() {
     # Set default properties
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
     [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="60"
+    [ -z "$AUR_MANGER_REPO" ] && AUR_MANGER_REPO="paru"
     [ -z "$AUR_SUPPORT" ] && command -v /usr/bin/paru &>/dev/null && AUR_SUPPORT="true"
     [ -z "$AUR_REVIEW" ] && AUR_REVIEW="false"
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
@@ -247,6 +251,11 @@ init_properties() {
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
     [ -z "$SHOW_UNKNOWN_PKG_LIST" ] && SHOW_UNKNOWN_PKG_LIST="false"
+
+    return 0
+}
+
+persist_properties() {
 
     # Validate properties
     [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500" # Set to max 500
@@ -297,6 +306,7 @@ init_properties() {
     { # Write properties
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
         echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
+        echo "AUR_MANGER_REPO=${AUR_MANGER_REPO}"
         echo "AUR_SUPPORT=${AUR_SUPPORT}"
         echo "AUR_REVIEW=${AUR_REVIEW}"
         echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
@@ -767,7 +777,7 @@ show_system_info() { # System info
         # BUG: gum write does not accept height greater than 7
         if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
             # If success: save/move file, remove spaces and re-init properties
-            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties || return 1
+            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && perists_properties || return 1
             rm -f "${ARCH_OS_BLACKLIST}.new"
             gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
         else
@@ -999,7 +1009,7 @@ show_settings() { # Settings
     # BUG: gum write does not accept height greater than 7
     if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
-        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
+        mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news packages" && gum_fail "Synchronize Database failed" && return 3
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
@@ -1199,14 +1209,14 @@ install_script_dependencies() {
         git clone "$repo_url" "$repo_tmp_dir"
         cd "$repo_tmp_dir"
         echo -e "\noptions=('!debug')" >>PKGBUILD
-        makepkg -si --noconfirm
+        makepkg -si
     }
 
     # Install system packages
     pacman_install git base-devel gum kitty libnotify meld reflector pacman-contrib fzf
 
     # Install paru
-    aur_install paru-git
+    aur_install "$AUR_MANGER_REPO" || return 1
 
     # Set paru config
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
@@ -1214,7 +1224,7 @@ install_script_dependencies() {
     sudo sed -i 's/^#SudoLoop/SudoLoop/g' /etc/paru.conf
 
     # Install downgrade
-    aur_install downgrade
+    aur_install downgrade || return 1
 
     echo ":: Finished"
     return 0

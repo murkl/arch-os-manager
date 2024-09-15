@@ -107,6 +107,7 @@ Edit the settings with the built-in editor in Arch OS Manager or edit the config
 ```
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
+AUR_MANAGER_REPO=paru             # Set AUR manager package for install (paru, paru-bin, paru-git)
 AUR_SUPPORT=true                  # Enable AUR support (disable: false)
 AUR_REVIEW=false                  # Disable AUR review (enable: true)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
