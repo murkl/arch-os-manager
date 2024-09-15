@@ -6,7 +6,10 @@
 </div>
 
 <div align="center">
-  <p><img src="./screenshots/arch-os-manager.png"></p>
+  <p><img src="./screenshots/main.png"></p>
+
+**[ ➜ More Screenshots ](#screenshots)**
+
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
     <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
@@ -29,16 +32,16 @@ arch-os
 
 ## Install from GitHub
 
-1. Install Dependencies:
-
-```
-sudo pacman -S kitty gum libnotify pacman-contrib
-```
-
-2. Clone GitHub Repo:
+1. Clone GitHub Repo:
 
 ```
 git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
+```
+
+2. Install Dependencies:
+
+```
+./arch-os --install
 ```
 
 3. Run Arch OS Manager:
@@ -52,13 +55,15 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ## Features
 
 - Check and list updates in _checkupdates_ format
+- System health info
 - Startup notify on available updates
-- Show latest Arch Linux news
+- Notify & show latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search and manage packages
 - Show system info, packages & logs
 - Upgrade system packages
 - Remove orphaned packages
+- Clear Pacman cache
 - Reset Pacman keyring
 - Built-in log blacklist filter
 - Built-in settings editor
@@ -75,20 +80,24 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 ## Usage
 
 ```
+// App
 arch-os [--kitty | -k]              Open main menu
+arch-os [--kitty | -k] check        Print package updates like checkupdates
+arch-os [--kitty | -k] notify       Notify on new package updates
+arch-os [--kitty | -k] settings     Edit settings in built-in ediitor
+arch-os [--kitty | -k] version      Print version info
 arch-os [--kitty | -k] help         Open help page
-arch-os [--kitty | -k] version      Print Arch OS Manager version
-arch-os [--kitty | -k] settings     Edit settings
-arch-os [--kitty | -k] info         Show system logs
+
+// Actions
 arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
-arch-os [--kitty | -k] upgrade      System upgrade (news, pacdiff, pacman, aur, flatpak)
+arch-os [--kitty | -k] info         Show system info (logs, services, health)
+arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)
 arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
 arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)
 arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)
 arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)
-arch-os [--kitty | -k] reset        Reset pacman (refresh pacman keyring)
-arch-os [--kitty | -k] notify       Notify on new package updates
-arch-os [--kitty | -k] check        Print package updates like checkupdates
+arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)
+arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)
 ```
 
 ## Settings
@@ -98,6 +107,7 @@ Edit the settings with the built-in editor in Arch OS Manager or edit the config
 ```
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
+AUR_MANAGER_REPO=paru             # Set AUR manager package for install (paru, paru-bin, paru-git)
 AUR_SUPPORT=true                  # Enable AUR support (disable: false)
 AUR_REVIEW=false                  # Disable AUR review (enable: true)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
@@ -106,7 +116,7 @@ ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
-SHOW_UNKNOWN_PKG_NAMES=true       # Enable unknown package names instead of counter (disable: false)
+SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name list (enable: true)
 ```
 
 ### Configurations
@@ -146,6 +156,7 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <p><img src="./screenshots/upgrade.png"></p>
 <p><img src="./screenshots/info.png"></p>
 <p><img src="./screenshots/search.png"></p>
+<p><img src="./screenshots/news.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
 
 </div>
