@@ -200,7 +200,7 @@ perist_state() {
     { # Write state.db
         echo "LATEST_UPDATE_CHECK=\"${LATEST_UPDATE_CHECK}\""
         echo "LATEST_SYSTEM_UPGRADE=\"${LATEST_SYSTEM_UPGRADE}\""
-        echo "LATEST_NEWS_DATE=\"${LATEST_NEWS_DATE}\""
+        echo "LATEST_ARCH_LINUX_NEWS_DATE=\"${LATEST_ARCH_LINUX_NEWS_DATE}\""
     } >"$STATE_DB" && return 0
     return 1
 }
@@ -448,7 +448,7 @@ show_news_info() { # Show Arch Linux News
         ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news" && gum_fail "Synchronize Database (news) failed" && return 3
 
         # Check unread news
-        local unread_news="false" && [ "$LATEST_NEWS_DATE" != "$(print_news_date 1)" ] && unread_news="true"
+        local unread_news="false" && [ "$LATEST_ARCH_LINUX_NEWS_DATE" != "$(print_news_date 1)" ] && unread_news="true"
 
         # Print news
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
@@ -460,7 +460,7 @@ show_news_info() { # Show Arch Linux News
             echo && gum_title "Unread News"
             gum_unread "$(print_news_date 1)" "$(print_news_url 1)"
             ! gum_confirm "Have you read the News?" && return 0
-            LATEST_NEWS_DATE="$(print_news_date 1)" && perist_state
+            LATEST_ARCH_LINUX_NEWS_DATE="$(print_news_date 1)" && perist_state
         fi
     fi
     return 0
