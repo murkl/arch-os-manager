@@ -7,6 +7,9 @@
 
 <div align="center">
   <p><img src="./screenshots/main.png"></p>
+
+**[ ➜ More Screenshots ](#screenshots)**
+
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
     <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
