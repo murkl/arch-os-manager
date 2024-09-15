@@ -1191,7 +1191,6 @@ color15                 #E5E9F0
 # ///////////////////////////////////////////////////////////////////
 
 install_script_dependencies() {
-    echo ":: Install Arch OS Manager Dependencies"
 
     # Remove tmp dir on exit
     trap 'rm -rf ${ARCH_OS_TMP}' EXIT
@@ -1213,9 +1212,11 @@ install_script_dependencies() {
     }
 
     # Install system packages
+    echo ":: Install Arch OS Manager Dependencies"
     pacman_install git base-devel gum kitty libnotify meld reflector pacman-contrib fzf
 
     # Install paru
+    echo ":: Install Paru..."
     aur_install "$AUR_MANGER_REPO" || return 1
 
     # Set paru config
@@ -1224,9 +1225,10 @@ install_script_dependencies() {
     sudo sed -i 's/^#SudoLoop/SudoLoop/g' /etc/paru.conf
 
     # Install downgrade
+    echo ":: Install Downgrade..."
     aur_install downgrade || return 1
 
-    echo ":: Finished"
+    echo ":: Successfuly finished"
     return 0
 }
 
