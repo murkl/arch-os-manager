@@ -13,7 +13,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.1"
+VERSION="1.6.2"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -1213,7 +1213,7 @@ install_script_dependencies() {
 
     # Install system packages
     echo ":: Install Arch OS Manager Dependencies"
-    pacman_install git base-devel gum kitty libnotify meld reflector pacman-contrib fzf
+    pacman_install git base-devel flatpak gum kitty libnotify meld reflector pacman-contrib fzf
 
     # Install paru
     echo ":: Install Paru..."
