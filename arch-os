@@ -1129,7 +1129,7 @@ install_script_dependencies() {
     echo ":: Install Arch OS Manager Dependencies"
 
     # Remove tmp dir on exit
-    # trap 'rm -rf ${ARCH_OS_TMP}' EXIT
+    trap 'rm -rf ${ARCH_OS_TMP}' EXIT
 
     # Pacman helper
     pacman_install() {
