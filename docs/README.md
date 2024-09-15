@@ -6,7 +6,7 @@
 </div>
 
 <div align="center">
-  <p><img src="./screenshots/arch-os-manager.png"></p>
+  <p><img src="./screenshots/main.png"></p>
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
     <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
@@ -60,6 +60,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Show system info, packages & logs
 - Upgrade system packages
 - Remove orphaned packages
+- Clear Pacman cache
 - Reset Pacman keyring
 - Built-in log blacklist filter
 - Built-in settings editor
