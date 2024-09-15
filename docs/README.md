@@ -32,16 +32,16 @@ arch-os
 
 ## Install from GitHub
 
-1. Install Dependencies:
-
-```
-sudo pacman -S kitty gum libnotify pacman-contrib
-```
-
-2. Clone GitHub Repo:
+1. Clone GitHub Repo:
 
 ```
 git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
+```
+
+2. Install Dependencies:
+
+```
+./arch-os --install
 ```
 
 3. Run Arch OS Manager:
@@ -153,9 +153,9 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <sub><b>This screenshots may outdated.</b></sub>
 
 <p><img src="./screenshots/upgrade.png"></p>
-<p><img src="./screenshots/news.png"></p>
 <p><img src="./screenshots/info.png"></p>
 <p><img src="./screenshots/search.png"></p>
+<p><img src="./screenshots/news.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
 
 </div>

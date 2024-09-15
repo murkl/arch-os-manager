@@ -50,6 +50,12 @@ COLOR_RED=1
 
 main() {
 
+    # Install
+    [ "$1" = '--install' ] && {
+        install_script_dependencies && exit 0
+        exit 1
+    }
+
     # Check dependencies
     if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found. Install with: sudo pacman -S gum" >&2 && exit 1; fi
     if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found. Install with: sudo pacman -S kitty" >&2 && exit 1; fi
@@ -1114,6 +1120,50 @@ color14                 #88C0D0
 color7                  #E5E9F0
 color15                 #E5E9F0
 '
+
+# ///////////////////////////////////////////////////////////////////
+# INSTALL SCRIPT DEPENDENCIES
+# ///////////////////////////////////////////////////////////////////
+
+install_script_dependencies() {
+    echo ":: Install Arch OS Manager Dependencies"
+
+    # Remove tmp dir on exit
+    # trap 'rm -rf ${ARCH_OS_TMP}' EXIT
+
+    # Pacman helper
+    pacman_install() {
+        sudo pacman -Sq --needed --disable-download-timeout "$@"
+    }
+
+    # AUR helper
+    aur_install() {
+        local repo_url repo_tmp_dir
+        repo_url="https://aur.archlinux.org/${1}.git"
+        repo_tmp_dir="${ARCH_OS_TMP}/${1}"
+        git clone "$repo_url" "$repo_tmp_dir"
+        cd "$repo_tmp_dir"
+        echo -e "\noptions=('!debug')" >>PKGBUILD
+        makepkg -si --noconfirm
+    }
+
+    # Install system packages
+    pacman_install git base-devel gum kitty libnotify meld reflector pacman-contrib fzf
+
+    # Install paru
+    aur_install paru-bin
+
+    # Set paru config
+    [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
+    sudo sed -i 's/^#BottomUp/BottomUp/g' /etc/paru.conf
+    sudo sed -i 's/^#SudoLoop/SudoLoop/g' /etc/paru.conf
+
+    # Install downgrade
+    aur_install downgrade
+
+    echo ":: Finished"
+    return 0
+}
 
 # ///////////////////////////////////////////////////////////////////
 # START SCRIPT
