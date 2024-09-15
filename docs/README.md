@@ -115,7 +115,7 @@ ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
-SHOW_UNKNOWN_PKG_NAMES=true       # Enable unknown package names instead of counter (disable: false)
+SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name list (enable: true)
 ```
 
 ### Configurations

@@ -246,7 +246,7 @@ init_properties() {
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
-    [ -z "$SHOW_UNKNOWN_PKG_NAMES" ] && SHOW_UNKNOWN_PKG_NAMES="true"
+    [ -z "$SHOW_UNKNOWN_PKG_LIST" ] && SHOW_UNKNOWN_PKG_LIST="false"
 
     # Validate properties
     [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500" # Set to max 500
@@ -282,7 +282,7 @@ init_properties() {
         echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}"
         echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}"
         echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
-        echo "SHOW_UNKNOWN_PKG_NAMES=${SHOW_UNKNOWN_PKG_NAMES}"
+        echo "SHOW_UNKNOWN_PKG_LIST=${SHOW_UNKNOWN_PKG_LIST}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -460,7 +460,7 @@ show_health_info() { # Show system health information
 
     # Package info
     gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
-    [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$(/usr/bin/paru -Qm | wc -l)"
+    [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$(/usr/bin/paru -Qm &>/dev/null && /usr/bin/paru -Qm | wc -l || echo Error)"
     # flatpak list --columns=application | tail -n +1 | wc -l
     [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
 
@@ -521,7 +521,7 @@ show_health_info() { # Show system health information
     local unknown_pkgs=()
     while read -r pkg; do if ! grep -q "$pkg" "$PACKAGES_DB"; then unknown_pkgs+=("$pkg"); fi; done < <(pacman -Qqm)
     if [ -n "${unknown_pkgs[*]}" ]; then
-        if [ "$SHOW_UNKNOWN_PKG_NAMES" = "true" ]; then
+        if [ "$SHOW_UNKNOWN_PKG_LIST" = "true" ]; then
             unknown_pkgs=$(printf "%s, " "${unknown_pkgs[@]}")
             unknown_pkgs=${unknown_pkgs%, }
             local IFS=', ' && gum_key_value_yellow "Unknown Packages" "${unknown_pkgs}"
@@ -754,17 +754,25 @@ show_upgrade() { # Update packages
     # Start upgrade system
     echo && ! gum_confirm "Start System Upgrade?" && return 2
     clear_screen && print_header && gum_title "Upgrade System Packages"
+
     # Prepare args
     local pkg_manager_args=()
     [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
-    [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
-    # Upgrade system
-    [ "$AUR_SUPPORT" = "true" ] && ! /usr/bin/paru -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
-    [ "$AUR_SUPPORT" = "false" ] && ! sudo /usr/bin/pacman -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
+
+    # Upgrade system packages
+    gum_mesg "Upgrading System Packages..."
+    ! sudo /usr/bin/pacman -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
+
+    # Upgrade AUR packages
+    if [ "$AUR_SUPPORT" = "true" ]; then
+        gum_mesg "Upgrading AUR Packages..."
+        [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+        ! /usr/bin/paru -Syuq "${pkg_manager_args[@]}" && gum_fail "AUR Upgrade failed" && return 3
+    fi
+    # Upgrade flatpak packages
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
-        # Check if flatpak updates available
-        if [ -n "$(flatpak remote-ls --updates)" ]; then
+        if [ -n "$(flatpak remote-ls --updates)" ]; then      # Check if flatpak updates available
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
                 ! gum_spin --title 'Upgrading Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
             else # Do Interactive flatpak update
@@ -780,7 +788,6 @@ show_upgrade() { # Update packages
     ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
 
     # Finish
-    # Persist state
     LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && perist_state
     gum_info "System Upgrade finished"
     echo # Print new line
@@ -1151,7 +1158,7 @@ install_script_dependencies() {
     pacman_install git base-devel gum kitty libnotify meld reflector pacman-contrib fzf
 
     # Install paru
-    aur_install paru-bin
+    aur_install paru
 
     # Set paru config
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
