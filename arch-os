@@ -74,7 +74,7 @@ main() {
     mkdir -p "${HOME}/.config/autostart"
 
     # Init state & init properties
-    init_state && init_properties &>/dev/null
+    init_state && init_properties
 
     # Sync database & exit
     if [ "$1" = '--sync' ]; then
@@ -237,12 +237,12 @@ init_properties() {
 
     # Set default properties
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
-    [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="30"
-    [ -z "$AUR_SUPPORT" ] && AUR_SUPPORT="true"
+    [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="60"
+    [ -z "$AUR_SUPPORT" ] && command -v /usr/bin/paru &>/dev/null && AUR_SUPPORT="true"
     [ -z "$AUR_REVIEW" ] && AUR_REVIEW="false"
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
     [ -z "$ARCH_DOWNLOAD_TIMEOUT" ] && ARCH_DOWNLOAD_TIMEOUT="false"
-    [ -z "$FLATPAK_SUPPORT" ] && FLATPAK_SUPPORT="true"
+    [ -z "$FLATPAK_SUPPORT" ] && command -v /usr/bin/flatpak &>/dev/null && FLATPAK_SUPPORT="true"
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
@@ -254,9 +254,32 @@ init_properties() {
     [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"       # Set to max 10
     [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"         # Set to min 0
 
-    # Check binaries
-    [ "$AUR_SUPPORT" = "true" ] && ! command -v /usr/bin/paru &>/dev/null && gum_warn "AUR_SUPPORT was disabled (/usr/bin/paru not found)" && AUR_SUPPORT="false"
-    [ "$FLATPAK_SUPPORT" = "true" ] && ! command -v /usr/bin/flatpak &>/dev/null && gum_warn "FLATPAK_SUPPORT was disabled (/usr/bin/flatpak not found)" && FLATPAK_SUPPORT="false"
+    # Check AUR binary
+    if [ "$AUR_SUPPORT" = "true" ]; then
+        local error && unset error
+        [ -z "$error" ] && ! command -v /usr/bin/paru &>/dev/null && error="/usr/bin/paru not found"
+        [ -z "$error" ] && ! /usr/bin/paru --version &>/dev/null && error="/usr/bin/paru is not working"
+        [ -n "$error" ] && {
+            gum_fail "$error"
+            notify_send "Error" "$error"
+            ! gum_confirm --timeout=3s "Disable AUR_SUPPORT?" && gum_fail "Canceled" && exit 3
+            AUR_SUPPORT="false" && gum_warn "AUR_SUPPORT was disabled"
+        }
+
+    fi
+
+    # Check Flatpak binary
+    if [ "$FLATPAK_SUPPORT" = "true" ]; then
+        local error && unset error
+        [ -z "$error" ] && ! command -v /usr/bin/flatpak &>/dev/null && error="/usr/bin/flatpak not found"
+        [ -z "$error" ] && ! /usr/bin/flatpak --version &>/dev/null && error="/usr/bin/flatpak is not working"
+        [ -n "$error" ] && {
+            gum_fail "$error"
+            notify_send "Error" "$error"
+            ! gum_confirm --timeout=3s "Disable FLATPAK_SUPPORT?" && gum_fail "Canceled" && exit 3
+            FLATPAK_SUPPORT="false" && gum_warn "FLATPAK_SUPPORT was disabled"
+        }
+    fi
 
     # Toggle settings
     if [ "$AUTOSTART_NOTIFY" = "true" ]; then
@@ -302,20 +325,20 @@ sync_updates_db() {
     # Pacman updates
     while IFS= read -r line; do
         echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "pacman," $1 "," $2 "," $4}' >>"$UPDATES_DB"
-    done < <(/usr/bin/checkupdates)
+    done < <(timeout 15 /usr/bin/checkupdates)
 
     # AUR updates
     if [ "$AUR_SUPPORT" = 'true' ] && /usr/bin/paru -Qua &>/dev/null; then
         while read -r line; do
             echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "aur," $1 "," $2 "," $4}' >>"$UPDATES_DB"
-        done < <(/usr/bin/paru -Qua)
+        done < <(timeout 15 /usr/bin/paru -Qua)
     fi
 
     # Flatpak updates
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         while read -r line; do
             echo "$line" | awk '{print "flatpak," $1 "," $2 "," ($3 == "" ? "latest" : $3)}' >>"$UPDATES_DB"
-        done < <(flatpak remote-ls --updates --columns=application,version,branch | tail -n +1)
+        done < <(timeout 15 flatpak remote-ls --updates --columns=application,version,branch | tail -n +1)
     fi
 
     # Persist state
@@ -325,16 +348,25 @@ sync_updates_db() {
 
 sync_news_db() {
     if [ -n "$NEWS_QUANTITY" ] && [ "$NEWS_QUANTITY" -gt 0 ]; then
-        curl -sf https://archlinux.org/feeds/news/ >"$NEWS_DB"
+        timeout 15 curl -sf https://archlinux.org/feeds/news/ >"$NEWS_DB"
     fi
     return 0
 }
 
 sync_package_db() {
-    local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
-    $pkg_manager -Slq >"$PACKAGES_DB"
-    sort "$PACKAGES_DB" | uniq >"${PACKAGES_DB}.trim"
-    mv "${PACKAGES_DB}.trim" "$PACKAGES_DB"
+    local tmp_db_pac="${ARCH_OS_TMP}/packages-pac.db"
+    local tmp_db_aur="${ARCH_OS_TMP}/packages-aur.db"
+    ! timeout 15 /usr/bin/pacman -Slq >"$tmp_db_pac" && return 3
+
+    # Add AUR packages
+    if [ "$AUR_SUPPORT" = "true" ]; then
+        timeout 15 /usr/bin/paru -Slqa >"$tmp_db_aur" || rm -f "$tmp_db_aur"
+        [ -f "$tmp_db_aur" ] && cat "$tmp_db_aur" >>"$tmp_db_pac"
+    fi
+
+    # Sort and remove redundant entries
+    sort "$tmp_db_pac" | uniq >"${tmp_db_pac}.trim"
+    mv "${tmp_db_pac}.trim" "$PACKAGES_DB"
     return 0
 }
 
@@ -369,7 +401,7 @@ action_notify_updates() { # Notify on new updates
     if [ "$update_count" -gt 0 ]; then
         [ "$update_count" = 1 ] && update_txt="${update_count} Update available"
         [ "$update_count" -gt 1 ] && update_txt="${update_count} Updates available"
-        notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "System Upgrade" "$update_txt"
+        notify_send "System Upgrade" "$update_txt"
         echo "$update_result"
         return 2
     fi
@@ -379,6 +411,13 @@ action_notify_updates() { # Notify on new updates
 # ///////////////////////////////////////////////////////////////////
 #  PRINT INFO FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
+
+print_no_internet_info() {
+    timeout 5 ping -c 1 8.8.8.8 &>/dev/null && return 0
+    gum_fail "No Internet Connection" && return 3
+}
+
+# -------------------------------------------------------------------
 
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
 print_service_running() { systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line}"; done; }
@@ -395,6 +434,7 @@ show_news_info() { # Show Arch Linux News
         print_news_url() { echo -n "$(<"$NEWS_DB")" | xmllint --xpath "string(//item[$1]/link)" - | awk '{$1=$1; print}'; }
 
         # Sync db
+        print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news" && gum_fail "Synchronize Database (news) failed" && return 3
 
         # Check unread news
@@ -422,6 +462,7 @@ show_update_info() { # Show package updates
     gum_title "Update Information"
 
     # Sync db
+    print_no_internet_info || return 3
     ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync updates" && gum_fail "Synchronize Database (updates) failed" && return 3
 
     # Check if updates available
@@ -456,6 +497,7 @@ show_health_info() { # Show system health information
     local sync_actions=()
     [ "$1" = "--sync-updates" ] && sync_actions+=(updates)
     [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
+    print_no_internet_info || return 3
     [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database (updates, packages) failed" && return 3
 
     # Package info
@@ -546,6 +588,7 @@ show_search() { # Search & manage packages
         print_header && gum_title "Package Information"
 
         # Sync db
+        print_no_internet_info || return 3
         [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages" && gum_fail "Synchronize Database (packages) failed" && return 3
 
         # -------------------------------------------------------------------
@@ -557,8 +600,7 @@ show_search() { # Search & manage packages
             list_results() {
                 local pkg_manager pkg_manager_result
                 pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
-                ! $pkg_manager -Ss "$1" &>/dev/null && return 1
-                pkg_manager_result="$(LANG=en_US.UTF-8 $pkg_manager -Ss "$1")"
+                ! pkg_manager_result="$(LANG=en_US.UTF-8 $pkg_manager -Ss "$1")" && return 1
                 local pkg_name pkg_desc
                 echo "$pkg_manager_result" | while IFS= read -r line; do
                     if [ -z "$pkg_name" ]; then
@@ -578,7 +620,7 @@ show_search() { # Search & manage packages
             gum_info "Search: ${user_input}"
 
             # Filter results
-            local filter_pkgs_results && filter_pkgs_results=$(list_results "$user_input" | tac)
+            local filter_pkgs_results && ! filter_pkgs_results="$(list_results "$user_input" | tac)"
             [ -z "$filter_pkgs_results" ] && gum_warn "No Results" && return 3
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
@@ -655,13 +697,16 @@ show_search() { # Search & manage packages
             ! gum_confirm "Install?" && clear_screen && continue
             local pkg_manager_args=()
             [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
-            [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
-            [ "$AUR_SUPPORT" = "true" ] && if /usr/bin/paru -Sq "${pkg_manager_args[@]}" $pkg_name; then gum_info "Done"; else gum_fail "Installing ${pkg_name} failed"; fi
-            [ "$AUR_SUPPORT" = "false" ] && if sudo /usr/bin/pacman -Sq "${pkg_manager_args[@]}" $pkg_name; then gum_info "Done"; else gum_fail "Installing ${pkg_name} failed"; fi
+            if [ "$pkg_is_aur" = "true" ]; then
+                [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
+                if /usr/bin/paru -Sq "${pkg_manager_args[@]}" $pkg_name; then gum_info "Install successful"; else gum_fail "Installing ${pkg_name} failed"; fi
+            else
+                if sudo /usr/bin/pacman -Sq "${pkg_manager_args[@]}" $pkg_name; then gum_info "Install successful"; else gum_fail "Installing ${pkg_name} failed"; fi
+            fi
             ;;
         'Remove')
             ! gum_confirm "Remove?" && clear_screen && continue
-            if sudo /usr/bin/pacman -Rns $pkg_name; then gum_info "Done"; else gum_fail "Removing ${pkg_name} failed"; fi
+            if sudo /usr/bin/pacman -Rns $pkg_name; then gum_info "Remove successful"; else gum_fail "Removing ${pkg_name} failed"; fi
             ;;
         'Show PKGBUILD')
             clear_screen && print_header && gum_title "PKGBUILD"
@@ -669,7 +714,7 @@ show_search() { # Search & manage packages
             ;;
         'Downgrade')
             ! gum_confirm "Downgrade?" && clear_screen && continue
-            if sudo downgrade $pkg_name; then gum_info "Done"; else gum_fail "Downgrading ${pkg_name} failed"; fi
+            if sudo downgrade $pkg_name; then gum_info "Downgrade successful"; else gum_fail "Downgrading ${pkg_name} failed"; fi
             ;;
         'Done') return 2 ;;
         *) unset pkg_name && gum_fail "Action '${user_input}' not available" && return 3 ;;
@@ -761,14 +806,13 @@ show_upgrade() { # Update packages
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
 
     # Upgrade system packages
-    gum_mesg "Upgrading System Packages..."
     ! sudo /usr/bin/pacman -Syuq "${pkg_manager_args[@]}" && gum_fail "System Upgrade failed" && return 3
 
     # Upgrade AUR packages
     if [ "$AUR_SUPPORT" = "true" ]; then
         gum_mesg "Upgrading AUR Packages..."
         [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
-        ! /usr/bin/paru -Syuq "${pkg_manager_args[@]}" && gum_fail "AUR Upgrade failed" && return 3
+        ! /usr/bin/paru -Suaq "${pkg_manager_args[@]}" && gum_fail "AUR Upgrade failed" && return 3
     fi
     # Upgrade flatpak packages
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
@@ -785,6 +829,7 @@ show_upgrade() { # Update packages
     fi
 
     # Resync packages & updates db
+    print_no_internet_info || return 3
     ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
 
     # Finish
@@ -938,7 +983,7 @@ show_reset_keyring() { # Keyring reset (if update failed, try to reset & reinit 
     local pkg_manager_args=()
     [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
     [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
-    ! sudo /usr/bin/pacman -Syq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}" && gum_warn "Canceled" && return 3
+    ! sudo /usr/bin/pacman -Syyq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}" && gum_warn "Canceled" && return 3
     gum_info "Done"
     return 0
 }
@@ -955,6 +1000,7 @@ show_settings() { # Settings
     if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties
+        print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news packages" && gum_fail "Synchronize Database failed" && return 3
         gum_info "Saved: ${ARCH_OS_CONF}" && return 0
     else
@@ -1006,6 +1052,8 @@ show_version() { # Print version page
 # ///////////////////////////////////////////////////////////////////
 # PRINT HELPER FUNCTIONS
 # ///////////////////////////////////////////////////////////////////
+
+notify_send() { notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0; }
 
 clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear and remove scrollback buffer
 
@@ -1158,7 +1206,7 @@ install_script_dependencies() {
     pacman_install git base-devel gum kitty libnotify meld reflector pacman-contrib fzf
 
     # Install paru
-    aur_install paru
+    aur_install paru-git
 
     # Set paru config
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
