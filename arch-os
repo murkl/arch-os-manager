@@ -69,13 +69,6 @@ main() {
     trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
     trap 'trap_exit $?' EXIT                       # Set exit trap
 
-    # Create working dirs
-    mkdir -p "$ARCH_OS_HOME"
-    mkdir -p "$ARCH_OS_TMP"
-    mkdir -p "${ARCH_OS_HOME}/config"
-    mkdir -p "${ARCH_OS_HOME}/database"
-    mkdir -p "${HOME}/.config/autostart"
-
     # Init state & init properties
     init_state && persist_properties
 
@@ -219,6 +212,13 @@ print_timestamp() { date +"%Y-%m-%d %H:%M:%S"; }
 # ///////////////////////////////////////////////////////////////////
 
 init_properties() {
+
+    # Create working dirs
+    mkdir -p "$ARCH_OS_HOME"
+    mkdir -p "$ARCH_OS_TMP"
+    mkdir -p "${ARCH_OS_HOME}/config"
+    mkdir -p "${ARCH_OS_HOME}/database"
+    mkdir -p "${HOME}/.config/autostart"
 
     # Migrate: < 1.5.5
     [ -f "${ARCH_OS_HOME}/arch-os.conf" ] && mv -f "${ARCH_OS_HOME}/arch-os.conf" "${ARCH_OS_HOME}/settings.conf"
