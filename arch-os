@@ -677,7 +677,15 @@ show_search() { # Search & manage packages
             gum_key_value_white "$(print_filled_space "AUR Votes")" "$(print_package_value "$pkg_info_remote" "Votes")"
             gum_key_value_white "$(print_filled_space "AUR Popularity")" "$(print_package_value "$pkg_info_remote" "Popularity")"
             gum_key_value_white "$(print_filled_space "AUR Modified")" "$(print_package_value "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
-        else # Non AUR package info
+
+            # Check outdated packages
+            local outdated && outdated="$(print_package_value "$pkg_info_remote" "Out Of Date")"
+            [ "$outdated" = "No" ] && gum_key_value_white "$(print_filled_space "AUR Outdated")" "no"
+            [ "$outdated" != "No" ] && gum_key_value_yellow "$(print_filled_space "AUR Outdated")" "$(echo $outdated | date -f - "+%Y-%m-%d %H:%M")"
+
+        else
+
+            # Non AUR package info
             gum_key_value_white "$(print_filled_space "Package URL")" "$(print_package_value "$pkg_info_remote" "URL")"
             gum_key_value_white "$(print_filled_space "Package Date")" "$(print_package_value "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
         fi
