@@ -423,7 +423,10 @@ action_notify_updates() { # Notify on new updates
 # ///////////////////////////////////////////////////////////////////
 
 print_no_internet_info() {
-    timeout 5 ping -c 1 8.8.8.8 &>/dev/null && return 0
+    for i in {1..3}; do
+        timeout 5 ping -c 1 -W 2 8.8.8.8 &>/dev/null && return 0
+        sleep 2
+    done
     gum_fail "No Internet Connection" && return 3
 }
 
@@ -768,7 +771,7 @@ show_system_info() { # System info
     # Show menu
     echo && gum_title "Options"
     options=("Edit Blacklist" "Done")
-    user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") || return 2
+    user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") || return 2
     case "$user_input" in
     'Edit Blacklist')
         clear_screen && print_header && gum_title "Edit Blacklist"
