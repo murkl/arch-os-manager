@@ -777,7 +777,7 @@ show_system_info() { # System info
         # BUG: gum write does not accept height greater than 7
         if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
             # If success: save/move file, remove spaces and re-init properties
-            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && perists_properties || return 1
+            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
             rm -f "${ARCH_OS_BLACKLIST}.new"
             gum_info "Saved: ${ARCH_OS_BLACKLIST}" && return 0
         else
