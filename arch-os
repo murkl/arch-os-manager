@@ -192,11 +192,11 @@ trap_error() {
 # ///////////////////////////////////////////////////////////////////
 
 init_state() {
-    touch "$STATE_DB" && source "$STATE_DB" && perist_state && return 0
+    touch "$STATE_DB" && source "$STATE_DB" && persist_state && return 0
     return 1
 }
 
-perist_state() {
+persist_state() {
     { # Write state.db
         echo "LATEST_UPDATE_CHECK=\"${LATEST_UPDATE_CHECK}\""
         echo "LATEST_SYSTEM_UPGRADE=\"${LATEST_SYSTEM_UPGRADE}\""
@@ -352,7 +352,7 @@ sync_updates_db() {
     fi
 
     # Persist state
-    LATEST_UPDATE_CHECK="$(print_timestamp)" && perist_state
+    LATEST_UPDATE_CHECK="$(print_timestamp)" && persist_state
     return 0
 }
 
@@ -463,7 +463,7 @@ show_news_info() { # Show Arch Linux News
             echo && gum_title "Unread News"
             gum_unread "$(print_news_date 1)" "$(print_news_url 1)"
             ! gum_confirm "Have you read the News?" && return 0
-            LATEST_ARCH_LINUX_NEWS_DATE="$(print_news_date 1)" && perist_state
+            LATEST_ARCH_LINUX_NEWS_DATE="$(print_news_date 1)" && persist_state
         fi
     fi
     return 0
@@ -846,7 +846,7 @@ show_upgrade() { # Update packages
     ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
 
     # Finish
-    LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && perist_state
+    LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
     gum_info "System Upgrade finished"
     echo # Print new line
     show_health_info || return $?
