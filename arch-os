@@ -613,7 +613,7 @@ show_search() { # Search & manage packages
             list_results() {
                 local pkg_manager pkg_manager_result
                 pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
-                ! pkg_manager_result="$(LANG=en_US.UTF-8 $pkg_manager -Ss "$1")" && return 1
+                ! pkg_manager_result="$(LANG=en_US.UTF-8 $pkg_manager -Ss $1)" && return 1
                 local pkg_name pkg_desc
                 echo "$pkg_manager_result" | while IFS= read -r line; do
                     if [ -z "$pkg_name" ]; then
@@ -938,7 +938,12 @@ show_refresh() { # Refresh mirrorlist with reflector
     ! gum_confirm "Continue?" && return 2
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
-    cat "$MIRRORLIST_TMP"
+
+    # Print mirrorlist
+    while read -r line; do
+        [[ $line =~ ^[#[:space:]]|^$ ]] || gum_content "${line}"
+    done <"$MIRRORLIST_TMP"
+
     echo && ! gum_confirm "Save Mirrorlist?" && return 2
     # Save mirrorlist and set correct permissions
     sudo mv -f "$MIRRORLIST_TMP" /etc/pacman.d/mirrorlist
@@ -1058,15 +1063,15 @@ show_help() { # Print help page
 # ///////////////////////////////////////////////////////////////////
 # VERSION
 # ///////////////////////////////////////////////////////////////////
-
 show_version() { # Print version page
-    gum_title "Kitty" && kitty --version && echo
-    gum_title "Gum" && gum --version && echo
-    gum_title "Notify" && notify-send --version && echo
-    [ "$FLATPAK_SUPPORT" = "true" ] && gum_title "Flatpak" && flatpak --version && echo
-    [ "$AUR_SUPPORT" = "true" ] && gum_title "Paru" && /usr/bin/paru --version && echo
-    gum_title "Checkupdates" && /usr/bin/checkupdates --version && echo
-    /usr/bin/pacman --version # Pacman
+    gum_title "Version Information"
+    gum_content "$(kitty --version)"
+    gum_content "$(gum --version)"
+    gum_content "$(notify-send --version)"
+    [ "$FLATPAK_SUPPORT" = "true" ] && gum_content "$(flatpak --version)"
+    [ "$AUR_SUPPORT" = "true" ] && gum_content "$(/usr/bin/paru --version)"
+    gum_content "$(/usr/bin/checkupdates --version)"
+    /usr/bin/pacman --version
     return 0
 }
 
@@ -1115,10 +1120,10 @@ gum_style() { gum style "${@}"; }
 gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="120" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
-gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
-gum_spin() { gum spin --spinner dot "${@}"; }
-gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null; }
 gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_spin() { gum spin --spinner dot "${@}"; }
+gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
+gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null; }
 
 # Colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
