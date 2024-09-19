@@ -947,8 +947,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     gum_title "Refresh Pacman Mirrorlist"
     ! gum_confirm "Continue?" && return 2
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    #! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
-    cp -f /etc/pacman.d/mirrorlist "$MIRRORLIST_TMP"
+    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
     # Clean reflector result (list only servers)
     local mirrorlist_cleaned && mirrorlist_cleaned=$(grep -v '^#' "$MIRRORLIST_TMP" | sed '/^$/d;s/^[[:space:]#]*//')
     echo -e "$mirrorlist_cleaned" >"$MIRRORLIST_TMP"
