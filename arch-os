@@ -953,15 +953,15 @@ show_refresh() { # Refresh mirrorlist with reflector
     echo -e "$mirrorlist_cleaned" >"$MIRRORLIST_TMP"
     ! [ -s "$MIRRORLIST_TMP" ] && gum_fail "New mirrorlist is empty" && return 3
     # Print cleaned mirrorlist
-    while IFS= read -r line || [ -n "$line" ]; do gum_mesg "$line"; done < <(cat "$MIRRORLIST_TMP")
+    while IFS= read -r line || [ -n "$line" ]; do gum_log_info "$line"; done < <(cat "$MIRRORLIST_TMP")
     # Edit mirrorlist?
     echo && gum_confirm "Edit Mirrorlist?" && clear_screen && print_header && gum_title "New Mirrorlist" && if gum_write --show-line-numbers --height="6" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
         # Refresh & re-print new mirrorlist
         mv -f "${MIRRORLIST_TMP}.new" "$MIRRORLIST_TMP"
-        while IFS= read -r line || [[ -n "$line" ]]; do gum_mesg "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
+        while IFS= read -r line || [[ -n "$line" ]]; do gum_log_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
     else
         rm -f "${ARCH_OS_BLACKLIST}.new"
-        while IFS= read -r line || [[ -n "$line" ]]; do gum_mesg "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
+        while IFS= read -r line || [[ -n "$line" ]]; do gum_log_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
         gum_warn "Edit canceled"
     fi
     # Save mirrorlist?
