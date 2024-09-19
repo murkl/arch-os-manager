@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
+
 set -Eeo pipefail
 
 # ///////////////////////////////////////////////////////////////////
@@ -113,7 +114,7 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             clear_screen && print_header
             local user_input options
-            options=("Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
+            options=("Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Keyring" "Settings" "Help" "Quit")
             user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'Search Package') selected_action='search' ;;
@@ -124,7 +125,7 @@ main() {
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
             'Clear Cache') selected_action='cache' ;;
-            'Reset Pacman') selected_action='reset' ;;
+            'Reset Keyring') selected_action='reset' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
             'Quit') clear_screen && exit 2 ;;
@@ -364,19 +365,20 @@ sync_news_db() {
 }
 
 sync_package_db() {
-    local tmp_db_pac="${ARCH_OS_TMP}/packages-pac.db"
+    local tmp_db_default="${ARCH_OS_TMP}/packages-pac.db"
     local tmp_db_aur="${ARCH_OS_TMP}/packages-aur.db"
-    ! /usr/bin/pacman -Slq >"$tmp_db_pac" && return 3
+    ! /usr/bin/pacman -Slq >"$tmp_db_default" && return 3
 
     # Add AUR packages
     if [ "$AUR_SUPPORT" = "true" ]; then
         /usr/bin/paru -Slqa >"$tmp_db_aur" || rm -f "$tmp_db_aur"
-        [ -f "$tmp_db_aur" ] && cat "$tmp_db_aur" >>"$tmp_db_pac"
+        [ -f "$tmp_db_aur" ] && cat "$tmp_db_aur" >>"$tmp_db_default"
     fi
 
     # Sort and remove redundant entries
-    sort "$tmp_db_pac" | uniq >"${tmp_db_pac}.trim"
-    mv "${tmp_db_pac}.trim" "$PACKAGES_DB"
+    #sort "$tmp_db_default" | uniq >"${tmp_db_default}.trim"
+    sort "$tmp_db_default" >"${tmp_db_default}.trim"
+    mv -f "${tmp_db_default}.trim" "$PACKAGES_DB"
     return 0
 }
 
@@ -455,17 +457,25 @@ show_news_info() { # Show Arch Linux News
 
         # Print news
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && gum_content_strong "$(print_news_date "$i") | $(print_news_title "$i")" && continue
-            gum_content "$(print_news_date "$i") | $(print_news_title "$i")"
+            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && gum_info "$(print_news_date "$i") | $(print_news_title "$i")" && continue
+            gum_mesg "$(print_news_date "$i") | $(print_news_title "$i")"
         done
 
+        # Unread news?
         if [ $unread_news = "true" ]; then
-            echo && gum_title "Unread News"
-            gum_unread "$(print_news_date 1)" "$(print_news_url 1)"
+
+            # Open in browser / print url (if xdg-utils is installed)
+            local open_browser="false"
+            echo && command -v /usr/bin/xdg-open &>/dev/null && gum_confirm "Open in Browser?" && open_browser="true"
+            [ $open_browser = "true" ] && xdg-open "$(print_news_url 1)"
+            [ $open_browser = "false" ] && gum_warn "Please open: $(print_news_url 1)" && echo
+
+            # Finish
             ! gum_confirm "Have you read the News?" && return 0
             LATEST_ARCH_LINUX_NEWS_DATE="$(print_news_date 1)" && persist_state
         fi
     fi
+
     return 0
 }
 
@@ -810,7 +820,7 @@ show_upgrade() { # Update packages
 
     # Show infos
     show_news_info || return $?
-    echo && show_update_info || return $?
+    show_update_info || return $?
     echo && show_health_info || return $?
     if [ ! -s "$UPDATES_DB" ]; then
         gum_confirm_continue
@@ -831,7 +841,7 @@ show_upgrade() { # Update packages
 
     # Upgrade AUR packages
     if [ "$AUR_SUPPORT" = "true" ]; then
-        gum_mesg "Upgrading AUR Packages..."
+        gum_mesg_strong "Upgrading AUR Packages..."
         [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
         ! /usr/bin/paru -Suaq "${pkg_manager_args[@]}" && gum_fail "AUR Upgrade failed" && return 3
     fi
@@ -841,11 +851,11 @@ show_upgrade() { # Update packages
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
                 ! gum_spin --title 'Upgrading Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && gum_fail "Flatpak Upgrade failed" && return 3
             else # Do Interactive flatpak update
-                gum_mesg "Upgrading Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
+                gum_mesg_strong "Upgrading Flatpak Apps" && ! flatpak update && gum_fail "Flatpak Upgrade failed" && return 3
             fi
-            gum_mesg "Flatpak Upgrade finished"
+            gum_mesg_strong "Flatpak Upgrade finished"
         else # Up to date
-            gum_mesg "Flatpak is up to date"
+            gum_mesg_strong "Flatpak is up to date"
         fi
     fi
 
@@ -875,15 +885,15 @@ show_orphans() { # Remove orphaned packages
     if /usr/bin/pacman -Qtdq &>/dev/null; then
         ! sudo /usr/bin/pacman -Rns "${pkg_manager_args[@]}" $(/usr/bin/pacman -Qtdq) && gum_fail "Remove System Orphans failed" && return 3
     else
-        gum_mesg "No orphaned system packages found"
+        gum_mesg_strong "No orphaned system packages found"
     fi
     # Remove unused flatpaks
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
             ! gum_spin --title 'Removing Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && gum_fail "Remove Flatpak Orphans failed" && return 3
-            gum_mesg "Remove Flatpak Orphans finished"
+            gum_mesg_strong "Remove Flatpak Orphans finished"
         else # Do Interactive flatpak orphans
-            gum_mesg "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 3
+            gum_mesg_strong "Remove Flatpak Orphans" && ! flatpak uninstall --unused && gum_fail "Remove Flatpak Orphans failed" && return 3
         fi
     fi
     gum_info "Done"
@@ -909,14 +919,14 @@ show_merge() { # Merge updated config files
         fi
         clear_screen && print_header # Clean install output & print new header
     fi
-    gum_title "Merge Configuration Updates"
+    gum_title "Merge Pacdiff Configurations"
     ! gum_confirm "Continue?" && return 2
-    local pacdiff_info && pacdiff_info="$(pacdiff -o)"
-    # Check if up to date and return
-    [ -z "$pacdiff_info" ] && gum_info "Nothing to do" && return 0
+    # List & show pacdiff config files
+    local pacdiff_files=() && while IFS= read -r line; do pacdiff_files+=("$line"); done < <(pacdiff -o)
+    [ ${#pacdiff_files[@]} -eq 0 ] && gum_info "Nothing to do" && return 0
+    for file in "${pacdiff_files[@]}"; do gum_warn "$file"; done
     # Merge files
-    echo -e "$pacdiff_info" && echo
-    ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 3
+    echo && ! sudo DIFFPROG=meld pacdiff && echo -e '\n' && gum_warn "Canceled" && return 3
     gum_info "Done"
     return 0
 }
@@ -939,14 +949,31 @@ show_refresh() { # Refresh mirrorlist with reflector
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && gum_fail "Failed" && return 3
 
-    # Print mirrorlist
-    while read -r line; do
-        [[ $line =~ ^[#[:space:]]|^$ ]] || gum_content "${line}"
-    done <"$MIRRORLIST_TMP"
+    local content && content="$(cat "$MIRRORLIST_TMP" | grep -v '^#' | sed '/^$/d;s/^[ \t#]*//')" && echo "$content"
 
-    echo && ! gum_confirm "Save Mirrorlist?" && return 2
+    # Print cleaned mirrorlist.clean (only server entries)
+    # sed -e '/^$/d' -e '/^[[:space:]#]/d' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$MIRRORLIST_TMP" >"${MIRRORLIST_TMP}.clean"
+    #local content && content="$(cat "${MIRRORLIST_TMP}.clean")" && echo "$content"
+    echo && gum_confirm "Edit Mirrorlist?" && clear_screen && print_header
+    if gum_write --show-line-numbers --height="6" --value="$content" >"${MIRRORLIST_TMP}.new"; then
+
+        mv -f "${MIRRORLIST_TMP}.new" "${MIRRORLIST_TMP}.clean"
+        # Refresh & print mirrorlist
+        gum_title "Mirrorlist"
+
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            echo "$line"
+        done <"${MIRRORLIST_TMP}.clean"
+
+    else
+        rm -f "${ARCH_OS_BLACKLIST}.new"
+    fi
+
+    ! gum_confirm "Save Mirrorlist?" && return 2
+    # Check new mirrorlist
+    ! [ -s "${MIRRORLIST_TMP}.clean" ] && gum_fail "Mirrorlist is empty" && return 3
     # Save mirrorlist and set correct permissions
-    sudo mv -f "$MIRRORLIST_TMP" /etc/pacman.d/mirrorlist
+    sudo cp -f "${MIRRORLIST_TMP}.clean" /etc/pacman.d/mirrorlist
     sudo chown root:root /etc/pacman.d/mirrorlist
     gum_info "Successfully copied to /etc/pacman.d/mirrorlist"
     return 0
@@ -967,7 +994,7 @@ show_downgrade() { # Downgrade packages
         ! /usr/bin/paru -Sq --needed "${pkg_manager_args[@]}" downgrade && gum_warn "Canceled" && return 3
         clear_screen && print_header # Clean install output & print new header
     fi
-    gum_title "Downgrade Packages"
+    gum_title "Downgrade Pacman Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
     ! user_input=$(gum_filter --limit 25 --height "20" --placeholder "Type to filter and toggle with CTRL + Space..." "${options[@]}") && return 2
@@ -1040,24 +1067,25 @@ show_settings() { # Settings
 # ///////////////////////////////////////////////////////////////////
 
 show_help() { # Print help page
-    gum_white --bold 'GitHub: https://github.com/murkl/arch-os-manager' && echo
+    gum_title 'GitHub'
+    gum_mesg 'Open Project URL  ➜  https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
-    gum_white 'arch-os [--kitty | -k]              Open main menu'
-    gum_white 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
-    gum_white 'arch-os [--kitty | -k] notify       Notify on new package updates'
-    gum_white 'arch-os [--kitty | -k] settings     Edit settings in built-in ediitor'
-    gum_white 'arch-os [--kitty | -k] version      Print version info'
-    gum_white 'arch-os [--kitty | -k] help         Open help page' && echo
+    gum_mesg 'arch-os [--kitty | -k]              Open main menu'
+    gum_mesg 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
+    gum_mesg 'arch-os [--kitty | -k] notify       Notify on new package updates'
+    gum_mesg 'arch-os [--kitty | -k] settings     Edit settings in built-in ediitor'
+    gum_mesg 'arch-os [--kitty | -k] version      Print version info'
+    gum_mesg 'arch-os [--kitty | -k] help         Open help page' && echo
     gum_title 'Actions'
-    gum_white 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
-    gum_white 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
-    gum_white 'arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)'
-    gum_white 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
-    gum_white 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
-    gum_white 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
-    gum_white 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
-    gum_white 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
-    gum_white 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)'
+    gum_mesg 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
+    gum_mesg 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
+    gum_mesg 'arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)'
+    gum_mesg 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
+    gum_mesg 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
+    gum_mesg 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
+    gum_mesg 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
+    gum_mesg 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
+    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)'
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -1065,12 +1093,12 @@ show_help() { # Print help page
 # ///////////////////////////////////////////////////////////////////
 show_version() { # Print version page
     gum_title "Version Information"
-    gum_content "$(kitty --version)"
-    gum_content "$(gum --version)"
-    gum_content "$(notify-send --version)"
-    [ "$FLATPAK_SUPPORT" = "true" ] && gum_content "$(flatpak --version)"
-    [ "$AUR_SUPPORT" = "true" ] && gum_content "$(/usr/bin/paru --version)"
-    gum_content "$(/usr/bin/checkupdates --version)"
+    gum_mesg "$(kitty --version)"
+    gum_mesg "$(gum --version)"
+    gum_mesg "$(notify-send --version)"
+    [ "$FLATPAK_SUPPORT" = "true" ] && gum_mesg "$(flatpak --version)"
+    [ "$AUR_SUPPORT" = "true" ] && gum_mesg "$(/usr/bin/paru --version)"
+    gum_mesg "$(/usr/bin/checkupdates --version)"
     /usr/bin/pacman --version
     return 0
 }
@@ -1134,19 +1162,15 @@ gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 # Print
 gum_title() { gum join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
-gum_info() { gum join "$(gum_green --bold " • ")" "$(gum_white --bold "${*}")"; }
-gum_warn() { gum join "$(gum_yellow --bold " • ")" "$(gum_white --bold "${*}")"; }
-gum_fail() { gum join "$(gum_red --bold " • ")" "$(gum_white --bold "${*}")"; }
-gum_mesg() { gum join "$(gum_white --bold " • ")" "$(gum_white --bold "${*}")"; }
-gum_content() { gum join "$(gum_white " • ")" "$(gum_white "${*}")"; }
-gum_content_strong() { gum join "$(gum_green " • ")" "$(gum_white --bold "${*}")"; }
+gum_info() { gum join "$(gum_green --bold " • ")" "$(gum_green --bold "${*}")"; }
+gum_warn() { gum join "$(gum_yellow --bold " • ")" "$(gum_yellow --bold "${*}")"; }
+gum_fail() { gum join "$(gum_red --bold " • ")" "$(gum_red --bold "${*}")"; }
+gum_mesg() { gum join "$(gum_white --bold " • ")" "$(gum_white "${*}")"; }
+gum_mesg_strong() { gum join "$(gum_white --bold " • ")" "$(gum_white --bold "${*}")"; }
 
 # Log
 gum_log_info() { gum join "$(gum_green --bold " • ")" "$(gum_white "${*}")"; }
 gum_log_fail() { gum join "$(gum_red --bold " • ")" "$(gum_white --bold "${*}")"; }
-
-# Unread
-gum_unread() { gum join "$(gum_yellow --bold " • ${1} : ")" "$(gum_yellow --bold "${2}")"; }
 
 # Key & value
 gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
@@ -1229,14 +1253,16 @@ install_script_dependencies() {
 
     # Install system packages
     echo ":: Install Arch OS Manager Dependencies"
-    pacman_install git base-devel flatpak gum kitty libnotify meld reflector pacman-contrib fzf
+    pacman_install git base-devel pacman-contrib reflector flatpak gum kitty libnotify fzf xdg-utils meld
+
+    # Create backup
+    [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
 
     # Install paru
     echo ":: Install Paru..."
     aur_install "$AUR_MANGER_REPO" || return 1
 
     # Set paru config
-    [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
     sudo sed -i 's/^#BottomUp/BottomUp/g' /etc/paru.conf
     sudo sed -i 's/^#SudoLoop/SudoLoop/g' /etc/paru.conf
 
@@ -1244,7 +1270,7 @@ install_script_dependencies() {
     echo ":: Install Downgrade..."
     aur_install downgrade || return 1
 
-    echo ":: Successfuly finished"
+    echo ":: Successfully finished"
     return 0
 }
 

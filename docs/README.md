@@ -76,6 +76,7 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 - `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
 - `meld`: Add support for merge pacdiff configurations
+- `xdg-utils`: Add support for open news in browser with `xdg-open`
 
 ## Usage
 
@@ -100,6 +101,25 @@ arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)
 arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)
 ```
 
+### Install Dependencies _(optional)_
+
+Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
+
+#### Pacman Packages
+
+```
+git base-devel pacman-contrib reflector flatpak gum kitty libnotify fzf xdg-utils meld
+```
+
+#### AUR Packages
+
+These packages are built and installed manually from the AUR-Git repository using `makepkg`:
+
+- paru (see `AUR_MANAGER_REPO` property for more details)
+- downgrade
+
+Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/etc/paru.conf.20240919170446`, for example (before editing).
+
 ## Settings
 
 Edit the settings with the built-in editor in Arch OS Manager or edit the config file manually.
@@ -107,7 +127,7 @@ Edit the settings with the built-in editor in Arch OS Manager or edit the config
 ```
 ARCH_UPGRADE_CONFIRM=true         # Enable confirm upgrade system packages (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false       # Disable pacman/paru download timeout (enable: true)
-AUR_MANAGER_REPO=paru             # Set AUR manager package for install (paru, paru-bin, paru-git)
+AUR_MANAGER_REPO=paru             # Set AUR manager package for --install (paru, paru-bin, paru-git)
 AUR_SUPPORT=true                  # Enable AUR support (disable: false)
 AUR_REVIEW=false                  # Disable AUR review (enable: true)
 FLATPAK_SUPPORT=true              # Enable flatpak support (disable: false)
@@ -156,7 +176,6 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <p><img src="./screenshots/upgrade.png"></p>
 <p><img src="./screenshots/info.png"></p>
 <p><img src="./screenshots/search.png"></p>
-<p><img src="./screenshots/news.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
 
 </div>
