@@ -1025,8 +1025,8 @@ show_downgrade() { # Downgrade packages
 # CLEAR CACHE
 # ///////////////////////////////////////////////////////////////////
 
-show_clear_cache() { # Clear package manager cache
-    gum_title "Clear Package Manager Cache"
+show_clear_cache() { # Clear package cache
+    gum_title "Clear Package Cache"
     ! gum_confirm "Continue?" && return 2
     local pkg_manager="sudo /usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
     $pkg_manager -Scc
@@ -1080,25 +1080,26 @@ show_settings() { # Settings
 # ///////////////////////////////////////////////////////////////////
 
 show_help() { # Print help page
-    gum_title 'App'
-    gum_mesg 'arch-os [--kitty | -k]              Open main menu'
-    gum_mesg 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
-    gum_mesg 'arch-os [--kitty | -k] notify       Notify on new package updates'
-    gum_mesg 'arch-os [--kitty | -k] settings     Edit settings in built-in ediitor'
-    gum_mesg 'arch-os [--kitty | -k] version      Print version info'
-    gum_mesg 'arch-os [--kitty | -k] help         Open help page' && echo
-    gum_title 'Actions'
-    gum_mesg 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
-    gum_mesg 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
-    gum_mesg 'arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)'
-    gum_mesg 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
-    gum_mesg 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
-    gum_mesg 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
-    gum_mesg 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
-    gum_mesg 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
-    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)' && echo
     gum_title 'GitHub'
-    gum_mesg 'https://github.com/murkl/arch-os-manager'
+    gum_mesg 'https://github.com/murkl/arch-os-manager' && echo
+    gum_title 'Usage'
+    gum_mesg_strong 'arch-os [--kitty | -k] [action]' && echo
+    gum_title 'App Actions'
+    gum_mesg 'help             ➜  Open help page'
+    gum_mesg 'version          ➜  Print version info'
+    gum_mesg 'settings         ➜  Edit settings in built-in ediitor' && echo
+    gum_title 'System Actions'
+    gum_mesg 'check            ➜  Print package updates (checkupdates)'
+    gum_mesg 'notify           ➜  Notify on new package updates (autostart)'
+    gum_mesg 'search           ➜  Search & manage packages (pacman, aur)'
+    gum_mesg 'info             ➜  Show system info (logs, services, health)'
+    gum_mesg 'upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)'
+    gum_mesg 'orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)'
+    gum_mesg 'merge            ➜  Merge updated configurations (pacdiff, meld)'
+    gum_mesg 'refresh          ➜  Refresh & edit pacman mirrorlist (reflector)'
+    gum_mesg 'downgrade        ➜  Downgrade packages (pacman)'
+    gum_mesg 'cache            ➜  Clear package cache (pacman, aur)'
+    gum_mesg 'reset            ➜  Reset pacman keyring & upgrade (pacman)'
 }
 
 # ///////////////////////////////////////////////////////////////////
