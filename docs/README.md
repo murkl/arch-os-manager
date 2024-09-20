@@ -76,8 +76,8 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 - `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
 - `meld`: Add support for merge pacdiff configurations
-- `gnome-extensions`: Add support for GNOME Extensions
-- `xdg-utils`: Add support for open news in browser with `xdg-open`
+- `xdg-utils`: Add support for open news in browser
+- `gnome-shell-extensions`: Add support for GNOME Extensions
 
 **Note:** _see [Install Dependencies](#install-dependencies-optional) for more information_
 
