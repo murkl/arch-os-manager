@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.3"
+VERSION="1.6.4"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -251,6 +251,8 @@ init_properties() {
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
+    [ -z "$SHOW_SYSTEM_LOG" ] && SHOW_SYSTEM_LOG="true"
+    [ -z "$SHOW_SERVICE_LIST" ] && SHOW_SERVICE_LIST="true"
     [ -z "$SHOW_UNKNOWN_PKG_LIST" ] && SHOW_UNKNOWN_PKG_LIST="false"
 
     return 0
@@ -316,6 +318,8 @@ persist_properties() {
         echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}"
         echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}"
         echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
+        echo "SHOW_SYSTEM_LOG=${SHOW_SYSTEM_LOG}"
+        echo "SHOW_SERVICE_LIST=${SHOW_SERVICE_LIST}"
         echo "SHOW_UNKNOWN_PKG_LIST=${SHOW_UNKNOWN_PKG_LIST}"
     } >"$ARCH_OS_CONF"
 
@@ -774,32 +778,33 @@ show_search() { # Search & manage packages
 
 show_system_info() { # System info
     local options user_input system_logs
-    gum_title "System Information"
-
-    # Show system logs
-    system_logs=$(print_system_error_logs)
-    if [ -n "$system_logs" ]; then
-        local log_counter=0
-        echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
-    else
-        gum_log_info "No System Logs available"
+    if [ "$SHOW_SYSTEM_LOG" = "true" ]; then
+        # Show system logs
+        gum_title "System Information"
+        system_logs=$(print_system_error_logs)
+        if [ -n "$system_logs" ]; then
+            local log_counter=0
+            echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
+        else
+            gum_log_info "No System Logs available"
+        fi
+        echo # Print new line
     fi
 
     # Show service health
-    echo && gum_title "Service Information"
-    print_service_running | while read -r line; do gum_log_info "${line}"; done
+    [ "$SHOW_SERVICE_LIST" = "true" ] && gum_title "Service Information" && print_service_running | while read -r line; do gum_log_info "${line}"; done && echo
 
     # Failed services
-    services_failed=$(print_service_failed)
+    services_failed="$(print_service_failed)"
     if [ -n "$services_failed" ]; then
-        echo -e "$services_failed" | while read -r line; do gum_log_fail "${line}"; done
+        gum_title "Failed Services" && echo -e "$services_failed" | while read -r line; do gum_log_fail "${line}"; done && echo
     fi
 
     # Show system health
-    echo && show_health_info --sync-updates
+    show_health_info --sync-updates && echo
 
     # Show menu
-    echo && gum_title "Options"
+    gum_title "Options"
     options=("Edit Blacklist" "Done")
     ! user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") && gum_warn "Canceled" && return 2
     case "$user_input" in
@@ -1075,8 +1080,6 @@ show_settings() { # Settings
 # ///////////////////////////////////////////////////////////////////
 
 show_help() { # Print help page
-    gum_title 'GitHub'
-    gum_mesg 'Open Project URL  ➜  https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_mesg 'arch-os [--kitty | -k]              Open main menu'
     gum_mesg 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
@@ -1093,7 +1096,9 @@ show_help() { # Print help page
     gum_mesg 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
     gum_mesg 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
     gum_mesg 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
-    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)'
+    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)' && echo
+    gum_title 'GitHub'
+    gum_mesg 'https://github.com/murkl/arch-os-manager'
 }
 
 # ///////////////////////////////////////////////////////////////////

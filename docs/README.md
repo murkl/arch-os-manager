@@ -78,6 +78,8 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 - `meld`: Add support for merge pacdiff configurations
 - `xdg-utils`: Add support for open news in browser with `xdg-open`
 
+**Note:** _see [Install Dependencies](#install-dependencies-optional) for more information_
+
 ## Usage
 
 ```
