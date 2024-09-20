@@ -1075,8 +1075,6 @@ show_settings() { # Settings
 # ///////////////////////////////////////////////////////////////////
 
 show_help() { # Print help page
-    gum_title 'GitHub'
-    gum_mesg 'Open Project  ➜  https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_mesg 'arch-os [--kitty | -k]              Open main menu'
     gum_mesg 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
@@ -1093,7 +1091,10 @@ show_help() { # Print help page
     gum_mesg 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
     gum_mesg 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
     gum_mesg 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
-    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)'
+    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)' && echo
+
+    gum_title 'GitHub'
+    gum_mesg 'https://github.com/murkl/arch-os-manager'
 }
 
 # ///////////////////////////////////////////////////////////////////
