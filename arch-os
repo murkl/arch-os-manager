@@ -473,7 +473,7 @@ show_news_info() { # Show Arch Linux News
             # Open in browser / print url (if xdg-utils is installed)
             local open_browser="false"
             command -v /usr/bin/xdg-open &>/dev/null && gum_confirm "Open in Browser?" && open_browser="true"
-            [ $open_browser = "true" ] && xdg-open "$(print_news_url 1)"
+            [ $open_browser = "true" ] && xdg-open "$(print_news_url 1)" &>/dev/null
             [ $open_browser = "false" ] && gum_warn "Please open: $(print_news_url 1)" && echo
 
             # Finish
