@@ -408,7 +408,7 @@ action_check_updates_available() { # Check & print package updates
 
 action_notify_updates() { # Notify on new updates
     local update_result update_count update_txt
-    update_result="$(action_check_updates_available)"
+    update_result="$(action_check_updates_available)" || true
     update_count=0 && [ -n "$update_result" ] && update_count=$(echo "$update_result" | wc -l)
     if [ "$update_count" -gt 0 ]; then
         [ "$update_count" = 1 ] && update_txt="${update_count} Update available"
