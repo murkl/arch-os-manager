@@ -608,9 +608,9 @@ show_health_info() { # Show system health information
 #shellcheck disable=SC2086
 show_search() { # Search & manage packages
 
-    local pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
+    local search_filter pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
-        print_header && gum_title "Package Information"
+        print_header && gum_title "Package Search"
 
         # Sync db
         print_no_internet_info || return 3
@@ -638,21 +638,26 @@ show_search() { # Search & manage packages
                 done
             }
 
-            # User input
-            local user_input
-            user_input=$(gum_input --placeholder="Search Package...") || return 2
-            [ -z "$user_input" ] && gum_fail "Search was empty" && return 3
-            gum_info "Search: ${user_input}"
+            # Search filter
+            ! search_filter=$(gum_input --placeholder="Search Package...") && gum_warn "Canceled" && return 2
+            [ -z "$search_filter" ] && gum_fail "Search was empty" && return 3
+
+            gum_key_value_white "$(print_filled_space "Search Filter")" "$search_filter"
 
             # Filter results
-            local filter_pkgs_results && ! filter_pkgs_results="$(list_results "$user_input" | tac)"
+            local filter_pkgs_results && ! filter_pkgs_results="$(list_results "$search_filter" | tac)"
             [ -z "$filter_pkgs_results" ] && gum_warn "No Results" && return 3
 
+            echo && gum_title "Package Information"
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            ! pkg_name=$(gum_filter --limit 1 --height "20" --placeholder "Filter..." "${search_result_array[@]}") && return 2
+            ! pkg_name=$(gum_filter --limit 1 --height "20" --placeholder "Filter..." "${search_result_array[@]}") && gum_warn "Canceled" && return 2
 
             # Set package name
             pkg_name="$(echo "$pkg_name" | cut -d':' -f1 | cut -d'/' -f2)"
+
+        else
+            gum_key_value_white "$(print_filled_space "Search Filter")" "$search_filter"
+            echo && gum_title "Package Information"
         fi
 
         # -------------------------------------------------------------------
@@ -675,12 +680,17 @@ show_search() { # Search & manage packages
         fi
 
         # Print general package info
-        # echo # Print new line
-        gum_key_value_white "$(print_filled_space "Name")" "$pkg_name"
-        gum_key_value_white "$(print_filled_space "Repository")" "$(print_package_value "$pkg_info_remote" "Repository")"
-        gum_key_value_white "$(print_filled_space "Dependencies")" "$(print_package_value "$pkg_info_remote" "Depends On" | wc -w)"
-        gum_key_value_white "$(print_filled_space "Version")" "$(print_package_value "$pkg_info_remote" "Version")"
+        local pkg_text && pkg_text="${pkg_name}:$(print_package_value "$pkg_info_remote" "Version")"
+        gum_key_value_white "$(print_filled_space "Package")" "$pkg_text"
         gum_key_value_white "$(print_filled_space "Description")" "$(print_package_value "$pkg_info_remote" "Description")"
+        # Repo
+        local pkg_repo && pkg_repo="$(print_package_value "$pkg_info_remote" "Repository")"
+        if [ "$pkg_repo" = "core" ] || [ "$pkg_repo" = "extra" ]; then
+            gum_key_value_white "$(print_filled_space "Repository")" "$pkg_repo"
+        else
+            gum_key_value_yellow "$(print_filled_space "Repository")" "$pkg_repo"
+        fi
+        gum_key_value_white "$(print_filled_space "Dependencies")" "$(print_package_value "$pkg_info_remote" "Depends On" | wc -w)"
 
         # Repo Info
         if [ "$pkg_is_aur" = "true" ]; then # AUR package info
@@ -724,7 +734,7 @@ show_search() { # Search & manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        user_input=$(gum_choose --selected="Done" --height=6 "${options[@]}") || return 2
+        ! user_input=$(gum_choose --selected="Done" --height=6 "${options[@]}") && gum_warn "Canceled" && return 2
         case "$user_input" in # Set user action to selected action
         'Install')
             ! gum_confirm "Install?" && clear_screen && continue
@@ -749,7 +759,7 @@ show_search() { # Search & manage packages
             ! gum_confirm "Downgrade?" && clear_screen && continue
             if sudo downgrade $pkg_name; then gum_info "Downgrade successful"; else gum_fail "Downgrading ${pkg_name} failed"; fi
             ;;
-        'Done') return 2 ;;
+        'Done') gum_mesg "Done" && return 2 ;;
         *) unset pkg_name && gum_fail "Action '${user_input}' not available" && return 3 ;;
         esac
         gum_confirm_continue
@@ -791,7 +801,7 @@ show_system_info() { # System info
     # Show menu
     echo && gum_title "Options"
     options=("Edit Blacklist" "Done")
-    user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") || return 2
+    ! user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") && gum_warn "Canceled" && return 2
     case "$user_input" in
     'Edit Blacklist')
         clear_screen && print_header && gum_title "Edit Blacklist"
@@ -808,7 +818,7 @@ show_system_info() { # System info
             gum_warn "Canceled" && return 3
         fi
         ;;
-    'Done') return 2 ;;
+    'Done') gum_mesg "Done" && return 2 ;;
     *) gum_fail "Option '${user_input}' not available" && return 3 ;;
     esac
     return 0
