@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.4"
+VERSION="1.6.5"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
