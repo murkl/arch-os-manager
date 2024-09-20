@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.3"
+VERSION="1.6.4"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -1076,7 +1076,7 @@ show_settings() { # Settings
 
 show_help() { # Print help page
     gum_title 'GitHub'
-    gum_mesg 'Open Project URL  ➜  https://github.com/murkl/arch-os-manager' && echo
+    gum_mesg 'Open Project  ➜  https://github.com/murkl/arch-os-manager' && echo
     gum_title 'App'
     gum_mesg 'arch-os [--kitty | -k]              Open main menu'
     gum_mesg 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
