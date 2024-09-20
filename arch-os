@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.4"
+VERSION="1.6.5"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -473,7 +473,7 @@ show_news_info() { # Show Arch Linux News
             # Open in browser / print url (if xdg-utils is installed)
             local open_browser="false"
             command -v /usr/bin/xdg-open &>/dev/null && gum_confirm "Open in Browser?" && open_browser="true"
-            [ $open_browser = "true" ] && xdg-open "$(print_news_url 1)"
+            [ $open_browser = "true" ] && xdg-open "$(print_news_url 1)" &>/dev/null
             [ $open_browser = "false" ] && gum_warn "Please open: $(print_news_url 1)" && echo
 
             # Finish
@@ -602,14 +602,13 @@ show_health_info() { # Show system health information
     else
         gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
     fi
-
 }
 
 # ///////////////////////////////////////////////////////////////////
 # SEARCH
 # ///////////////////////////////////////////////////////////////////
 
-#shellcheck disable=SC2086
+# shellcheck disable=SC2086
 show_search() { # Search & manage packages
 
     local search_filter pkg_name pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
@@ -707,10 +706,9 @@ show_search() { # Search & manage packages
             # Check outdated packages
             local outdated && outdated="$(print_package_value "$pkg_info_remote" "Out Of Date")"
             [ "$outdated" = "No" ] && gum_key_value_white "$(print_filled_space "AUR Outdated")" "no"
-            [ "$outdated" != "No" ] && gum_key_value_yellow "$(print_filled_space "AUR Outdated")" "$(echo $outdated | date -f - "+%Y-%m-%d %H:%M")"
+            [ "$outdated" != "No" ] && gum_key_value_red "$(print_filled_space "AUR Outdated")" "$(echo "$outdated" | date -f - "+%Y-%m-%d %H:%M")"
 
         else
-
             # Non AUR package info
             gum_key_value_white "$(print_filled_space "Package URL")" "$(print_package_value "$pkg_info_remote" "URL")"
             gum_key_value_white "$(print_filled_space "Package Date")" "$(print_package_value "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
@@ -862,6 +860,7 @@ show_upgrade() { # Update packages
         [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
         ! /usr/bin/paru -Suaq "${pkg_manager_args[@]}" && gum_fail "AUR Upgrade failed" && return 3
     fi
+    
     # Upgrade flatpak packages
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ -n "$(flatpak remote-ls --updates)" ]; then      # Check if flatpak updates available
@@ -1025,8 +1024,8 @@ show_downgrade() { # Downgrade packages
 # CLEAR CACHE
 # ///////////////////////////////////////////////////////////////////
 
-show_clear_cache() { # Clear package manager cache
-    gum_title "Clear Package Manager Cache"
+show_clear_cache() { # Clear package cache
+    gum_title "Clear Package Cache"
     ! gum_confirm "Continue?" && return 2
     local pkg_manager="sudo /usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
     $pkg_manager -Scc
@@ -1080,25 +1079,26 @@ show_settings() { # Settings
 # ///////////////////////////////////////////////////////////////////
 
 show_help() { # Print help page
-    gum_title 'App'
-    gum_mesg 'arch-os [--kitty | -k]              Open main menu'
-    gum_mesg 'arch-os [--kitty | -k] check        Print package updates like checkupdates'
-    gum_mesg 'arch-os [--kitty | -k] notify       Notify on new package updates'
-    gum_mesg 'arch-os [--kitty | -k] settings     Edit settings in built-in ediitor'
-    gum_mesg 'arch-os [--kitty | -k] version      Print version info'
-    gum_mesg 'arch-os [--kitty | -k] help         Open help page' && echo
-    gum_title 'Actions'
-    gum_mesg 'arch-os [--kitty | -k] search       Search & manage package (pacman, aur)'
-    gum_mesg 'arch-os [--kitty | -k] info         Show system info (logs, services, health)'
-    gum_mesg 'arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)'
-    gum_mesg 'arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)'
-    gum_mesg 'arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)'
-    gum_mesg 'arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)'
-    gum_mesg 'arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)'
-    gum_mesg 'arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)'
-    gum_mesg 'arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)' && echo
     gum_title 'GitHub'
-    gum_mesg 'https://github.com/murkl/arch-os-manager'
+    gum_mesg 'https://github.com/murkl/arch-os-manager' && echo
+    gum_title 'Usage'
+    gum_mesg_strong 'arch-os [--kitty | -k] [action]' && echo
+    gum_title 'App Actions'
+    gum_mesg 'help             ➜  Open help page'
+    gum_mesg 'version          ➜  Print version info'
+    gum_mesg 'settings         ➜  Edit settings in built-in ediitor' && echo
+    gum_title 'System Actions'
+    gum_mesg 'check            ➜  Print package updates (checkupdates)'
+    gum_mesg 'notify           ➜  Notify on new package updates (autostart)'
+    gum_mesg 'search           ➜  Search & manage packages (pacman, aur)'
+    gum_mesg 'info             ➜  Show system info (logs, services, health)'
+    gum_mesg 'upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)'
+    gum_mesg 'orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)'
+    gum_mesg 'merge            ➜  Merge updated configurations (pacdiff, meld)'
+    gum_mesg 'refresh          ➜  Refresh & edit pacman mirrorlist (reflector)'
+    gum_mesg 'downgrade        ➜  Downgrade packages (pacman)'
+    gum_mesg 'cache            ➜  Clear package cache (pacman, aur)'
+    gum_mesg 'reset            ➜  Reset pacman keyring & upgrade (pacman)'
 }
 
 # ///////////////////////////////////////////////////////////////////

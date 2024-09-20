@@ -28,7 +28,7 @@
 arch-os
 ```
 
-**Note:** Add parameter `-k` to start with built-in kitty
+**Note:** Add parameter `-k` to start with built-in kitty in standalone mode
 
 ## Install from GitHub
 
@@ -50,24 +50,24 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ./arch-os
 ```
 
-**Note:** Add parameter `-k` to start with built-in kitty
+**Note:** Add parameter `-k` to start with built-in kitty in standalone mode
 
 ## Features
 
-- Check and list updates in _checkupdates_ format
+- Check & list updates in _checkupdates_ format
 - System health info
 - Startup notify on available updates
 - Notify & show latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
-- Search and manage packages
+- Search & manage packages
 - Show system info, packages & logs
 - Upgrade system packages
 - Remove orphaned packages
-- Clear Pacman cache
+- Clear Package cache
 - Reset Pacman keyring
-- Built-in log blacklist filter
+- Built-in system log blacklist
 - Built-in settings editor
-- Built-in kitty support
+- Standalone mode with built-in kitty
 
 Install these **optional** dependencies to equip Arch OS Manager with additional features:
 
@@ -76,31 +76,43 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 - `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
 - `meld`: Add support for merge pacdiff configurations
-- `xdg-utils`: Add support for open news in browser with `xdg-open`
+- `xdg-utils`: Add support for open news in browser
+- `gnome-shell-extensions`: Add support for GNOME Extensions
 
 **Note:** _see [Install Dependencies](#install-dependencies-optional) for more information_
 
 ## Usage
 
-```
-// App
-arch-os [--kitty | -k]              Open main menu
-arch-os [--kitty | -k] check        Print package updates like checkupdates
-arch-os [--kitty | -k] notify       Notify on new package updates
-arch-os [--kitty | -k] settings     Edit settings in built-in ediitor
-arch-os [--kitty | -k] version      Print version info
-arch-os [--kitty | -k] help         Open help page
+The manager can be opened regularly with `arch-os` or in standalone mode with `arch-os --kitty`.
 
-// Actions
-arch-os [--kitty | -k] search       Search & manage package (pacman, aur)
-arch-os [--kitty | -k] info         Show system info (logs, services, health)
-arch-os [--kitty | -k] upgrade      System upgrade (news, health, pacman, aur, flatpak)
-arch-os [--kitty | -k] orphans      Remove orphaned packages (pacman, aur, flatpak)
-arch-os [--kitty | -k] merge        Merge updated configurations (using pacdiff and meld)
-arch-os [--kitty | -k] refresh      Refresh pacman mirrorlist (using preconfigured reflector)
-arch-os [--kitty | -k] downgrade    Downgrade packages (pacman only)
-arch-os [--kitty | -k] cache        Clear package manager cache (pacman, aur)
-arch-os [--kitty | -k] reset        Reset pacman (reset pacman keyring)
+```
+arch-os [--kitty | -k] [action]
+```
+
+**Note:** If no parameter is specified, the main menu is opened.
+
+### App Actions
+
+```
+help             ➜  Open help page
+version          ➜  Print version info
+settings         ➜  Edit settings in built-in ediitor
+```
+
+### System Actions
+
+```
+check            ➜  Print package updates (checkupdates)
+notify           ➜  Notify on new package updates (autostart)
+search           ➜  Search & manage packages (pacman, aur)
+info             ➜  Show system info (logs, services, health)
+upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
+orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)
+merge            ➜  Merge updated configurations (pacdiff, meld)
+refresh          ➜  Refresh & edit pacman mirrorlist (reflector)
+downgrade        ➜  Downgrade packages (pacman)
+cache            ➜  Clear package cache (pacman, aur)
+reset            ➜  Reset pacman keyring & upgrade (pacman)
 ```
 
 ### Install Dependencies _(optional)_
@@ -138,6 +150,8 @@ ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
+SHOW_SYSTEM_LOG=true              # Show system log in info (disable: false)
+SHOW_SERVICE_LIST=true            # Show running services in info (disable: false)
 SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name list (enable: true)
 ```
 
@@ -145,7 +159,7 @@ SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name
 
 - Arch OS Manager config: `~/.arch-os/config/settings.conf`
 - Built-in kitty config: `~/.arch-os/config/kitty.conf`
-- System logs blacklist: `~/.arch-os/config/blacklist.conf`
+- System log blacklist: `~/.arch-os/config/blacklist.conf`
 
 ## Integrate GNOME Extension
 
@@ -178,8 +192,8 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <p><img src="./screenshots/upgrade.png"></p>
 <p><img src="./screenshots/info.png"></p>
 <p><img src="./screenshots/search.png"></p>
-<p><img src="./screenshots/news.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
+<p><img src="./screenshots/uptodate.png"></p>
 
 </div>
 
