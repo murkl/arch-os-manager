@@ -541,12 +541,12 @@ show_health_info() { # Show system health information
     # Gnome extensions count
     command -v /usr/bin/gnome-extensions &>/dev/null && gum_key_value_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
 
-    # System Logs
+    # System Log
     log_count=$(print_system_error_logs | wc -l)
     if [ "$log_count" -gt "0" ]; then
-        gum_key_value_yellow "System Logs" "${log_count}"
+        gum_key_value_yellow "System Log" "${log_count}"
     else
-        gum_key_value_green "System Logs" "${log_count}"
+        gum_key_value_green "System Log" "${log_count}"
     fi
 
     # Service Failure
@@ -784,7 +784,7 @@ show_system_info() { # System info
             local log_counter=0
             echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
         else
-            gum_log_info "No System Logs available"
+            gum_log_info "No System Log available"
         fi
         echo # Print new line
     fi
