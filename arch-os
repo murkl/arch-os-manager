@@ -333,6 +333,15 @@ persist_properties() {
 
 sync_updates_db() {
 
+    while timeout 180 tail --pid=$(pgrep checkupdates) -f /dev/null &>/dev/null; do sleep 1; done
+    pgrep checkupdates &>/dev/null && log_fail "checkupdates timeout after 180 seconds" && exit 1
+
+    while timeout 180 tail --pid=$(pgrep paru) -f /dev/null &>/dev/null; do sleep 1; done
+    pgrep paru &>/dev/null && log_fail "paru timeout after 180 seconds" && exit 1
+
+    while timeout 180 tail --pid=$(pgrep flatpak) -f /dev/null &>/dev/null; do sleep 1; done
+    pgrep flatpak &>/dev/null && log_fail "flatpak timeout after 180 seconds" && exit 1
+
     # Remove database file
     rm -f "$UPDATES_DB"
     touch "$UPDATES_DB"
@@ -860,7 +869,7 @@ show_upgrade() { # Update packages
         [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
         ! /usr/bin/paru -Suaq "${pkg_manager_args[@]}" && gum_fail "AUR Upgrade failed" && return 3
     fi
-    
+
     # Upgrade flatpak packages
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ -n "$(flatpak remote-ls --updates)" ]; then      # Check if flatpak updates available
