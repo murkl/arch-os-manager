@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.5"
+VERSION="1.6.6"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -541,12 +541,12 @@ show_health_info() { # Show system health information
     # Gnome extensions count
     command -v /usr/bin/gnome-extensions &>/dev/null && gum_key_value_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
 
-    # System Failure
+    # System Logs
     log_count=$(print_system_error_logs | wc -l)
     if [ "$log_count" -gt "0" ]; then
-        gum_key_value_yellow "System Failure" "${log_count}"
+        gum_key_value_yellow "System Logs" "${log_count}"
     else
-        gum_key_value_green "System Failure" "${log_count}"
+        gum_key_value_green "System Logs" "${log_count}"
     fi
 
     # Service Failure
