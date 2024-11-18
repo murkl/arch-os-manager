@@ -548,19 +548,11 @@ show_health_info() { # Show system health information
     # flatpak list --columns=application | tail -n +1 | wc -l
     [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
 
-    # Services count
-    gum_key_value_white "Running Services" "$(systemctl list-units --type=service --state=running --plain --no-legend | wc -l)"
-
     # Gnome extensions count
     command -v /usr/bin/gnome-extensions &>/dev/null && gum_key_value_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
 
-    # System Log
-    log_count=$(print_system_error_logs | wc -l)
-    if [ "$log_count" -gt "0" ]; then
-        gum_key_value_yellow "System Log" "${log_count}"
-    else
-        gum_key_value_green "System Log" "${log_count}"
-    fi
+    # Services count
+    gum_key_value_white "Running Services" "$(systemctl list-units --type=service --state=running --plain --no-legend | wc -l)"
 
     # Service Failure
     service_count=$(print_service_failed | wc -l)
@@ -568,6 +560,14 @@ show_health_info() { # Show system health information
         gum_key_value_red "Service Failure" "${service_count}"
     else
         gum_key_value_green "Service Failure" "${service_count}"
+    fi
+
+    # System Log
+    log_count=$(print_system_error_logs | wc -l)
+    if [ "$log_count" -gt "0" ]; then
+        gum_key_value_yellow "System Log" "${log_count}"
+    else
+        gum_key_value_green "System Log" "${log_count}"
     fi
 
     # Check pending updates
