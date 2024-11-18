@@ -75,7 +75,12 @@ main() {
 
     # Sync database & exit
     if [ "$1" = '--sync' ]; then
-        shift && [ $# -eq 0 ] && sync_news_db && sync_package_db && sync_updates_db && exit 2
+        if shift && [ $# -eq 0 ]; then
+            sync_news_db
+            sync_package_db
+            sync_updates_db
+            exit 2
+        fi
         for arg in "$@"; do
             case "$arg" in
             'news') sync_news_db ;;
@@ -333,21 +338,16 @@ persist_properties() {
 
 sync_updates_db() {
 
-    while timeout 180 tail --pid=$(pgrep checkupdates) -f /dev/null &>/dev/null; do sleep 1; done
-    pgrep checkupdates &>/dev/null && gum_log_fail "checkupdates timeout after 180 seconds" && exit 1
-
-    while timeout 180 tail --pid=$(pgrep paru) -f /dev/null &>/dev/null; do sleep 1; done
-    pgrep paru &>/dev/null && gum_log_fail "paru timeout after 180 seconds" && exit 1
-
-    while timeout 180 tail --pid=$(pgrep flatpak) -f /dev/null &>/dev/null; do sleep 1; done
-    pgrep flatpak &>/dev/null && gum_log_fail "flatpak timeout after 180 seconds" && exit 1
-
     # Remove database tmp file
+    mkdir -p "${ARCH_OS_TMP}"
     local tmp_db="${ARCH_OS_TMP}/update.db.tmp"
     rm -f "$tmp_db"
     touch "$tmp_db"
 
     # Pacman updates
+    while timeout 30 tail --pid=$(pgrep checkupdates) -f /dev/null &>/dev/null; do sleep 1; done
+    pgrep checkupdates &>/dev/null && gum_log_fail "Timeout after 30 seconds" && exit 3
+
     while IFS= read -r line; do
         [ -n "$line" ] && echo "$line" | sed 's/\x1b\[[0-9;]*m//g' | awk '{print "pacman," $1 "," $2 "," $4}' >>"$tmp_db"
     done < <(/usr/bin/checkupdates || echo)
@@ -467,7 +467,7 @@ show_news_info() { # Show Arch Linux News
 
         # Sync db
         print_no_internet_info || return 3
-        ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news" && gum_fail "Synchronize Database (news) failed" && return 3
+        ! gum_spin --title 'Synchronize News Database...' -- bash -c "${SELF} --sync news" && gum_fail "Synchronize Database (news) failed" && return 3
 
         # Check unread news
         local unread_news="false" && [ "$LATEST_ARCH_LINUX_NEWS_DATE" != "$(print_news_date 1)" ] && unread_news="true"
@@ -505,7 +505,7 @@ show_update_info() { # Show package updates
 
     # Sync db
     print_no_internet_info || return 3
-    ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync updates" && gum_fail "Synchronize Database (updates) failed" && return 3
+    ! gum_spin --title 'Synchronize Update Database...' -- bash -c "${SELF} --sync updates" && gum_fail "Synchronize Database (updates) failed" && return 3
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -630,7 +630,7 @@ show_search() { # Search & manage packages
 
         # Sync db
         print_no_internet_info || return 3
-        [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages" && gum_fail "Synchronize Database (packages) failed" && return 3
+        [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Package Database...' -- bash -c "${SELF} --sync packages" && gum_fail "Synchronize Database (packages) failed" && return 3
 
         # -------------------------------------------------------------------
 
@@ -890,7 +890,7 @@ show_upgrade() { # Update packages
 
     # Resync packages & updates db
     print_no_internet_info || return 3
-    ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
+    ! gum_spin --title 'Synchronize Update Database...' -- bash -c "${SELF} --sync packages updates" && gum_fail "Synchronize Database failed" && return 3
 
     # Finish
     LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
