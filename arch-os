@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.6"
+VERSION="1.6.7"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -119,8 +119,8 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             clear_screen && print_header
             local user_input options
-            options=("Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Keyring" "Settings" "Help" "Quit")
-            user_input=$(gum_choose --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
+            options=("Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
+            user_input=$(gum_choose --cursor "> " --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'Search Package') selected_action='search' ;;
             'System Info') selected_action='info' ;;
@@ -130,7 +130,7 @@ main() {
             'Refresh Mirrorlist') selected_action='refresh' ;;
             'Downgrade Packages') selected_action='downgrade' ;;
             'Clear Cache') selected_action='cache' ;;
-            'Reset Keyring') selected_action='reset' ;;
+            'Reset Pacman') selected_action='reset' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
             'Quit') clear_screen && exit 2 ;;
@@ -151,7 +151,7 @@ main() {
         'refresh') { print_header && show_refresh; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'downgrade') { print_header && show_downgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'cache') { print_header && show_clear_cache; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'reset') { print_header && show_reset_keyring; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'reset') { print_header && show_reset_pacman; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'settings') { print_header && show_settings; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -525,7 +525,7 @@ show_update_info() { # Show package updates
     # Print updates
     local reset="\033[0m" bold="\033[1m" green="\033[32m"
     while IFS=',' read -r manager package version update; do
-        printf " • ${bold}%-${pkg_length}s  ${reset}%-${version_length}s  %-3s  ${bold}${green}%-${update_length}s  ${reset}${bold}%-s  ${reset}%-${manager_length}s\n" \
+        printf ":: ${bold}%-${pkg_length}s  ${reset}%-${version_length}s  %-3s  ${bold}${green}%-${update_length}s  ${reset}${bold}%-s  ${reset}%-${manager_length}s\n" \
             "$package" "$version" "➜" "$update" "∷" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣
     done <"$UPDATES_DB"
 }
@@ -563,11 +563,13 @@ show_health_info() { # Show system health information
     fi
 
     # System Log
-    log_count=$(print_system_error_logs | wc -l)
-    if [ "$log_count" -gt "0" ]; then
-        gum_key_value_yellow "System Log" "${log_count}"
-    else
-        gum_key_value_green "System Log" "${log_count}"
+    if [ "$SHOW_SYSTEM_LOG" = "true" ]; then
+        log_count=$(print_system_error_logs | wc -l)
+        if [ "$log_count" -gt "0" ]; then
+            gum_key_value_yellow "System Log" "${log_count}"
+        else
+            gum_key_value_green "System Log" "${log_count}"
+        fi
     fi
 
     # Check pending updates
@@ -791,11 +793,11 @@ show_system_info() { # System info
     local options user_input system_logs
     if [ "$SHOW_SYSTEM_LOG" = "true" ]; then
         # Show system logs
-        gum_title "System Information"
+        gum_title "System Log"
         system_logs=$(print_system_error_logs)
         if [ -n "$system_logs" ]; then
             local log_counter=0
-            echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
+            echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped..." && break; done
         else
             gum_log_info "No System Log available"
         fi
@@ -812,10 +814,13 @@ show_system_info() { # System info
     fi
 
     # Show system health
-    show_health_info --sync-updates && echo
+    show_health_info --sync-updates
 
-    # Show menu
-    gum_title "Options"
+    # Return if no more options
+    [ "$SHOW_SYSTEM_LOG" = "false" ] && return 0
+
+    # Show options menu
+    echo && gum_title "Options"
     options=("Edit Blacklist" "Done")
     ! user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") && gum_warn "Canceled" && return 2
     case "$user_input" in
@@ -824,7 +829,7 @@ show_system_info() { # System info
         local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
         # Open editor with count of properties + 2
         # BUG: gum write does not accept height greater than 7
-        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
             # If success: save/move file, remove spaces and re-init properties
             awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
             rm -f "${ARCH_OS_BLACKLIST}.new"
@@ -1046,10 +1051,10 @@ show_clear_cache() { # Clear package cache
 }
 
 # ///////////////////////////////////////////////////////////////////
-# RESET KEYRING
+# RESET PACMAN
 # ///////////////////////////////////////////////////////////////////
 
-show_reset_keyring() { # Keyring reset (if update failed, try to reset & reinit keyring)
+show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit keyring)
     gum_title "Reset Pacman Keyring"
     ! gum_confirm "Continue?" && return 2
     sudo rm -f /var/lib/pacman/db.lck # Remove pacman lock if exists
@@ -1189,21 +1194,21 @@ gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 # Print
 gum_title() { gum join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
-gum_info() { gum join "$(gum_green --bold " • ")" "$(gum_green --bold "${*}")"; }
-gum_warn() { gum join "$(gum_yellow --bold " • ")" "$(gum_yellow --bold "${*}")"; }
-gum_fail() { gum join "$(gum_red --bold " • ")" "$(gum_red --bold "${*}")"; }
-gum_mesg() { gum join "$(gum_white --bold " • ")" "$(gum_white "${*}")"; }
-gum_mesg_strong() { gum join "$(gum_white --bold " • ")" "$(gum_white --bold "${*}")"; }
+gum_info() { gum join "$(gum_green --bold ":: ")" "$(gum_green --bold "${*}")"; }
+gum_warn() { gum join "$(gum_yellow --bold ":: ")" "$(gum_yellow --bold "${*}")"; }
+gum_fail() { gum join "$(gum_red --bold ":: ")" "$(gum_red --bold "${*}")"; }
+gum_mesg() { gum join "$(gum_white --bold ":: ")" "$(gum_white "${*}")"; }
+gum_mesg_strong() { gum join "$(gum_white --bold ":: ")" "$(gum_white --bold "${*}")"; }
 
 # Log
-gum_log_info() { gum join "$(gum_green --bold " • ")" "$(gum_white "${*}")"; }
-gum_log_fail() { gum join "$(gum_red --bold " • ")" "$(gum_white --bold "${*}")"; }
+gum_log_info() { gum join "$(gum_green --bold ":: ")" "$(gum_white "${*}")"; }
+gum_log_fail() { gum join "$(gum_red --bold ":: ")" "$(gum_white --bold "${*}")"; }
 
 # Key & value
-gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
-gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_GREEN}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
-gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_YELLOW}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
-gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_RED}" " • ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_RED}" "${2}")"; }
+gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
+gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_GREEN}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_YELLOW}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_RED}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_RED}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS

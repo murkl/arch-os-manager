@@ -150,7 +150,7 @@ ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
-SHOW_SYSTEM_LOG=true              # Show system log in info (disable: false)
+SHOW_SYSTEM_LOG=true              # Show system log in info & health (disable: false)
 SHOW_SERVICE_LIST=true            # Show running services in info (disable: false)
 SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name list (enable: true)
 ```
