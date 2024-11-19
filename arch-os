@@ -814,13 +814,14 @@ show_system_info() { # System info
     fi
 
     # Show system health
-    show_health_info --sync-updates && echo
+    show_health_info --sync-updates
 
-    # Show menu
-    gum_title "Options"
-    options=()
-    [ "$SHOW_SYSTEM_LOG" = "true" ] && options+=("Edit Blacklist")
-    options+=("Done")
+    # Return if no more options
+    [ "$SHOW_SYSTEM_LOG" = "false" ] && return 0
+
+    # Show options menu
+    echo && gum_title "Options"
+    options=("Edit Blacklist" "Done")
     ! user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") && gum_warn "Canceled" && return 2
     case "$user_input" in
     'Edit Blacklist')
