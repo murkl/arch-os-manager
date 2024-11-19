@@ -563,11 +563,13 @@ show_health_info() { # Show system health information
     fi
 
     # System Log
-    log_count=$(print_system_error_logs | wc -l)
-    if [ "$log_count" -gt "0" ]; then
-        gum_key_value_yellow "System Log" "${log_count}"
-    else
-        gum_key_value_green "System Log" "${log_count}"
+    if [ "$SHOW_SYSTEM_LOG" = "true" ]; then
+        log_count=$(print_system_error_logs | wc -l)
+        if [ "$log_count" -gt "0" ]; then
+            gum_key_value_yellow "System Log" "${log_count}"
+        else
+            gum_key_value_green "System Log" "${log_count}"
+        fi
     fi
 
     # Check pending updates
@@ -791,11 +793,11 @@ show_system_info() { # System info
     local options user_input system_logs
     if [ "$SHOW_SYSTEM_LOG" = "true" ]; then
         # Show system logs
-        gum_title "System Information"
+        gum_title "System Log"
         system_logs=$(print_system_error_logs)
         if [ -n "$system_logs" ]; then
             local log_counter=0
-            echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped." && break; done
+            echo -e "$system_logs" | while read -r line; do gum_log_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && gum_warn "You have more than 25 Logs. Output stopped..." && break; done
         else
             gum_log_info "No System Log available"
         fi
@@ -816,7 +818,9 @@ show_system_info() { # System info
 
     # Show menu
     gum_title "Options"
-    options=("Edit Blacklist" "Done")
+    options=()
+    [ "$SHOW_SYSTEM_LOG" = "true" ] && options+=("Edit Blacklist")
+    options+=("Done")
     ! user_input=$(gum_choose --height=5 --selected="Done" "${options[@]}") && gum_warn "Canceled" && return 2
     case "$user_input" in
     'Edit Blacklist')
@@ -824,7 +828,7 @@ show_system_info() { # System info
         local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
         # Open editor with count of properties + 2
         # BUG: gum write does not accept height greater than 7
-        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message to hide in system log (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
             # If success: save/move file, remove spaces and re-init properties
             awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
             rm -f "${ARCH_OS_BLACKLIST}.new"
