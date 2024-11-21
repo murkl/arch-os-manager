@@ -55,13 +55,11 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ## Features
 
 - Check & list updates in _checkupdates_ format
-- System health info
-- Startup notify on available updates
-- Rich Update Notification
+- Rich startup notification on available updates
+- System health info, packages & logs
 - Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages
-- Show system info, packages & logs
 - Upgrade system packages
 - Remove orphaned packages
 - Clear Package cache
