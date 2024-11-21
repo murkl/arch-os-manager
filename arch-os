@@ -435,17 +435,19 @@ action_notify_updates() { # Notify on new updates
     update_count=0 && [ -n "$update_result" ] && update_count=$(echo "$update_result" | wc -l)
     echo "$update_result"
     if [ "$update_count" -gt 0 ]; then
-        [ "$update_count" = 1 ] && update_txt="${update_count} Update available"
-        [ "$update_count" -gt 1 ] && update_txt="${update_count} Updates available"
+        [ "$update_count" = 1 ] && update_txt="<b>${update_count}</b> Update available"
+        [ "$update_count" -gt 1 ] && update_txt="<b>${update_count}</b> Updates available"
         notify_result=$(
             notify-send \
                 -a "Arch OS Manager" \
                 -i "${WORKING_DIR}/docs/logo.svg" \
                 -u critical \
+                -c device.added \
+                -h string:sound-name:message-new-instant \
                 -A "list=List Updates" \
                 -A "upgrade=Run Upgrade" \
                 "System Upgrade" \
-                "$update_txt"
+                "${update_txt}"
         )
         [ "$notify_result" = "list" ] && ${SELF} -k list
         [ "$notify_result" = "upgrade" ] && ${SELF} -k upgrade
