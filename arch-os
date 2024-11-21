@@ -16,6 +16,10 @@ set -Eeo pipefail
 # SCRIPT VERSION
 VERSION="1.6.8"
 
+# ENVIRONMENT
+: "${KITTY:=/usr/bin/kitty}"
+: "${GUM:=/usr/bin/gum}"
+
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
 
@@ -61,8 +65,8 @@ main() {
     }
 
     # Check dependencies
-    if ! command -v /usr/bin/gum &>/dev/null; then echo "ERROR: gum not found. Install with: sudo pacman -S gum" >&2 && exit 1; fi
-    if ! command -v /usr/bin/kitty &>/dev/null; then echo "ERROR: kitty not found. Install with: sudo pacman -S kitty" >&2 && exit 1; fi
+    if ! command -v "$GUM" &>/dev/null; then echo "ERROR: gum not found. Install with: sudo pacman -S gum" >&2 && exit 1; fi
+    if ! command -v "$KITTY" &>/dev/null; then echo "ERROR: kitty not found. Install with: sudo pacman -S kitty" >&2 && exit 1; fi
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found. Install with: sudo pacman -S pacman-contrib" >&2 && exit 1; fi
     if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found. Install with: sudo pacman -S libnotify" >&2 && exit 1; fi
 
@@ -1189,7 +1193,7 @@ print_filled_space() {
 # ///////////////////////////////////////////////////////////////////
 
 # Wrapper
-gum() { /usr/bin/gum "$@"; }
+gum() { "$GUM" "$@"; }
 gum_style() { gum style "${@}"; }
 gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="120" --char-limit 0 "${@}"; }
@@ -1230,7 +1234,7 @@ gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_RED}" ":: ")" 
 
 kitty() {
     [ ! -f "$ARCH_OS_KITTY_CONF" ] && echo "$kitty_conf_template" >"$ARCH_OS_KITTY_CONF" # Create kitty.conf if not exists
-    /usr/bin/kitty --detach --class "arch-os" --name "Arch OS" -c "$ARCH_OS_KITTY_CONF" "$@"
+    "$KITTY" --detach --class "arch-os" --name "Arch OS" -c "$ARCH_OS_KITTY_CONF" "$@"
 }
 
 # https://sw.kovidgoyal.net/kitty/conf/

@@ -106,7 +106,7 @@ settings         ➜  Edit settings in built-in ediitor
 ```
 check            ➜  Print package updates (checkupdates)
 notify           ➜  Notify on new package updates (autostart)
-list             ➜  List system updates (without database sync) 
+list             ➜  List system updates (without database sync)
 search           ➜  Search & manage packages (pacman, aur)
 info             ➜  Show system info (logs, services, health)
 upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
@@ -200,6 +200,12 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <p><img src="./screenshots/uptodate.png"></p>
 
 </div>
+
+## Development
+
+```
+GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
+```
 
 ## Credits
 
