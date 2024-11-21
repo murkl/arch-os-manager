@@ -38,7 +38,7 @@ arch-os
 git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ```
 
-2. Install Dependencies:
+1. Install [Dependencies](#install-dependencies-optional):
 
 ```
 ./arch-os --install
