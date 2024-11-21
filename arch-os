@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.6.7"
+VERSION="1.6.8"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -119,9 +119,10 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             clear_screen && print_header
             local user_input options
-            options=("Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
-            user_input=$(gum_choose --cursor "> " --height=15 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
+            options=("List Updates" "Search Package" "System Info" "Upgrade System" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Settings" "Help" "Quit")
+            user_input=$(gum_choose --cursor "> " --height=16 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
+            'List Updates') selected_action='list' ;;
             'Search Package') selected_action='search' ;;
             'System Info') selected_action='info' ;;
             'Upgrade System') selected_action='upgrade' ;;
@@ -145,6 +146,7 @@ main() {
         case "$selected_action" in # Execute action
         'search') { print_header && show_search; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'info') { print_header && show_system_info; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'list') { print_header && show_update_info --no-sync; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'upgrade') { print_header && show_upgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'orphans') { print_header && show_orphans; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'merge') { print_header && show_merge; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -424,14 +426,25 @@ action_check_updates_available() { # Check & print package updates
 # -------------------------------------------------------------------
 
 action_notify_updates() { # Notify on new updates
-    local update_result update_count update_txt
+    local update_result notify_result update_count update_txt
     update_result="$(action_check_updates_available)" || true
     update_count=0 && [ -n "$update_result" ] && update_count=$(echo "$update_result" | wc -l)
+    echo "$update_result"
     if [ "$update_count" -gt 0 ]; then
         [ "$update_count" = 1 ] && update_txt="${update_count} Update available"
         [ "$update_count" -gt 1 ] && update_txt="${update_count} Updates available"
-        notify_send "System Upgrade" "$update_txt"
-        echo "$update_result"
+        notify_result=$(
+            notify-send \
+                -a "Arch OS Manager" \
+                -i "${WORKING_DIR}/docs/logo.svg" \
+                -u critical \
+                -A "list=List Updates" \
+                -A "upgrade=Run Upgrade" \
+                "System Upgrade" \
+                "$update_txt"
+        )
+        [ "$notify_result" = "list" ] && ${SELF} -k list
+        [ "$notify_result" = "upgrade" ] && ${SELF} -k upgrade
         return 2
     fi
     return 3
@@ -505,7 +518,7 @@ show_update_info() { # Show package updates
 
     # Sync db
     print_no_internet_info || return 3
-    ! gum_spin --title 'Synchronize Update Database...' -- bash -c "${SELF} --sync updates" && gum_fail "Synchronize Database (updates) failed" && return 3
+    [ "$1" != "--no-sync" ] && ! gum_spin --title 'Synchronize Update Database...' -- bash -c "${SELF} --sync updates" && gum_fail "Synchronize Database (updates) failed" && return 3
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -1108,6 +1121,7 @@ show_help() { # Print help page
     gum_title 'System Actions'
     gum_mesg 'check            ➜  Print package updates (checkupdates)'
     gum_mesg 'notify           ➜  Notify on new package updates (autostart)'
+    gum_mesg 'list             ➜  List system updates (without database sync)'
     gum_mesg 'search           ➜  Search & manage packages (pacman, aur)'
     gum_mesg 'info             ➜  Show system info (logs, services, health)'
     gum_mesg 'upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)'
