@@ -38,7 +38,7 @@ arch-os
 git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ```
 
-2. Install Dependencies:
+1. Install [Dependencies](#install-dependencies-optional):
 
 ```
 ./arch-os --install
@@ -55,12 +55,11 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ## Features
 
 - Check & list updates in _checkupdates_ format
-- System health info
-- Startup notify on available updates
-- Notify & show latest Arch Linux news
+- Rich startup notification on available updates
+- System health info, packages & logs
+- Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages
-- Show system info, packages & logs
 - Upgrade system packages
 - Remove orphaned packages
 - Clear Package cache
@@ -68,6 +67,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Built-in system log blacklist
 - Built-in settings editor
 - Standalone mode with built-in kitty
+- System-oriented design
 
 Install these **optional** dependencies to equip Arch OS Manager with additional features:
 
@@ -104,6 +104,7 @@ settings         ➜  Edit settings in built-in ediitor
 ```
 check            ➜  Print package updates (checkupdates)
 notify           ➜  Notify on new package updates (autostart)
+list             ➜  List system updates (without database sync)
 search           ➜  Search & manage packages (pacman, aur)
 info             ➜  Show system info (logs, services, health)
 upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
@@ -189,6 +190,7 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
+<p><img src="./screenshots/notification.png"></p>
 <p><img src="./screenshots/upgrade.png"></p>
 <p><img src="./screenshots/info.png"></p>
 <p><img src="./screenshots/search.png"></p>
@@ -196,6 +198,12 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <p><img src="./screenshots/uptodate.png"></p>
 
 </div>
+
+## Development
+
+```
+GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
+```
 
 ## Credits
 
