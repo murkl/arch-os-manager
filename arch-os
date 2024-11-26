@@ -49,6 +49,14 @@ COLOR_GREEN=2
 COLOR_YELLOW=3
 COLOR_RED=1
 
+COLOR_PURPLE_BASH="\033[35m"
+COLOR_WHITE_BASH="\033[37m"
+COLOR_GREEN_BASH="\033[32m"
+COLOR_YELLOW_BASH="\033[33m"
+COLOR_RED_BASH="\033[31m"
+COLOR_RESET_BASH="\033[0m"
+COLOR_BOLD_BASH="\033[1m"
+
 # ///////////////////////////////////////////////////////////////////
 # MAIN FUNCTION
 # ///////////////////////////////////////////////////////////////////
@@ -562,32 +570,32 @@ show_health_info() { # Show system health information
     [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && gum_fail "Synchronize Database (updates, packages) failed" && return 3
 
     # Package info
-    gum_key_value_white "Arch Packages" "$(pacman -Qn | wc -l)"
-    [ "$AUR_SUPPORT" = "true" ] && gum_key_value_white "AUR Packages" "$(/usr/bin/paru -Qm &>/dev/null && /usr/bin/paru -Qm | wc -l || echo Error)"
+    print_format_white "Arch Packages" "$(pacman -Qn | wc -l)"
+    [ "$AUR_SUPPORT" = "true" ] && print_format_white "AUR Packages" "$(/usr/bin/paru -Qm &>/dev/null && /usr/bin/paru -Qm | wc -l || echo Error)"
     # flatpak list --columns=application | tail -n +1 | wc -l
-    [ "$FLATPAK_SUPPORT" = "true" ] && gum_key_value_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
+    [ "$FLATPAK_SUPPORT" = "true" ] && print_format_white "Flatpak Packages" "$(flatpak list --app | wc -l)"
 
     # Gnome extensions count
-    command -v /usr/bin/gnome-extensions &>/dev/null && gum_key_value_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
+    command -v /usr/bin/gnome-extensions &>/dev/null && print_format_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
 
     # Services count
-    gum_key_value_white "Running Services" "$(systemctl list-units --type=service --state=running --plain --no-legend | wc -l)"
+    print_format_white "Running Services" "$(systemctl list-units --type=service --state=running --plain --no-legend | wc -l)"
 
     # Service Failure
     service_count=$(print_service_failed | wc -l)
     if [ "$service_count" -gt "0" ]; then
-        gum_key_value_red "Service Failure" "${service_count}"
+        print_format_red "Service Failure" "${service_count}"
     else
-        gum_key_value_green "Service Failure" "${service_count}"
+        print_format_green "Service Failure" "${service_count}"
     fi
 
     # System Log
     if [ "$SHOW_SYSTEM_LOG" = "true" ]; then
         log_count=$(print_system_error_logs | wc -l)
         if [ "$log_count" -gt "0" ]; then
-            gum_key_value_yellow "System Log" "${log_count}"
+            print_format_yellow "System Log" "${log_count}"
         else
-            gum_key_value_green "System Log" "${log_count}"
+            print_format_green "System Log" "${log_count}"
         fi
     fi
 
@@ -595,9 +603,9 @@ show_health_info() { # Show system health information
     local pending_updates=0
     [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
     if [ "$pending_updates" -gt "0" ]; then
-        gum_key_value_yellow "Pending Updates" "${pending_updates}"
+        print_format_yellow "Pending Updates" "${pending_updates}"
     else
-        gum_key_value_green "Pending Updates" "${pending_updates}"
+        print_format_green "Pending Updates" "${pending_updates}"
     fi
 
     # Check pacdiff
@@ -606,9 +614,9 @@ show_health_info() { # Show system health information
     [ -n "$pacdiff_info" ] && pacdiff_count="$(echo "$pacdiff_info" | wc -l)"
     [ -z "$pacdiff_info" ] && pacdiff_count="0"
     if [ "$pacdiff_count" -gt "0" ]; then
-        gum_key_value_yellow "Pending Merges" "${pacdiff_count}"
+        print_format_yellow "Pending Merges" "${pacdiff_count}"
     else
-        gum_key_value_green "Pending Merges" "${pacdiff_count}"
+        print_format_green "Pending Merges" "${pacdiff_count}"
     fi
 
     # Check orphans
@@ -617,9 +625,9 @@ show_health_info() { # Show system health information
     orphans_packages="$($pkg_manager -Qtdq &>/dev/null && $pkg_manager -Qtdq)"
     orphans_count="$(echo "$orphans_packages" | wc -w)"
     if [ "$orphans_count" -gt "0" ]; then
-        gum_key_value_yellow "Orphaned Packages" "${orphans_count}"
+        print_format_yellow "Orphaned Packages" "${orphans_count}"
     else
-        gum_key_value_green "Orphaned Packages" "${orphans_count}"
+        print_format_green "Orphaned Packages" "${orphans_count}"
     fi
 
     # Unknown pkgs
@@ -629,12 +637,12 @@ show_health_info() { # Show system health information
         if [ "$SHOW_UNKNOWN_PKG_LIST" = "true" ]; then
             unknown_pkgs=$(printf "%s, " "${unknown_pkgs[@]}")
             unknown_pkgs=${unknown_pkgs%, }
-            local IFS=', ' && gum_key_value_yellow "Unknown Packages" "${unknown_pkgs}"
+            local IFS=', ' && print_format_yellow "Unknown Packages" "${unknown_pkgs}"
         else
-            local IFS=', ' && gum_key_value_yellow "Unknown Packages" "${#unknown_pkgs[*]}"
+            local IFS=', ' && print_format_yellow "Unknown Packages" "${#unknown_pkgs[*]}"
         fi
     else
-        gum_key_value_green "Unknown Packages" "${#unknown_pkgs[*]}"
+        print_format_green "Unknown Packages" "${#unknown_pkgs[*]}"
     fi
 }
 
@@ -679,7 +687,7 @@ show_search() { # Search & manage packages
             ! search_filter=$(gum_input --placeholder="Search Package...") && gum_warn "Canceled" && return 2
             [ -z "$search_filter" ] && gum_fail "Search was empty" && return 3
 
-            gum_key_value_white "$(print_filled_space "Search Filter")" "$search_filter"
+            print_format_white "$(print_filled_space "Search Filter")" "$search_filter"
 
             # Filter results
             local filter_pkgs_results && ! filter_pkgs_results="$(list_results "$search_filter" | tac)"
@@ -693,7 +701,7 @@ show_search() { # Search & manage packages
             pkg_name="$(echo "$pkg_name" | cut -d':' -f1 | cut -d'/' -f2)"
 
         else
-            gum_key_value_white "$(print_filled_space "Search Filter")" "$search_filter"
+            print_format_white "$(print_filled_space "Search Filter")" "$search_filter"
             echo && gum_title "Package Information"
         fi
 
@@ -718,44 +726,44 @@ show_search() { # Search & manage packages
 
         # Print general package info
         local pkg_text && pkg_text="${pkg_name}:$(print_package_value "$pkg_info_remote" "Version")"
-        gum_key_value_white "$(print_filled_space "Package")" "$pkg_text"
-        gum_key_value_white "$(print_filled_space "Description")" "$(print_package_value "$pkg_info_remote" "Description")"
+        print_format_white "$(print_filled_space "Package")" "$pkg_text"
+        print_format_white "$(print_filled_space "Description")" "$(print_package_value "$pkg_info_remote" "Description")"
         # Repo
         local pkg_repo && pkg_repo="$(print_package_value "$pkg_info_remote" "Repository")"
         if [ "$pkg_repo" = "core" ] || [ "$pkg_repo" = "extra" ]; then
-            gum_key_value_white "$(print_filled_space "Repository")" "$pkg_repo"
+            print_format_white "$(print_filled_space "Repository")" "$pkg_repo"
         else
-            gum_key_value_yellow "$(print_filled_space "Repository")" "$pkg_repo"
+            print_format_yellow "$(print_filled_space "Repository")" "$pkg_repo"
         fi
-        gum_key_value_white "$(print_filled_space "Dependencies")" "$(print_package_value "$pkg_info_remote" "Depends On" | wc -w)"
+        print_format_white "$(print_filled_space "Dependencies")" "$(print_package_value "$pkg_info_remote" "Depends On" | wc -w)"
 
         # Repo Info
         if [ "$pkg_is_aur" = "true" ]; then # AUR package info
-            gum_key_value_white "$(print_filled_space "AUR URL")" "$(print_package_value "$pkg_info_remote" "AUR URL")"
-            gum_key_value_white "$(print_filled_space "AUR Maintainer")" "$(print_package_value "$pkg_info_remote" "Maintainer")"
-            gum_key_value_white "$(print_filled_space "AUR Votes")" "$(print_package_value "$pkg_info_remote" "Votes")"
-            gum_key_value_white "$(print_filled_space "AUR Popularity")" "$(print_package_value "$pkg_info_remote" "Popularity")"
-            gum_key_value_white "$(print_filled_space "AUR Modified")" "$(print_package_value "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
+            print_format_white "$(print_filled_space "AUR URL")" "$(print_package_value "$pkg_info_remote" "AUR URL")"
+            print_format_white "$(print_filled_space "AUR Maintainer")" "$(print_package_value "$pkg_info_remote" "Maintainer")"
+            print_format_white "$(print_filled_space "AUR Votes")" "$(print_package_value "$pkg_info_remote" "Votes")"
+            print_format_white "$(print_filled_space "AUR Popularity")" "$(print_package_value "$pkg_info_remote" "Popularity")"
+            print_format_white "$(print_filled_space "AUR Modified")" "$(print_package_value "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
 
             # Check outdated packages
             local outdated && outdated="$(print_package_value "$pkg_info_remote" "Out Of Date")"
-            [ "$outdated" = "No" ] && gum_key_value_white "$(print_filled_space "AUR Outdated")" "no"
-            [ "$outdated" != "No" ] && gum_key_value_red "$(print_filled_space "AUR Outdated")" "$(echo "$outdated" | date -f - "+%Y-%m-%d %H:%M")"
+            [ "$outdated" = "No" ] && print_format_white "$(print_filled_space "AUR Outdated")" "no"
+            [ "$outdated" != "No" ] && print_format_red "$(print_filled_space "AUR Outdated")" "$(echo "$outdated" | date -f - "+%Y-%m-%d %H:%M")"
 
         else
             # Non AUR package info
-            gum_key_value_white "$(print_filled_space "Package URL")" "$(print_package_value "$pkg_info_remote" "URL")"
-            gum_key_value_white "$(print_filled_space "Package Date")" "$(print_package_value "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
+            print_format_white "$(print_filled_space "Package URL")" "$(print_package_value "$pkg_info_remote" "URL")"
+            print_format_white "$(print_filled_space "Package Date")" "$(print_package_value "$pkg_info_remote" "Build Date" | date -f - "+%Y-%m-%d %H:%M")"
         fi
 
         # Installed/Not installed package info
         if [ "$pkg_is_installed" = "true" ]; then # Installed package info
-            gum_key_value_white "$(print_filled_space "Install Date")" "$(print_package_value "$pkg_info_local" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
-            gum_key_value_white "$(print_filled_space "Install Version")" "$(print_package_value "$pkg_info_local" "Version")"
-            gum_key_value_white "$(print_filled_space "Install Reason")" "$(print_package_value "$pkg_info_local" "Install Reason")"
-            gum_key_value_green "$(print_filled_space "Installed")" "yes"
+            print_format_white "$(print_filled_space "Install Date")" "$(print_package_value "$pkg_info_local" "Install Date" | date -f - "+%Y-%m-%d %H:%M")"
+            print_format_white "$(print_filled_space "Install Version")" "$(print_package_value "$pkg_info_local" "Version")"
+            print_format_white "$(print_filled_space "Install Reason")" "$(print_package_value "$pkg_info_local" "Install Reason")"
+            print_format_green "$(print_filled_space "Installed")" "yes"
         else # Not installed package info
-            gum_key_value_yellow "$(print_filled_space "Installed")" "no"
+            print_format_yellow "$(print_filled_space "Installed")" "no"
         fi
 
         # Show package options menu
@@ -1197,6 +1205,7 @@ print_filled_space() {
 # Wrapper
 gum() { "$GUM" "$@"; }
 gum_style() { gum style "${@}"; }
+gum_join() { gum join "${@}"; }
 gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="120" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
@@ -1212,23 +1221,37 @@ gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
-# Print
-gum_title() { gum join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
-gum_info() { gum join "$(gum_green --bold ":: ")" "$(gum_green --bold "${*}")"; }
-gum_warn() { gum join "$(gum_yellow --bold ":: ")" "$(gum_yellow --bold "${*}")"; }
-gum_fail() { gum join "$(gum_red --bold ":: ")" "$(gum_red --bold "${*}")"; }
-gum_mesg() { gum join "$(gum_white --bold ":: ")" "$(gum_white "${*}")"; }
-gum_mesg_strong() { gum join "$(gum_white --bold ":: ")" "$(gum_white --bold "${*}")"; }
+# Print | ⟲ ⥄ ⇦ ➤ ➜ ≣
+print_format() { local color="$1" key="$2" value="$3" && printf "${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "::" "$(print_filled_space 18 "$key")" "➜" "$value"; }
+print_format_white() { print_format "$COLOR_WHITE_BASH" "$1" "$2"; }
+print_format_green() { print_format "$COLOR_GREEN_BASH" "$1" "$2"; }
+print_format_yellow() { print_format "$COLOR_YELLOW_BASH" "$1" "$2"; }
+print_format_red() { print_format "$COLOR_RED_BASH" "$1" "$2"; }
+
+gum_title() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s\n" "//" "$*"; }
+gum_info() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s\n" "::" "$*"; }
+gum_warn() { printf "${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s\n" "::" "$*"; }
+gum_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s\n" "::" "$*"; }
+gum_mesg() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}${COLOR_WHITE_BASH}%s\n" "::" "$*"; }
+gum_mesg_strong() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s\n" "::" "$*"; }
+#gum_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
+#gum_info() { gum_join "$(gum_green --bold ":: ")" "$(gum_green --bold "${*}")"; }
+#gum_warn() { gum_join "$(gum_yellow --bold ":: ")" "$(gum_yellow --bold "${*}")"; }
+#gum_fail() { gum_join "$(gum_red --bold ":: ")" "$(gum_red --bold "${*}")"; }
+#gum_mesg() { gum_join "$(gum_white --bold ":: ")" "$(gum_white "${*}")"; }
+#gum_mesg_strong() { gum_join "$(gum_white --bold ":: ")" "$(gum_white --bold "${*}")"; }
 
 # Log
-gum_log_info() { gum join "$(gum_green --bold ":: ")" "$(gum_white "${*}")"; }
-gum_log_fail() { gum join "$(gum_red --bold ":: ")" "$(gum_white --bold "${*}")"; }
+gum_log_info() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_WHITE}%s\n" "::" "$*"; }
+gum_log_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_WHITE}%s\n" "::" "$*"; }
+#gum_log_info() { gum_join "$(gum_green --bold ":: ")" "$(gum_white "${*}")"; }
+#gum_log_fail() { gum_join "$(gum_red --bold ":: ")" "$(gum_white --bold "${*}")"; }
 
 # Key & value
-gum_key_value_white() { gum join "$(gum style --foreground "${COLOR_WHITE}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
-gum_key_value_green() { gum join "$(gum style --foreground "${COLOR_GREEN}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
-gum_key_value_yellow() { gum join "$(gum style --foreground "${COLOR_YELLOW}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
-gum_key_value_red() { gum join "$(gum style --foreground "${COLOR_RED}" ":: ")" "$(gum style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum style --bold --foreground "${COLOR_RED}" "${2}")"; }
+#gum_key_value_white() { gum_join "$(gum_style --foreground "${COLOR_WHITE}" ":: ")" "$(gum_style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum_style --bold --foreground "${COLOR_WHITE}" "${2}")"; }
+#gum_key_value_green() { gum_join "$(gum_style --foreground "${COLOR_GREEN}" ":: ")" "$(gum_style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum_style --bold --foreground "${COLOR_GREEN}" "${2}")"; }
+#gum_key_value_yellow() { gum_join "$(gum_style --foreground "${COLOR_YELLOW}" ":: ")" "$(gum_style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum_style --bold --foreground "${COLOR_YELLOW}" "${2}")"; }
+#gum_key_value_red() { gum_join "$(gum_style --foreground "${COLOR_RED}" ":: ")" "$(gum_style --foreground "${COLOR_WHITE}" "$(print_filled_space 18 "${1}") ➜  ")" "$(gum_style --bold --foreground "${COLOR_RED}" "${2}")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS
