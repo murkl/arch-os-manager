@@ -96,7 +96,7 @@ arch-os [--kitty | -k] [action]
 ```
 help             ➜  Open help page
 version          ➜  Print version info
-config         ➜  Edit config in built-in ediitor
+config           ➜  Edit config in built-in ediitor
 ```
 
 ### System Actions
