@@ -476,7 +476,7 @@ action_notify_updates() { # Notify on new updates
                 -u critical \
                 -c device.added \
                 -h string:sound-name:message-new-instant \
-                -A "list=List Updates" \
+                -A "info=Update Info" \
                 -A "upgrade=Run Upgrade" \
                 "System Upgrade" \
                 "${update_txt}"
