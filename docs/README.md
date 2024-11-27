@@ -193,8 +193,8 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <p><img src="./screenshots/notification.png"></p>
 <p><img src="./screenshots/upgrade.png"></p>
-<p><img src="./screenshots/info.png"></p>
-<p><img src="./screenshots/search.png"></p>
+<p><img src="./screenshots/dashboard.png"></p>
+<p><img src="./screenshots/pkg.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
 <p><img src="./screenshots/uptodate.png"></p>
 
