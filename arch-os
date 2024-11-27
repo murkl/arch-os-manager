@@ -479,8 +479,14 @@ print_no_internet_info() {
 # -------------------------------------------------------------------
 
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
-print_service_running() { systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line}"; done; }
-print_service_failed() { if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; fi; }
+print_service_running() {
+    systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line%% *}"; done
+    systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line%% *}"; done
+}
+print_service_failed() {
+    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; fi
+    if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; fi
+}
 
 # -------------------------------------------------------------------
 
@@ -579,7 +585,7 @@ show_health_info() { # Show system health information
     command -v /usr/bin/gnome-extensions &>/dev/null && print_format_white "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
 
     # Services count
-    print_format_white "Running Services" "$(systemctl list-units --type=service --state=running --plain --no-legend | wc -l)"
+    print_format_white "Running Services" "$(print_service_running | wc -l)"
 
     # Service Failure
     service_count=$(print_service_failed | wc -l)
@@ -1222,19 +1228,19 @@ gum_yellow() { gum_style --foreground "$COLOR_YELLOW" "${@}"; }
 gum_red() { gum_style --foreground "$COLOR_RED" "${@}"; }
 
 # Print | ⟲ ⥄ ⇦ ➤ ➜ ≣
-print_format() { local color="$1" key="$2" value="$3" && printf "${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "::" "$(print_filled_space 18 "$key")" "➜" "$value"; }
-print_format_white() { print_format "$COLOR_WHITE_BASH" "$1" "$2"; }
-print_format_green() { print_format "$COLOR_GREEN_BASH" "$1" "$2"; }
-print_format_yellow() { print_format "$COLOR_YELLOW_BASH" "$1" "$2"; }
-print_format_red() { print_format "$COLOR_RED_BASH" "$1" "$2"; }
+print_format() { local space="$1" color="$2" key="$3" value="$4" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "::" "$(print_filled_space "$space" "$key")" " ➜ " "$value"; }
+print_format_white() { print_format 18 "$COLOR_WHITE_BASH" "$1" "$2"; }
+print_format_green() { print_format 18 "$COLOR_GREEN_BASH" "$1" "$2"; }
+print_format_yellow() { print_format 18 "$COLOR_YELLOW_BASH" "$1" "$2"; }
+print_format_red() { print_format 18 "$COLOR_RED_BASH" "$1" "$2"; }
 
-gum_title() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s\n" "//" "$*"; }
-gum_info() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s\n" "::" "$*"; }
-gum_warn() { printf "${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s\n" "::" "$*"; }
-gum_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s\n" "::" "$*"; }
-gum_mesg() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}${COLOR_WHITE_BASH}%s\n" "::" "$*"; }
-gum_mesg_strong() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s\n" "::" "$*"; }
-#gum_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
+gum_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
+#gum_title() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s${COLOR_RESET_BASH}\n" "//" "$*"; }
+gum_info() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
+gum_warn() { printf "${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
+gum_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
+gum_mesg() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}${COLOR_WHITE_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
+gum_mesg_strong() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
 #gum_info() { gum_join "$(gum_green --bold ":: ")" "$(gum_green --bold "${*}")"; }
 #gum_warn() { gum_join "$(gum_yellow --bold ":: ")" "$(gum_yellow --bold "${*}")"; }
 #gum_fail() { gum_join "$(gum_red --bold ":: ")" "$(gum_red --bold "${*}")"; }
@@ -1242,8 +1248,8 @@ gum_mesg_strong() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESE
 #gum_mesg_strong() { gum_join "$(gum_white --bold ":: ")" "$(gum_white --bold "${*}")"; }
 
 # Log
-gum_log_info() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_WHITE}%s\n" "::" "$*"; }
-gum_log_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_WHITE}%s\n" "::" "$*"; }
+gum_log_info() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_WHITE_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
+gum_log_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
 #gum_log_info() { gum_join "$(gum_green --bold ":: ")" "$(gum_white "${*}")"; }
 #gum_log_fail() { gum_join "$(gum_red --bold ":: ")" "$(gum_white --bold "${*}")"; }
 
