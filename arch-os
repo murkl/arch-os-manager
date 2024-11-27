@@ -277,7 +277,7 @@ init_properties() {
     [ -z "$SHOW_SYSTEM_LOG" ] && SHOW_SYSTEM_LOG="true"
     [ -z "$SHOW_SERVICE_LIST" ] && SHOW_SERVICE_LIST="true"
     [ -z "$SHOW_UNKNOWN_PKG_LIST" ] && SHOW_UNKNOWN_PKG_LIST="false"
-    [ -z "$INCLUDE_USER_SERVICES" ] && INCLUDE_USER_SERVICES="false"
+    [ -z "$SHOW_USER_SERVICES" ] && SHOW_USER_SERVICES="false"
 
     return 0
 }
@@ -345,7 +345,7 @@ persist_properties() {
         echo "SHOW_SYSTEM_LOG=${SHOW_SYSTEM_LOG}"
         echo "SHOW_SERVICE_LIST=${SHOW_SERVICE_LIST}"
         echo "SHOW_UNKNOWN_PKG_LIST=${SHOW_UNKNOWN_PKG_LIST}"
-        echo "INCLUDE_USER_SERVICES=${INCLUDE_USER_SERVICES}"
+        echo "SHOW_USER_SERVICES=${SHOW_USER_SERVICES}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -505,12 +505,12 @@ print_no_internet_info() {
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
 print_service_running() {
     systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "SYS (running)" "${line%% *}"; done
-    [ "$INCLUDE_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "USR (running)" "${line%% *}"; done
+    [ "$SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "USR (running)" "${line%% *}"; done
     return 0
 }
 print_service_failed() {
     if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 0 "SYS (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
-    [ "$INCLUDE_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    [ "$SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
     return 0
 }
 

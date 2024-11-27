@@ -153,8 +153,8 @@ AUTOSTART_DELAY=30                # Delay update check after boot in seconds (mi
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
 SHOW_SYSTEM_LOG=true              # Show system log in dashboard & health (disable: false)
 SHOW_SERVICE_LIST=true            # Show running services in dashboard (disable: false)
-INCLUDE_USER_SERVICES=false          # Show user services in dashboard & health (enable: true)
 SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name list (enable: true)
+SHOW_USER_SERVICES=false          # Show user services in dashboard & health (enable: true)
 ```
 
 ### Configurations
