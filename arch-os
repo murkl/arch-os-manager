@@ -874,12 +874,13 @@ show_dashboard() { # Dashboard
 
     local pending_updates
     [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
+    [ -z "$pending_updates" ] && pending_updates=0
 
     # Show options menu
     echo && print_title "Options"
     options=()
     options+=("Edit Blacklist")
-    [ "$pending_updates" -gt "0" ] && options+=("Upgrade")
+    [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
     options+=("Done")
     ! user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
     case "$user_input" in
@@ -1243,7 +1244,7 @@ gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
-gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null; }
+gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
 
 # Gum colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
