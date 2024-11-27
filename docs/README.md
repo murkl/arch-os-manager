@@ -65,7 +65,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Clear Package cache
 - Reset Pacman keyring
 - Built-in system log blacklist
-- Built-in settings editor
+- Built-in config editor
 - Standalone mode with built-in kitty
 - System-oriented design
 
@@ -96,7 +96,7 @@ arch-os [--kitty | -k] [action]
 ```
 help             ➜  Open help page
 version          ➜  Print version info
-settings         ➜  Edit settings in built-in ediitor
+config         ➜  Edit config in built-in ediitor
 ```
 
 ### System Actions

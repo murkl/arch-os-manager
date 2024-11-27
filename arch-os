@@ -127,7 +127,7 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             local user_input options
             clear_screen && print_header
-            options=("Dashboard" "Upgrade" "Actions" "Packages" "Settings" "Help" "Quit")
+            options=("Dashboard" "Packages" "Upgrade" "Actions" "Config" "Help" "Quit")
             user_input=$(gum_choose --cursor "> " --height=10 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'Dashboard') selected_action='dashboard' ;;
@@ -148,7 +148,7 @@ main() {
                 esac
                 ;;
             'Packages') selected_action='pkg' ;;
-            'Settings') selected_action='settings' ;;
+            'Config') selected_action='config' ;;
             'Help') selected_action='help' ;;
             'Quit') clear_screen && exit 2 ;;
             esac
@@ -170,7 +170,7 @@ main() {
         'downgrade') { print_header && show_downgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'cache') { print_header && show_clear_cache; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'reset') { print_header && show_reset_pacman; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'settings') { print_header && show_settings; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'config') { print_header && show_config; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'notify') action_notify_updates || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
@@ -504,13 +504,13 @@ print_no_internet_info() {
 
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
 print_service_running() {
-    systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 3 "SYS" "${line%% *}"; done
-    [ "$SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 3 "USR" "${line%% *}"; done
+    systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "SYS (running)" "${line%% *}"; done
+    [ "$SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "USR (running)" "${line%% *}"; done
     return 0
 }
 print_service_failed() {
-    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 3 "SYS" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
-    [ "$SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 3 "USR" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 0 "SYS (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    [ "$SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
     return 0
 }
 
@@ -865,7 +865,7 @@ show_dashboard() { # Dashboard
     # Failed services
     services_failed="$(print_service_failed)"
     if [ -n "$services_failed" ]; then
-        print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do print_fail "${line}"; done && echo
+        print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done && echo
     fi
 
     show_update_info
@@ -1139,8 +1139,8 @@ show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit ke
 # SETTINGS
 # ///////////////////////////////////////////////////////////////////
 
-show_settings() { # Settings
-    print_title "Edit Settings"
+show_config() { # Config
+    print_title "Edit Config"
     local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
     # Open editor with count of properties + 2
     # BUG: gum write does not accept height greater than 7
@@ -1168,7 +1168,7 @@ show_help() { # Print help page
     print_title 'App Actions'
     print_mesg 'help             ➜  Open help page'
     print_mesg 'version          ➜  Print version info'
-    print_mesg 'settings         ➜  Edit settings in built-in ediitor' && echo
+    print_mesg 'config           ➜  Edit config in built-in ediitor' && echo
     print_title 'System Actions'
     print_mesg 'check            ➜  Print package updates (checkupdates)'
     print_mesg 'notify           ➜  Notify on new package updates (autostart)'
