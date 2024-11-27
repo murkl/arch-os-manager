@@ -556,9 +556,8 @@ show_update_info() { # Show package updates
     done <"$UPDATES_DB"
 
     # Print updates
-    local reset="\033[0m" bold="\033[1m" green="\033[32m"
     while IFS=',' read -r manager package version update; do
-        printf ":: ${bold}%-${pkg_length}s  ${reset}%-${version_length}s  %-3s  ${bold}${green}%-${update_length}s  ${reset}${bold}%-s  ${reset}%-${manager_length}s\n" \
+        printf "${COLOR_BOLD_BASH}:: ${COLOR_BOLD_BASH}%-${pkg_length}s  ${COLOR_RESET_BASH}%-${version_length}s  %-3s  ${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%-${update_length}s  ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%-s  ${COLOR_RESET_BASH}%-${manager_length}s\n" \
             "$package" "$version" "➜" "$update" "∷" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣
     done <"$UPDATES_DB"
 }
