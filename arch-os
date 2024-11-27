@@ -127,13 +127,12 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             local user_input options
             clear_screen && print_header
-            options=("Dashboard" "Upgrade" "Packages" "Tools" "Settings" "Help" "Quit")
+            options=("Dashboard" "Upgrade" "Actions" "Packages" "Settings" "Help" "Quit")
             user_input=$(gum_choose --cursor "> " --height=10 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'Dashboard') selected_action='dashboard' ;;
             'Upgrade') selected_action='upgrade' ;;
-            'Packages') selected_action='pkg' ;;
-            'Tools')
+            'Actions')
                 clear_screen && print_header
                 options=("Update Information" "Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
                 user_input2=$(gum_choose --cursor "> " --height=11 --selected="$user_input2" "${options[@]}") || continue
@@ -148,6 +147,7 @@ main() {
                 'Back') continue ;;
                 esac
                 ;;
+            'Packages') selected_action='pkg' ;;
             'Settings') selected_action='settings' ;;
             'Help') selected_action='help' ;;
             'Quit') clear_screen && exit 2 ;;
@@ -276,6 +276,7 @@ init_properties() {
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
     [ -z "$SHOW_SYSTEM_LOG" ] && SHOW_SYSTEM_LOG="true"
     [ -z "$SHOW_SERVICE_LIST" ] && SHOW_SERVICE_LIST="true"
+    [ -z "$SHOW_USER_SERVICES" ] && SHOW_USER_SERVICES="false"
     [ -z "$SHOW_UNKNOWN_PKG_LIST" ] && SHOW_UNKNOWN_PKG_LIST="false"
 
     return 0
@@ -343,6 +344,7 @@ persist_properties() {
         echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
         echo "SHOW_SYSTEM_LOG=${SHOW_SYSTEM_LOG}"
         echo "SHOW_SERVICE_LIST=${SHOW_SERVICE_LIST}"
+        echo "SHOW_USER_SERVICES=${SHOW_USER_SERVICES}"
         echo "SHOW_UNKNOWN_PKG_LIST=${SHOW_UNKNOWN_PKG_LIST}"
     } >"$ARCH_OS_CONF"
 
@@ -503,11 +505,13 @@ print_no_internet_info() {
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
 print_service_running() {
     systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 3 "SYS" "${line%% *}"; done
-    systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 3 "USR" "${line%% *}"; done
+    [ "$SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 3 "USR" "${line%% *}"; done
+    return 0
 }
 print_service_failed() {
     if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 3 "SYS" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
-    if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 3 "USR" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    [ "$SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 3 "USR" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    return 0
 }
 
 # -------------------------------------------------------------------
@@ -868,9 +872,6 @@ show_dashboard() { # Dashboard
     echo # Newline
     show_health_info
 
-    # Return if no more options
-    [ "$SHOW_SYSTEM_LOG" = "false" ] && return 0
-
     local pending_updates
     [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
 
@@ -878,7 +879,7 @@ show_dashboard() { # Dashboard
     echo && print_title "Options"
     options=()
     options+=("Edit Blacklist")
-    [ "$pending_updates" -gt "0" ] && options+=("Upgrade System")
+    [ "$pending_updates" -gt "0" ] && options+=("Upgrade")
     options+=("Done")
     ! user_input=$(gum_choose --height=6 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
     case "$user_input" in
@@ -897,7 +898,7 @@ show_dashboard() { # Dashboard
             print_warn "Canceled" && return 3
         fi
         ;;
-    'Upgrade System')
+    'Upgrade')
         clear_screen && print_header
         show_upgrade
         return 2
