@@ -56,7 +56,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 
 - Check & list updates in _checkupdates_ format
 - Rich startup notification on available updates
-- System health info, packages & logs
+- Dashboard: System health info, packages & logs
 - Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages
@@ -104,10 +104,10 @@ settings         ➜  Edit settings in built-in ediitor
 ```
 check            ➜  Print package updates (checkupdates)
 notify           ➜  Notify on new package updates (autostart)
-list             ➜  List system updates (without database sync)
-search           ➜  Search & manage packages (pacman, aur)
-info             ➜  Show system info (logs, services, health)
+dashboard        ➜  Show dashboard (logs, services, health)
+info             ➜  Show system update info (without database sync)
 upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
+pkg              ➜  Search & manage packages (pacman, aur)
 orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)
 merge            ➜  Merge updated configurations (pacdiff, meld)
 refresh          ➜  Refresh & edit pacman mirrorlist (reflector)
@@ -151,8 +151,8 @@ ORPHANS_CONFIRM=false             # Disable confirm remove orphans (enable: true
 AUTOSTART_NOTIFY=true             # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                # Delay update check after boot in seconds (min: 10)
 NEWS_QUANTITY=3                   # Number of news to shown (disable: 0)
-SHOW_SYSTEM_LOG=true              # Show system log in info & health (disable: false)
-SHOW_SERVICE_LIST=true            # Show running services in info (disable: false)
+SHOW_SYSTEM_LOG=true              # Show system log in dashboard & health (disable: false)
+SHOW_SERVICE_LIST=true            # Show running services in dashboard (disable: false)
 SHOW_UNKNOWN_PKG_LIST=false       # Show unknown package counter instead of name list (enable: true)
 ```
 
