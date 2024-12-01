@@ -892,9 +892,9 @@ show_dashboard() { # Dashboard
     # Show options menu
     echo && print_title "Options"
     options=()
-    options+=("Edit Blacklist")
-    [ "$pending_updates" -gt 0 ] && options+=("Upgrade System")
     options+=("Synchronize")
+    [ "$pending_updates" -gt 0 ] && options+=("Upgrade System")
+    options+=("Edit Blacklist")
     options+=("Done")
     ! user_input=$(gum_choose --height=7 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
     case "$user_input" in
