@@ -509,13 +509,13 @@ print_no_internet_info() {
 
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
 print_service_running() {
-    systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "SYS (running)" "${line%% *}"; done
-    [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "USR (running)" "${line%% *}"; done
+    systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "SYS" "${line%% *}"; done
+    [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "USR" "${line%% *}"; done
     return 0
 }
 print_service_failed() {
-    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 0 "SYS (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
-    [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR (running)" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 0 "SYS" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
     return 0
 }
 
@@ -931,7 +931,7 @@ show_dashboard() { # Dashboard
             return 2
             ;;
         'Refresh')
-            ! gum_spin --title 'Refresh Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+            ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
             ;;
         'Done') print_mesg "Done" && return 2 ;;
         *) print_fail "Option '${user_input}' is not available" && return 3 ;;
