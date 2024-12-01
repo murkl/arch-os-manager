@@ -41,6 +41,9 @@ MIRRORLIST_TMP="${ARCH_OS_TMP}/mirrorlist"
 # STATE
 HEADER_PRINTED="false"
 
+# INTERNET TEST
+INTERNET_TEST_IP=8.8.8.8
+
 # GUM COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
 COLOR_PURPLE=212
 COLOR_WHITE=7
@@ -125,7 +128,7 @@ main() {
 
         # Show menu if user action argument is NOT set
         local selected_action && if [ -z "$user_action" ]; then
-            local user_input options
+            local user_input user_input2 options options2
             clear_screen && print_header
             options=("Dashboard" "Upgrade" "Actions" "Packages" "Config" "Help" "Quit")
             user_input=$(gum_choose --cursor "> " --height=11 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
@@ -134,8 +137,8 @@ main() {
             'Upgrade') selected_action='upgrade' ;;
             'Actions')
                 clear_screen && print_header
-                options=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
-                user_input2=$(gum_choose --cursor "> " --height=10 --selected="$user_input2" "${options[@]}") || continue
+                options2=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
+                user_input2=$(gum_choose --cursor "> " --height=10 --selected="$user_input2" "${options2[@]}") || continue
                 case "$user_input2" in # Set user action to selected action
                 'Remove Orphans') selected_action='orphans' ;;
                 'Merge Configurations') selected_action='merge' ;;
@@ -173,7 +176,7 @@ main() {
         'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'notify') action_notify_updates || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
         'check') action_check_updates_available || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
-        *) print_header && show_help && echo && print_fail "Action '${selected_action}' not available!" ;;
+        *) print_header && show_help && echo && print_fail "Action '${selected_action}' is not available!" ;;
         esac
 
         # Cleanup run (order is important!)
@@ -496,8 +499,8 @@ action_notify_updates() { # Notify on new updates
 
 print_no_internet_info() {
     for i in {1..3}; do
-        timeout 5 ping -c 1 -W 2 8.8.8.8 &>/dev/null && return 0
-        sleep 2
+        timeout 0.7 ping -c 1 -W 5 ${INTERNET_TEST_IP} &>/dev/null && return 0
+        gum_spin --title "${i}/3 Waiting for internet connection..." -- bash -c "timeout 5 ping -c 1 -W 5 ${INTERNET_TEST_IP} &>/dev/null && exit 0" && return 0
     done
     print_fail "No Internet Connection" && return 3
 }
@@ -526,7 +529,7 @@ show_news_info() { # Show Arch Linux News
 
         # Sync db
         print_no_internet_info || return 3
-        ! gum_spin --title 'Synchronize News Database...' -- bash -c "${SELF} --sync news" && print_fail "Synchronize Database (news) failed" && return 3
+        ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news" && print_fail "Synchronize Database (news) failed" && return 3
 
         # Check unread news
         local unread_news="false" && [ "$LATEST_ARCH_LINUX_NEWS_DATE" != "$(print_news_value 1 1)" ] && unread_news="true"
@@ -570,7 +573,7 @@ show_update_info() { # Show package updates
     [ -n "$LATEST_UPDATE_CHECK" ] && [ "$1" = "--sync-db" ] && sync_actions+=("updates")
 
     print_no_internet_info || return 3
-    [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database ${sync_actions[*]} failed" && return 3
+    [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database ${sync_actions[*]} failed" && return 3
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -604,7 +607,7 @@ show_health_info() { # Show system health information
     #[ "$1" = "--sync-updates" ] && sync_actions+=(updates)
     [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
     print_no_internet_info || return 3
-    [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database (updates, packages) failed" && return 3
+    [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database (updates, packages) failed" && return 3
 
     # Package info
     print_format_white 18 "Arch Packages" "$(pacman -Qn | wc -l)"
@@ -700,7 +703,7 @@ show_search() { # Search & manage packages
 
             # Sync db
             print_no_internet_info || return 3
-            [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Package Database...' -- bash -c "${SELF} --sync packages" && print_fail "Synchronize Database (packages) failed" && return 3
+            [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages" && print_fail "Synchronize Database (packages) failed" && return 3
 
             # Helper
             list_results() {
@@ -723,7 +726,7 @@ show_search() { # Search & manage packages
 
             # Search filter
             if [ -z "$search_filter" ]; then
-                ! search_filter=$(gum_input --placeholder="Full-text search...") && print_warn "Canceled" && return 2
+                ! search_filter=$(gum_input --placeholder="Full-text search...") && return 2
                 [ -z "$search_filter" ] && print_fail "Search was empty" && return 3
                 # Filter results
                 filter_pkgs_results="$(list_results "$search_filter" | tac)"
@@ -733,7 +736,11 @@ show_search() { # Search & manage packages
             print_format_green 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            ! pkg_name_filter=$(gum_filter --limit 1 --height "20" --placeholder "Package..." "${search_result_array[@]}") && print_warn "Canceled" && return 2
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "20" --placeholder "Package..." "${search_result_array[@]}"); then
+                unset search_filter
+                clear_screen
+                continue
+            fi
 
             # Set package name
             pkg_name="$(echo "$pkg_name_filter" | cut -d':' -f1 | cut -d'/' -f2)"
@@ -807,7 +814,7 @@ show_search() { # Search & manage packages
         echo && print_title "Options"
         # Dynamic package entries
         local options=()
-        [ "$pkg_is_aur" = "true" ] && [ "$AUR_SUPPORT" = "true" ] && options+=("Show PKGBUILD")
+        [ "$pkg_is_aur" = "true" ] && [ "$AUR_SUPPORT" = "true" ] && options+=("PKGBUILD")
         [ "$pkg_is_installed" = "false" ] && options+=("Install")
         [ "$pkg_is_installed" = "true" ] && options+=("Remove")
         # Show downgrade entry if package is installed and not from AUR
@@ -832,7 +839,7 @@ show_search() { # Search & manage packages
             ! gum_confirm "Remove?" && clear_screen && continue
             if sudo /usr/bin/pacman -Rns $pkg_name; then print_info "Remove successful"; else print_fail "Removing ${pkg_name} failed"; fi
             ;;
-        'Show PKGBUILD')
+        'PKGBUILD')
             clear_screen && print_header && print_title "PKGBUILD"
             /usr/bin/paru -Gp $pkg_name
             ;;
@@ -845,7 +852,7 @@ show_search() { # Search & manage packages
             clear_screen
             continue
             ;;
-        *) unset pkg_name && print_fail "Action '${user_input}' not available" && return 3 ;;
+        *) unset pkg_name && print_fail "Action '${user_input}' is not available" && return 3 ;;
         esac
         gum_confirm_continue
         clear_screen
@@ -858,75 +865,79 @@ show_search() { # Search & manage packages
 # ///////////////////////////////////////////////////////////////////
 
 show_dashboard() { # Dashboard
-    local options user_input system_logs
-    if [ "$DASHBOARD_SHOW_LOG" = "true" ]; then
-        # Show system logs
-        print_title "System Log"
-        system_logs=$(print_system_error_logs)
-        if [ -n "$system_logs" ]; then
-            local log_counter=0
-            echo -e "$system_logs" | while read -r line; do print_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
-        else
-            print_info "No System Log available"
+
+    while (true); do
+
+        local options user_input system_logs
+        if [ "$DASHBOARD_SHOW_LOG" = "true" ]; then
+            # Show system logs
+            print_title "System Log"
+            system_logs=$(print_system_error_logs)
+            if [ -n "$system_logs" ]; then
+                local log_counter=0
+                echo -e "$system_logs" | while read -r line; do print_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
+            else
+                print_info "No System Log available"
+            fi
+            echo # Print new line
         fi
-        echo # Print new line
-    fi
 
-    # Show service health
-    [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && print_title "Service Information" && print_service_running | while read -r line; do echo "${line}"; done && echo
+        # Show service health
+        [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && print_title "Service Information" && print_service_running | while read -r line; do echo "${line}"; done && echo
 
-    # Failed services
-    services_failed="$(print_service_failed)"
-    if [ -n "$services_failed" ]; then
-        print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done && echo
-    fi
-
-    show_update_info
-    echo # Newline
-    show_health_info
-
-    local pending_updates
-    [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
-    [ -z "$pending_updates" ] && pending_updates=0
-
-    # Show options menu
-    echo && print_title "Options"
-    options=()
-    options+=("Synchronize")
-    [ "$pending_updates" -gt 0 ] && options+=("Upgrade System")
-    options+=("Edit Blacklist")
-    options+=("Done")
-    ! user_input=$(gum_choose --height=7 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
-    case "$user_input" in
-    'Edit Blacklist')
-        clear_screen && print_header && print_title "Edit Blacklist"
-        local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
-        # Open editor with count of properties + 2
-        # BUG: gum write does not accept height greater than 7
-        if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
-            # If success: save/move file, remove spaces and re-init properties
-            awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
-            rm -f "${ARCH_OS_BLACKLIST}.new"
-            print_info "Saved" && return 0
-        else
-            rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
-            print_warn "Canceled" && return 3
+        # Failed services
+        services_failed="$(print_service_failed)"
+        if [ -n "$services_failed" ]; then
+            print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done && echo
         fi
-        ;;
-    'Upgrade System')
+
+        show_update_info
+        echo # Newline
+        show_health_info
+
+        local pending_updates
+        [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
+        [ -z "$pending_updates" ] && pending_updates=0
+
+        # Show options menu
+        echo && print_title "Options"
+        options=()
+        options+=("Blacklist")
+        [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
+        options+=("Refresh")
+        options+=("Done")
+        ! user_input=$(gum_choose --height=7 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
+        case "$user_input" in
+        'Blacklist')
+            clear_screen && print_header && print_title "Edit Blacklist"
+            local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
+            # Open editor with count of properties + 2
+            # BUG: gum write does not accept height greater than 7
+            if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+                # If success: save/move file, remove spaces and re-init properties
+                awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
+                rm -f "${ARCH_OS_BLACKLIST}.new"
+                print_info "Saved"
+                gum_confirm_continue
+            else
+                rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
+                print_warn "Canceled"
+                gum_confirm_continue
+            fi
+            ;;
+        'Upgrade')
+            clear_screen && print_header
+            show_upgrade
+            return 2
+            ;;
+        'Refresh')
+            ! gum_spin --title 'Refresh Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+            ;;
+        'Done') print_mesg "Done" && return 2 ;;
+        *) print_fail "Option '${user_input}' is not available" && return 3 ;;
+        esac
         clear_screen && print_header
-        show_upgrade
-        return 2
-        ;;
-    'Synchronize')
-        clear_screen && print_header
-        ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database failed" && return 3
-        show_dashboard
-        return 2
-        ;;
-    'Done') print_mesg "Done" && return 2 ;;
-    *) print_fail "Option '${user_input}' not available" && return 3 ;;
-    esac
+    done
     return 0
 }
 
@@ -980,7 +991,7 @@ show_upgrade() { # Update packages
 
     # Resync packages & updates db
     print_no_internet_info || return 3
-    ! gum_spin --title 'Synchronize Update Database...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database failed" && return 3
+    ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
 
     # Finish
     LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
@@ -1169,7 +1180,7 @@ show_config() { # Config
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
-        ! gum_spin --title 'Synchronize Database...' -- bash -c "${SELF} --sync news packages updates" && print_fail "Synchronize Database failed" && return 3
+        ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news packages updates" && print_fail "Synchronize Database (news, packages, updates) failed" && return 3
         print_info "Saved" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
