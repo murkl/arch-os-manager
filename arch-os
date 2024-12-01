@@ -60,7 +60,7 @@ COLOR_YELLOW_BASH="\033[33m"
 main() {
 
     # Init properties
-    init_properties
+    init_properties && persist_properties
 
     # Install
     [ "$1" = '--install' ] && {
