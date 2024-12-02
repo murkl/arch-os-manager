@@ -6,9 +6,12 @@
 </div>
 
 <div align="center">
+  
   <p><img src="./screenshots/main.png"></p>
 
 **[ ➜ More Screenshots ](#screenshots)**
+
+  <p>The Arch OS Manager is a tool for managing Arch Linux systems. It provides a straightforward interface for system administration and supports execution via tty or desktop. Offering features like system upgrade, package management, health monitoring and some more... </p>
 
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
