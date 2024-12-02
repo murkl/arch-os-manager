@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.0"
+VERSION="1.7.1"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
