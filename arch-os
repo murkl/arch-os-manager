@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.0"
+VERSION="1.7.1"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -45,8 +45,9 @@ HEADER_PRINTED="false"
 INTERNET_TEST_IP=8.8.8.8
 
 # GUM COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
-COLOR_PURPLE=212
 COLOR_WHITE=7
+COLOR_GREEN=2
+COLOR_PURPLE=212
 
 # BASH COLORS
 COLOR_RESET_BASH="\033[0m"
@@ -55,6 +56,7 @@ COLOR_WHITE_BASH="\033[37m"
 COLOR_RED_BASH="\033[31m"
 COLOR_GREEN_BASH="\033[32m"
 COLOR_YELLOW_BASH="\033[33m"
+COLOR_PURPLE_BASH="\033[35m"
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN FUNCTION
@@ -275,12 +277,12 @@ init_properties() {
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
-    [ -z "$DASHBOARD_SHOW_USER_SERVICES" ] && DASHBOARD_SHOW_USER_SERVICES="false"
-    [ -z "$DASHBOARD_SHOW_SERVICES" ] && DASHBOARD_SHOW_SERVICES="true"
-    [ -z "$DASHBOARD_SHOW_LOG" ] && DASHBOARD_SHOW_LOG="true"
-    [ -z "$HEALTH_SHOW_LOG" ] && HEALTH_SHOW_LOG="true"
-    [ -z "$HEALTH_ENABLE_UNKNOWN_PKG_LIST" ] && HEALTH_ENABLE_UNKNOWN_PKG_LIST="false"
     [ -z "$UPGRADE_SHOW_HEALTH" ] && UPGRADE_SHOW_HEALTH="true"
+    [ -z "$HEALTH_ENABLE_UNKNOWN_PKG_LIST" ] && HEALTH_ENABLE_UNKNOWN_PKG_LIST="false"
+    [ -z "$HEALTH_SHOW_LOG" ] && HEALTH_SHOW_LOG="true"
+    [ -z "$DASHBOARD_SHOW_LOG" ] && DASHBOARD_SHOW_LOG="false"
+    [ -z "$DASHBOARD_SHOW_SERVICES" ] && DASHBOARD_SHOW_SERVICES="false"
+    [ -z "$DASHBOARD_SHOW_USER_SERVICES" ] && DASHBOARD_SHOW_USER_SERVICES="false"
 
     return 0
 }
@@ -815,6 +817,7 @@ show_search() { # Search & manage packages
         # Dynamic package entries
         local options=()
         [ "$pkg_is_aur" = "true" ] && [ "$AUR_SUPPORT" = "true" ] && options+=("PKGBUILD")
+        [ "$pkg_is_aur" = "true" ] && [ "$AUR_SUPPORT" = "true" ] && options+=("Comments")
         [ "$pkg_is_installed" = "false" ] && options+=("Install")
         [ "$pkg_is_installed" = "true" ] && options+=("Remove")
         # Show downgrade entry if package is installed and not from AUR
@@ -822,7 +825,7 @@ show_search() { # Search & manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        ! user_input=$(gum_choose --selected="Done" --height=6 "${options[@]}") && print_warn "Canceled" && unset pkg_name && clear_screen && continue
+        ! user_input=$(gum_choose --selected="Done" --height=7 "${options[@]}") && print_warn "Canceled" && unset pkg_name && clear_screen && continue
         case "$user_input" in # Set user action to selected action
         'Install')
             ! gum_confirm "Install?" && clear_screen && continue
@@ -840,8 +843,16 @@ show_search() { # Search & manage packages
             if sudo /usr/bin/pacman -Rns $pkg_name; then print_info "Remove successful"; else print_fail "Removing ${pkg_name} failed"; fi
             ;;
         'PKGBUILD')
-            clear_screen && print_header && print_title "PKGBUILD"
+            clear_screen && print_header
+            print_format_title "AUR PKGBUILD" "${pkg_name}" && echo
             /usr/bin/paru -Gp $pkg_name
+            ;;
+        'Comments')
+            clear_screen && print_header
+            print_format_title "AUR Comments" "${pkg_name}" && echo
+            local comments && comments="$(/usr/bin/paru -Gc $pkg_name)"
+            [ -z "$comments" ] && print_mesg 'No AUR comments available.' && echo
+            [ -n "$comments" ] && /usr/bin/paru -Gc $pkg_name
             ;;
         'Downgrade')
             ! gum_confirm "Downgrade?" && clear_screen && continue
@@ -875,7 +886,9 @@ show_dashboard() { # Dashboard
             system_logs=$(print_system_error_logs)
             if [ -n "$system_logs" ]; then
                 local log_counter=0
-                echo -e "$system_logs" | while read -r line; do print_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
+                # Cut after 110 chars and print
+                trim_log() { echo -e "${1}" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}'; }
+                echo -e "$system_logs" | while read -r line; do print_fail "$(trim_log "$line")" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
             else
                 print_info "No System Log available"
             fi
@@ -927,7 +940,11 @@ show_dashboard() { # Dashboard
             ;;
         'Upgrade')
             clear_screen && print_header
-            show_upgrade
+            if show_upgrade; then
+                gum_confirm_continue
+            else
+                [ $? != 2 ] && gum_confirm_continue
+            fi
             return 2
             ;;
         'Refresh')
@@ -1000,8 +1017,7 @@ show_upgrade() { # Update packages
     print_info "System Upgrade finished"
     echo # Print new line
     if [ "$UPGRADE_SHOW_HEALTH" = "true" ]; then show_health_info || return $?; fi
-    gum_confirm_continue
-    return 2
+    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -1080,7 +1096,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     print_title "Refresh Pacman Mirrorlist"
     ! gum_confirm "Continue?" && return 2
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    ! gum_spin --title 'Waiting for Reflector...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
+    ! gum_spin --title 'Waiting for Reflector. Please wait...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
     # Clean reflector result (list only servers)
     local mirrorlist_cleaned && mirrorlist_cleaned=$(grep -v '^#' "$MIRRORLIST_TMP" | sed '/^$/d;s/^[[:space:]#]*//')
     echo -e "$mirrorlist_cleaned" >"$MIRRORLIST_TMP"
@@ -1281,6 +1297,7 @@ gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor 
 
 # Gum colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
+gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 
 # Print helper
@@ -1297,6 +1314,8 @@ print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" "$2" "$3"; }
 print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" "$2" "$3"; }
 print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" "$2" "$3"; }
 print_format_red() { print_format "$1" "$COLOR_RED_BASH" "$2" "$3"; }
+print_format_purple() { print_format "$1" "$COLOR_PURPLE_BASH" "$2" "$3"; }
+print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_green --bold "$2")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS

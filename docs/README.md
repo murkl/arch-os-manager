@@ -6,9 +6,12 @@
 </div>
 
 <div align="center">
+  
   <p><img src="./screenshots/main.png"></p>
 
 **[ ➜ More Screenshots ](#screenshots)**
+
+  <p>The Arch OS Manager is a tool for managing Arch Linux systems. It provides a straightforward interface for system administration and supports execution via tty or desktop. Offering features like system upgrade, package management, health monitoring and some more... </p>
 
   <p>
     <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
@@ -139,13 +142,13 @@ Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/et
 Edit the settings with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
-ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (disable (experimentell): false)
+ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false           # Disable pacman/paru download timeout (enable: true)
 AUR_MANAGER_REPO=paru                 # Set AUR manager package for --install (paru, paru-bin, paru-git)
 AUR_SUPPORT=true                      # Enable AUR support (disable: false)
 AUR_REVIEW=false                      # Disable AUR review (enable: true)
 FLATPAK_SUPPORT=true                  # Enable flatpak support (disable: false)
-FLATPAK_UPGRADE_CONFIRM=false         # Disable confirm flatpak upgrade (enable: true)
+FLATPAK_UPGRADE_CONFIRM=false         # Disable confirm flatpak upgrade (experimental) (enable: true)
 ORPHANS_CONFIRM=false                 # Disable confirm remove orphans (enable: true)
 AUTOSTART_NOTIFY=true                 # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                    # Delay update check after boot in seconds (min: 10)
