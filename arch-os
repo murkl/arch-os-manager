@@ -927,7 +927,7 @@ show_dashboard() { # Dashboard
             ;;
         'Upgrade')
             clear_screen && print_header
-            ! show_upgrade && [ $? = 2 ] && gum_confirm_continue
+            show_upgrade || gum_confirm_continue
             return 2
             ;;
         'Refresh')
