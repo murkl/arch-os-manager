@@ -927,7 +927,11 @@ show_dashboard() { # Dashboard
             ;;
         'Upgrade')
             clear_screen && print_header
-            show_upgrade || gum_confirm_continue
+            if show_upgrade; then
+                gum_confirm_continue
+            else
+                [ $? != 2 ] && gum_confirm_continue
+            fi
             return 2
             ;;
         'Refresh')
@@ -1000,7 +1004,7 @@ show_upgrade() { # Update packages
     print_info "System Upgrade finished"
     echo # Print new line
     if [ "$UPGRADE_SHOW_HEALTH" = "true" ]; then show_health_info || return $?; fi
-    return 2
+    return 0
 }
 
 # ///////////////////////////////////////////////////////////////////
