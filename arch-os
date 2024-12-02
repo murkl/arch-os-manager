@@ -875,7 +875,9 @@ show_dashboard() { # Dashboard
             system_logs=$(print_system_error_logs)
             if [ -n "$system_logs" ]; then
                 local log_counter=0
-                echo -e "$system_logs" | while read -r line; do print_fail "$line" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
+                # Cut after 110 chars and print
+                trim_log() { echo -e "${1}" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}'; }
+                echo -e "$system_logs" | while read -r line; do print_fail "$(trim_log "$line")" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
             else
                 print_info "No System Log available"
             fi
