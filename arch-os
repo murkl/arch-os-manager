@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.2"
+VERSION="1.7.3"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -85,6 +85,13 @@ main() {
 
     # Init state & init properties
     init_state && persist_properties
+
+    # Init (only create dir structure & files)
+    if [ "$1" = '--init' ]; then
+        print_title "Arch OS Manager"
+        print_info "Successfully initialized"
+        exit 2
+    fi
 
     # Sync database & exit
     if [ "$1" = '--sync' ]; then
