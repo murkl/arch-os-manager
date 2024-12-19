@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.3"
+VERSION="1.7.4"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -88,8 +88,7 @@ main() {
 
     # Init (only create dir structure & files)
     if [ "$1" = '--init' ]; then
-        print_title "Arch OS Manager"
-        print_info "Successfully initialized"
+        print_info "$(print_timestamp) | Successfully initialized"
         exit 2
     fi
 
@@ -978,7 +977,6 @@ show_upgrade() { # Update packages
     # Show infos
     show_news_info || return $?
     show_update_info --sync-db || return $?
-    if [ "$UPGRADE_SHOW_HEALTH" = "true" ]; then echo && show_health_info || return $?; fi
     if [ ! -s "$UPDATES_DB" ]; then
         gum_confirm_continue
         return 2
@@ -986,7 +984,7 @@ show_upgrade() { # Update packages
 
     # Start upgrade system
     echo && ! gum_confirm "Start System Upgrade?" && return 2
-    clear_screen && print_header && print_title "Upgrade System Packages"
+    print_title "Upgrade System Packages"
 
     # Prepare args
     local pkg_manager_args=()
@@ -1011,7 +1009,7 @@ show_upgrade() { # Update packages
             else # Do Interactive flatpak update
                 print_info "Upgrading Flatpak Apps" && ! flatpak update && print_fail "Flatpak Upgrade failed" && return 3
             fi
-            print_info "Flatpak Upgrade finished"
+            print_info "Flatpak Upgrade completed"
         else # Up to date
             print_info "Flatpak is up to date"
         fi
@@ -1023,7 +1021,7 @@ show_upgrade() { # Update packages
 
     # Finish
     LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
-    print_info "System Upgrade finished"
+    print_info "System Upgrade completed"
     echo # Print new line
     if [ "$UPGRADE_SHOW_HEALTH" = "true" ]; then show_health_info || return $?; fi
     return 0
@@ -1049,7 +1047,7 @@ show_orphans() { # Remove orphaned packages
     if [ "$FLATPAK_SUPPORT" = "true" ]; then
         if [ "$ORPHANS_CONFIRM" = "false" ]; then # Do auto flatpak orphans
             ! gum_spin --title 'Removing Flatpak Orphans...' -- bash -c "flatpak uninstall -y --noninteractive --unused" && print_fail "Remove Flatpak Orphans failed" && return 3
-            print_info "Remove Flatpak Orphans finished"
+            print_info "Remove Flatpak Orphans completed"
         else # Do Interactive flatpak orphans
             print_info "Remove Flatpak Orphans" && ! flatpak uninstall --unused && print_fail "Remove Flatpak Orphans failed" && return 3
         fi
@@ -1158,6 +1156,8 @@ show_downgrade() { # Downgrade packages
     for item in "${user_input[@]}"; do print_warn "${item}"; done
     echo && ! gum_confirm "Downgrade selected packages?" && return 2
     ! sudo downgrade "${user_input[@]}" && print_warn "Canceled" && return 3
+    print_no_internet_info || return 3
+    ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" && print_fail "Synchronize Database (updates) failed" && return 3
     print_info "Downgrade successful"
     return 0
 }
@@ -1189,9 +1189,14 @@ show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit ke
     # Update Arch keyring & system
     local pkg_manager_args=()
     [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
-    [ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
-    ! sudo /usr/bin/pacman -Syyq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}" && print_warn "Canceled" && return 3
-    print_info "Done"
+    #[ "$ARCH_UPGRADE_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm') # Disabled for better control
+    if sudo /usr/bin/pacman -Syyq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}"; then
+        print_no_internet_info || return 3
+        ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+        print_info "Done"
+    else
+        print_warn "Canceled" && return 3
+    fi
     return 0
 }
 
@@ -1418,7 +1423,7 @@ install_script_dependencies() {
     echo ":: Install Downgrade..."
     aur_install downgrade || return 1
 
-    echo ":: Successfully finished"
+    echo ":: Successfully completed"
     return 0
 }
 
