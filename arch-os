@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.4"
+VERSION="1.7.5"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -516,14 +516,11 @@ print_no_internet_info() {
 # -------------------------------------------------------------------
 
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
-print_service_running() {
-    systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "SYS" "${line%% *}"; done
-    [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ] && systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_format_green 0 "USR" "${line%% *}"; done
-    return 0
-}
-print_service_failed() {
+print_system_services() { systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_info "${line%% *}"; done; }
+print_user_services() { systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_info "${line%% *}"; done; }
+print_services_failed() {
     if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 0 "SYS" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
-    [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ] && if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USR" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
     return 0
 }
 
@@ -627,10 +624,11 @@ show_health_info() { # Show system health information
     command -v /usr/bin/gnome-extensions &>/dev/null && print_format_white 18 "GNOME Extensions" "$(gnome-extensions list --enabled | wc -l)"
 
     # Services count
-    print_format_white 18 "Running Services" "$(print_service_running | wc -l)"
+    print_format_white 18 "System Services" "$(print_system_services | wc -l)"
+    print_format_white 18 "User Services" "$(print_user_services | wc -l)"
 
     # Service Failure
-    service_count=$(print_service_failed | wc -l)
+    service_count=$(print_services_failed | wc -l)
     if [ "$service_count" -gt "0" ]; then
         print_format_red 18 "Service Failure" "${service_count}"
     else
@@ -883,31 +881,58 @@ show_search() { # Search & manage packages
 # DASHBOARD
 # ///////////////////////////////////////////////////////////////////
 
+view_system_log() {
+    print_title "System Log"
+    system_logs=$(print_system_error_logs)
+    if [ -n "$system_logs" ]; then
+        local log_counter=0
+        # Cut after 110 chars and print
+        trim_log() { echo -e "${1}" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}'; }
+        echo -e "$system_logs" | while read -r line; do print_fail "$(trim_log "$line")" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
+    else
+        print_info "No System Log available"
+    fi
+}
+
+view_system_services() {
+    print_title "System Services"
+    print_system_services | while read -r line; do echo "${line}"; done
+    if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
+        echo && print_title "User Services"
+        print_user_services | while read -r line; do echo "${line}"; done
+    fi
+}
+
+view_edit_blacklist() {
+    clear_screen && print_header && print_title "Edit Blacklist"
+    local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
+    # Open editor with count of properties + 2
+    # BUG: gum write does not accept height greater than 7
+    if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+        # If success: save/move file, remove spaces and re-init properties
+        awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
+        rm -f "${ARCH_OS_BLACKLIST}.new"
+        print_info "Saved"
+        gum_confirm_continue
+    else
+        rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
+        print_warn "Canceled"
+        gum_confirm_continue
+    fi
+}
+
 show_dashboard() { # Dashboard
 
     while (true); do
 
         local options user_input system_logs
-        if [ "$DASHBOARD_SHOW_LOG" = "true" ]; then
-            # Show system logs
-            print_title "System Log"
-            system_logs=$(print_system_error_logs)
-            if [ -n "$system_logs" ]; then
-                local log_counter=0
-                # Cut after 110 chars and print
-                trim_log() { echo -e "${1}" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}'; }
-                echo -e "$system_logs" | while read -r line; do print_fail "$(trim_log "$line")" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
-            else
-                print_info "No System Log available"
-            fi
-            echo # Print new line
-        fi
+        [ "$DASHBOARD_SHOW_LOG" = "true" ] && view_system_log && echo
 
         # Show service health
-        [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && print_title "Service Information" && print_service_running | while read -r line; do echo "${line}"; done && echo
+        [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && view_system_services && echo
 
         # Failed services
-        services_failed="$(print_service_failed)"
+        services_failed="$(print_services_failed)"
         if [ -n "$services_failed" ]; then
             print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done && echo
         fi
@@ -923,28 +948,32 @@ show_dashboard() { # Dashboard
         # Show options menu
         echo && print_title "Options"
         options=()
-        options+=("Blacklist")
+        [ "$DASHBOARD_SHOW_SERVICES" = "false" ] && options+=("Show Services")
+        [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("Show Logs")
+        [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Edit Blacklist")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
         options+=("Refresh")
         options+=("Done")
-        ! user_input=$(gum_choose --height=7 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
+        ! user_input=$(gum_choose --height=8 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
         case "$user_input" in
-        'Blacklist')
-            clear_screen && print_header && print_title "Edit Blacklist"
-            local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
-            # Open editor with count of properties + 2
-            # BUG: gum write does not accept height greater than 7
-            if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
-                # If success: save/move file, remove spaces and re-init properties
-                awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
-                rm -f "${ARCH_OS_BLACKLIST}.new"
-                print_info "Saved"
-                gum_confirm_continue
-            else
-                rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
-                print_warn "Canceled"
-                gum_confirm_continue
+        'Show Services')
+            clear_screen && print_header
+            view_system_services
+            local services_failed && services_failed="$(print_services_failed)"
+            if [ -n "$services_failed" ]; then
+                echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
             fi
+            gum_confirm_continue
+            ;;
+        'Show Logs')
+            clear_screen && print_header
+            view_system_log
+            echo && print_title "Options"
+            local user_input && ! user_input=$(gum_choose --height=8 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
+            [ "$user_input" = 'Edit Blacklist' ] && view_edit_blacklist
+            ;;
+        'Edit Blacklist')
+            view_edit_blacklist
             ;;
         'Upgrade')
             clear_screen && print_header
