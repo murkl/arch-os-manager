@@ -969,7 +969,7 @@ show_dashboard() { # Dashboard
             clear_screen && print_header
             view_system_log
             echo && print_title "Options"
-            local user_input && ! user_input=$(gum_choose --height=8 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
+            local user_input && ! user_input=$(gum_choose --height=5 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
             [ "$user_input" = 'Edit Blacklist' ] && view_edit_blacklist
             ;;
         'Edit Blacklist')
