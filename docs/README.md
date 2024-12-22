@@ -164,7 +164,7 @@ DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disa
 DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
 ```
 
-### Configurations
+### Configuration Files
 
 - Arch OS Manager config: `~/.arch-os/config/settings.conf`
 - Built-in kitty config: `~/.arch-os/config/kitty.conf`
@@ -210,7 +210,17 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 ## Development
 
 ```
+# Start with custom binaries (gum & kitty)
 GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
+
+# Install dependencies
+./arch-os --install
+
+# Init Arch OS Manager (dirs & files)
+./arch-os --init
+
+# Sync all databases
+./arch-os --sync
 ```
 
 ## Credits
