@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.7"
+VERSION="1.7.8"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -872,7 +872,13 @@ show_search() { # Search & manage packages
             ;;
         'Downgrade')
             ! gum_confirm "Downgrade?" && clear_screen && continue
-            if sudo downgrade $pkg_name; then print_info "Downgrade successful"; else print_fail "Downgrading ${pkg_name} failed"; fi
+            if sudo downgrade $pkg_name; then
+                print_no_internet_info || return 3
+                [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" && print_fail "Synchronize Database (updates) failed" && return 3
+                print_info "Downgrade successful"
+            else
+                print_fail "Downgrading ${pkg_name} failed"
+            fi
             ;;
         'Done')
             unset pkg_name
