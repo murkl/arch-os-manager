@@ -164,7 +164,7 @@ DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disa
 DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
 ```
 
-### Configurations
+### Configuration Files
 
 - Arch OS Manager config: `~/.arch-os/config/settings.conf`
 - Built-in kitty config: `~/.arch-os/config/kitty.conf`
