@@ -874,7 +874,10 @@ show_search() { # Search & manage packages
             ! gum_confirm "Downgrade?" && clear_screen && continue
             if sudo downgrade $pkg_name; then
                 print_no_internet_info || return 3
-                [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" && print_fail "Synchronize Database (updates) failed" && return 3
+                gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" || {
+                    print_fail "Synchronize Database (updates) failed"
+                    return 3
+                }   
                 print_info "Downgrade successful"
             else
                 print_fail "Downgrading ${pkg_name} failed"
@@ -961,7 +964,7 @@ show_dashboard() { # Dashboard
         local pending_updates
         [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
         [ -z "$pending_updates" ] && pending_updates=0
-        pending_updates=0
+
         # Show options menu
         echo && print_title "Options"
         options=()
