@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.5"
+VERSION="1.7.6"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -272,6 +272,7 @@ init_properties() {
     touch "$ARCH_OS_BLACKLIST"
 
     # Set default properties
+    [ -z "$CONTENT_MAX_WIDTH" ] && CONTENT_MAX_WIDTH="110"
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
     [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="60"
     [ -z "$AUR_MANGER_REPO" ] && AUR_MANGER_REPO="paru"
@@ -296,10 +297,12 @@ init_properties() {
 persist_properties() {
 
     # Validate properties
-    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500" # Set to max 500
-    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"   # Set to min 10
-    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"       # Set to max 10
-    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"         # Set to min 0
+    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500"     # Set to max 500
+    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"       # Set to min 10
+    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"           # Set to max 10
+    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"             # Set to min 0
+    [ "$CONTENT_MAX_WIDTH" -gt 500 ] && CONTENT_MAX_WIDTH="500" # Set to max 500
+    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="50"   # Set to min 0
 
     # Check AUR binary
     if [ "$AUR_SUPPORT" = "true" ]; then
@@ -312,7 +315,6 @@ persist_properties() {
             ! gum_confirm --timeout=3s "Disable AUR_SUPPORT?" && print_fail "Canceled" && exit 3
             AUR_SUPPORT="false" && print_warn "AUR_SUPPORT was disabled"
         }
-
     fi
 
     # Check Flatpak binary
@@ -342,6 +344,7 @@ persist_properties() {
     fi
 
     { # Write properties
+        echo "CONTENT_MAX_WIDTH=${CONTENT_MAX_WIDTH}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
         echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
         echo "AUR_MANGER_REPO=${AUR_MANGER_REPO}"
@@ -722,7 +725,7 @@ show_search() { # Search & manage packages
                         pkg_name="$(echo -e "$line" | cut -d ' ' -f 1)"
                     else
                         pkg_desc=$(echo "${line}" | awk '{$1=$1; print}')
-                        echo -e "${pkg_name}: ${pkg_desc}" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}' # Cut after 110 chars and print
+                        echo -e "${pkg_name}: ${pkg_desc}" | awk -v len="$CONTENT_MAX_WIDTH" '{print (length($0) > len ? substr($0, 1, len) "..." : $0)}'
                         unset pkg_name
                     fi
                 done
@@ -760,7 +763,7 @@ show_search() { # Search & manage packages
         # Helper function
         print_package_value() {
             local result && result="$(echo "$1" | grep -i "^${2}" | sed -E "s/^${2}\s*:\s*//" || echo "unavailable")"
-            echo "$result" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}' # Cut after 110 chars and print
+            echo "$result" | awk -v len=$((CONTENT_MAX_WIDTH - 30)) '{print (length($0) > len ? substr($0, 1, len) "..." : $0)}'
         }
 
         # Fetch general package infos
@@ -886,8 +889,7 @@ view_system_log() {
     system_logs=$(print_system_error_logs)
     if [ -n "$system_logs" ]; then
         local log_counter=0
-        # Cut after 110 chars and print
-        trim_log() { echo -e "${1}" | awk '{print (length($0) > 110 ? substr($0, 1, 110) "..." : $0)}'; }
+        trim_log() { echo -e "${1}" | awk -v len="$CONTENT_MAX_WIDTH" '{print (length($0) > len ? substr($0, 1, len) "..." : $0)}'; }
         echo -e "$system_logs" | while read -r line; do print_fail "$(trim_log "$line")" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
     else
         print_info "No System Log available"
@@ -969,7 +971,7 @@ show_dashboard() { # Dashboard
             clear_screen && print_header
             view_system_log
             echo && print_title "Options"
-            local user_input && ! user_input=$(gum_choose --height=8 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
+            local user_input && ! user_input=$(gum_choose --height=5 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
             [ "$user_input" = 'Edit Blacklist' ] && view_edit_blacklist
             ;;
         'Edit Blacklist')

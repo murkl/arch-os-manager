@@ -142,6 +142,7 @@ Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/et
 Edit the settings with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
+CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 50)
 ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false           # Disable pacman/paru download timeout (enable: true)
 AUR_MANAGER_REPO=paru                 # Set AUR manager package for --install (paru, paru-bin, paru-git)
