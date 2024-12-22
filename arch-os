@@ -275,6 +275,7 @@ init_properties() {
     # Set default properties
     [ -z "$REFLECTOR_COUNTRY" ] && REFLECTOR_COUNTRY="none"
     [ -z "$CONTENT_MAX_WIDTH" ] && CONTENT_MAX_WIDTH="110"
+    [ -z "$CONTENT_MAX_HEIGHT" ] && CONTENT_MAX_HEIGHT="16"
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
     [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="60"
     [ -z "$AUR_MANGER_REPO" ] && AUR_MANGER_REPO="paru"
@@ -299,12 +300,14 @@ init_properties() {
 persist_properties() {
 
     # Validate properties
-    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500"     # Set to max 500
-    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"       # Set to min 10
-    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"           # Set to max 10
-    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"             # Set to min 0
-    [ "$CONTENT_MAX_WIDTH" -gt 500 ] && CONTENT_MAX_WIDTH="500" # Set to max 500
-    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="50"   # Set to min 0
+    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500"       # Set to max 500
+    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"         # Set to min 10
+    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"             # Set to max 10
+    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"               # Set to min 0
+    [ "$CONTENT_MAX_WIDTH" -gt 500 ] && CONTENT_MAX_WIDTH="500"   # Set to max 500
+    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="50"     # Set to min 50
+    [ "$CONTENT_MAX_HEIGHT" -gt 100 ] && CONTENT_MAX_HEIGHT="100" # Set to max 100
+    [ "$CONTENT_MAX_HEIGHT" -lt 5 ] && CONTENT_MAX_HEIGHT="5"     # Set to min 5
 
     # Check AUR binary
     if [ "$AUR_SUPPORT" = "true" ]; then
@@ -346,8 +349,9 @@ persist_properties() {
     fi
 
     { # Write properties
-        echo "REFLECTOR_COUNTRY=${REFLECTOR_COUNTRY}"
         echo "CONTENT_MAX_WIDTH=${CONTENT_MAX_WIDTH}"
+        echo "CONTENT_MAX_HEIGHT=${CONTENT_MAX_HEIGHT}"
+        echo "REFLECTOR_COUNTRY=${REFLECTOR_COUNTRY}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
         echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
         echo "AUR_MANGER_REPO=${AUR_MANGER_REPO}"
@@ -748,7 +752,7 @@ show_search() { # Search & manage packages
             print_format_green 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            if ! pkg_name_filter=$(gum_filter --limit 1 --height "20" --placeholder "Search Package... / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package... / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
                 unset search_filter
                 clear_screen
                 continue
@@ -1154,7 +1158,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
     ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
-    print_title "Refresh Pacman Mirrorlist"
+    print_title "New Pacman Mirrorlist"
     local param && [ -n "$REFLECTOR_COUNTRY" ] && [ "$REFLECTOR_COUNTRY" != "none" ] && param="--country ${REFLECTOR_COUNTRY}"
     # Refresh mirrorlist with reflector and return if user press ctrl + c
     ! gum_spin --title 'Waiting for Reflector. Please wait...' -- bash -c "reflector ${param} --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
@@ -1165,7 +1169,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     # Print cleaned mirrorlist
     while IFS= read -r line || [ -n "$line" ]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP")
     # Edit mirrorlist?
-    echo && gum_confirm "Edit Mirrorlist?" && clear_screen && print_header && print_title "New Mirrorlist" && if gum_write --show-line-numbers --height="6" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
+    echo && gum_confirm "Edit new Mirrorlist?" && clear_screen && print_header && print_title "New Mirrorlist" && if gum_write --show-line-numbers --height="6" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
         # Refresh & re-print new mirrorlist
         mv -f "${MIRRORLIST_TMP}.new" "$MIRRORLIST_TMP"
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
@@ -1175,7 +1179,7 @@ show_refresh() { # Refresh mirrorlist with reflector
         print_warn "Edit canceled"
     fi
     # Save mirrorlist?
-    ! gum_confirm "Save Mirrorlist?" && print_warn "New mirrorlist was ignored" && return 2
+    ! gum_confirm "Save new Mirrorlist?" && print_warn "New mirrorlist was ignored" && return 2
     # Check new mirrorlist
     ! [ -s "$MIRRORLIST_TMP" ] && print_fail "New mirrorlist is empty" && return 3
     # Save mirrorlist and set correct permissions
@@ -1208,7 +1212,7 @@ show_downgrade() { # Downgrade packages
     print_title "Downgrade Pacman Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "20" --placeholder "Type to filter and toggle with CTRL + Space... / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space... / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
     [ -z "$user_input" ] && print_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
