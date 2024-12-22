@@ -210,7 +210,17 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 ## Development
 
 ```
+# Start with custom gum
 GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
+
+# Install dependencies
+./arch-os --install
+
+# Init Arch OS (dirs & files)
+./arch-os --init
+
+# Sync all databases
+./arch-os --sync
 ```
 
 ## Credits
