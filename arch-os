@@ -877,7 +877,7 @@ show_search() { # Search & manage packages
                 gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" || {
                     print_fail "Synchronize Database (updates) failed"
                     return 3
-                }   
+                }
                 print_info "Downgrade successful"
             else
                 print_fail "Downgrading ${pkg_name} failed"
