@@ -137,12 +137,14 @@ These packages are built and installed manually from the AUR-Git repository usin
 
 Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/etc/paru.conf.20240919170446`, for example (before editing).
 
-## Settings
+## Config
 
-Edit the settings with the built-in editor in Arch OS Manager or edit the config file manually.
+Edit the config with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
 CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 50)
+CONTENT_MAX_HEIGHT=16                 # Max lines in packages & downgrade (max: 100)
+REFLECTOR_COUNTRY=none                # Set prefered reflector country (example: Germany,France)
 ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false           # Disable pacman/paru download timeout (enable: true)
 AUR_MANAGER_REPO=paru                 # Set AUR manager package for --install (paru, paru-bin, paru-git)

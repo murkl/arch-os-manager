@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.6"
+VERSION="1.7.7"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -46,6 +46,7 @@ INTERNET_TEST_IP=8.8.8.8
 
 # GUM COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
 COLOR_WHITE=7
+COLOR_GREEN=2
 COLOR_GREEN=2
 COLOR_PURPLE=212
 
@@ -139,14 +140,14 @@ main() {
             local user_input user_input2 options options2
             clear_screen && print_header
             options=("Dashboard" "Upgrade" "Actions" "Packages" "Config" "Help" "Quit")
-            user_input=$(gum_choose --cursor "> " --height=11 --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
+            user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'Dashboard') selected_action='dashboard' ;;
             'Upgrade') selected_action='upgrade' ;;
             'Actions')
                 clear_screen && print_header
                 options2=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
-                user_input2=$(gum_choose --cursor "> " --height=10 --selected="$user_input2" "${options2[@]}") || continue
+                user_input2=$(gum_choose --cursor "> " --height=$((${#options2[@]} + 3)) --selected="$user_input2" "${options2[@]}") || continue
                 case "$user_input2" in # Set user action to selected action
                 'Remove Orphans') selected_action='orphans' ;;
                 'Merge Configurations') selected_action='merge' ;;
@@ -272,7 +273,9 @@ init_properties() {
     touch "$ARCH_OS_BLACKLIST"
 
     # Set default properties
+    [ -z "$REFLECTOR_COUNTRY" ] && REFLECTOR_COUNTRY="none"
     [ -z "$CONTENT_MAX_WIDTH" ] && CONTENT_MAX_WIDTH="110"
+    [ -z "$CONTENT_MAX_HEIGHT" ] && CONTENT_MAX_HEIGHT="16"
     [ -z "$AUTOSTART_NOTIFY" ] && AUTOSTART_NOTIFY="true"
     [ -z "$AUTOSTART_DELAY" ] && AUTOSTART_DELAY="60"
     [ -z "$AUR_MANGER_REPO" ] && AUR_MANGER_REPO="paru"
@@ -297,12 +300,14 @@ init_properties() {
 persist_properties() {
 
     # Validate properties
-    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500"     # Set to max 500
-    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"       # Set to min 10
-    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"           # Set to max 10
-    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"             # Set to min 0
-    [ "$CONTENT_MAX_WIDTH" -gt 500 ] && CONTENT_MAX_WIDTH="500" # Set to max 500
-    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="50"   # Set to min 0
+    [ "$AUTOSTART_DELAY" -gt 500 ] && AUTOSTART_DELAY="500"       # Set to max 500
+    [ "$AUTOSTART_DELAY" -lt 10 ] && AUTOSTART_DELAY="10"         # Set to min 10
+    [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"             # Set to max 10
+    [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"               # Set to min 0
+    [ "$CONTENT_MAX_WIDTH" -gt 500 ] && CONTENT_MAX_WIDTH="500"   # Set to max 500
+    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="50"     # Set to min 50
+    [ "$CONTENT_MAX_HEIGHT" -gt 100 ] && CONTENT_MAX_HEIGHT="100" # Set to max 100
+    [ "$CONTENT_MAX_HEIGHT" -lt 5 ] && CONTENT_MAX_HEIGHT="5"     # Set to min 5
 
     # Check AUR binary
     if [ "$AUR_SUPPORT" = "true" ]; then
@@ -345,6 +350,8 @@ persist_properties() {
 
     { # Write properties
         echo "CONTENT_MAX_WIDTH=${CONTENT_MAX_WIDTH}"
+        echo "CONTENT_MAX_HEIGHT=${CONTENT_MAX_HEIGHT}"
+        echo "REFLECTOR_COUNTRY=${REFLECTOR_COUNTRY}"
         echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
         echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
         echo "AUR_MANGER_REPO=${AUR_MANGER_REPO}"
@@ -735,7 +742,7 @@ show_search() { # Search & manage packages
 
             # Search filter
             if [ -z "$search_filter" ]; then
-                ! search_filter=$(gum_input --placeholder="Full-text search...") && return 2
+                ! search_filter=$(gum_input --placeholder="Full-Text Package Search... / Cancel with ESC or CTRL + C") && return 2
                 [ -z "$search_filter" ] && print_fail "Search was empty" && return 3
                 # Filter results
                 filter_pkgs_results="$(list_results "$search_filter" | tac)"
@@ -745,7 +752,7 @@ show_search() { # Search & manage packages
             print_format_green 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            if ! pkg_name_filter=$(gum_filter --limit 1 --height "20" --placeholder "Package..." "${search_result_array[@]}"); then
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package... / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
                 unset search_filter
                 clear_screen
                 continue
@@ -834,7 +841,7 @@ show_search() { # Search & manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        ! user_input=$(gum_choose --selected="Done" --height=7 "${options[@]}") && print_warn "Canceled" && unset pkg_name && clear_screen && continue
+        ! user_input=$(gum_choose --selected="Done" --height=$((${#options[@]} + 3)) "${options[@]}") && print_warn "Canceled" && unset pkg_name && clear_screen && continue
         case "$user_input" in # Set user action to selected action
         'Install')
             ! gum_confirm "Install?" && clear_screen && continue
@@ -910,7 +917,8 @@ view_edit_blacklist() {
     local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
     # Open editor with count of properties + 2
     # BUG: gum write does not accept height greater than 7
-    if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+    #if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+    if gum_write --show-line-numbers --height="7" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
         # If success: save/move file, remove spaces and re-init properties
         awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
         rm -f "${ARCH_OS_BLACKLIST}.new"
@@ -943,31 +951,28 @@ show_dashboard() { # Dashboard
         echo # Newline
         show_health_info
 
+        # Fetch infos
         local pending_updates
         [ -s "$UPDATES_DB" ] && pending_updates=$(wc -l <"$UPDATES_DB")
         [ -z "$pending_updates" ] && pending_updates=0
-
+        pending_updates=0
         # Show options menu
         echo && print_title "Options"
         options=()
-        [ "$DASHBOARD_SHOW_SERVICES" = "false" ] && options+=("Show Services")
-        [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("Show Logs")
+        [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("System Log")
         [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Edit Blacklist")
+        [ "$DASHBOARD_SHOW_SERVICES" = "false" ] && options+=("Services")
+        # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
+        # [ "$pending_orphans" -gt 0 ] && options+=("Remove Orphans")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
         options+=("Refresh")
         options+=("Done")
-        ! user_input=$(gum_choose --height=8 --selected="Done" "${options[@]}") && print_warn "Canceled" && return 2
+        user_input=$(gum_choose --height=$((${#options[@]} + 3)) --selected="Done" "${options[@]}") || {
+            print_warn "Canceled"
+            return 2
+        }
         case "$user_input" in
-        'Show Services')
-            clear_screen && print_header
-            view_system_services
-            local services_failed && services_failed="$(print_services_failed)"
-            if [ -n "$services_failed" ]; then
-                echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
-            fi
-            gum_confirm_continue
-            ;;
-        'Show Logs')
+        'System Log')
             clear_screen && print_header
             view_system_log
             echo && print_title "Options"
@@ -976,6 +981,15 @@ show_dashboard() { # Dashboard
             ;;
         'Edit Blacklist')
             view_edit_blacklist
+            ;;
+        'Services')
+            clear_screen && print_header
+            view_system_services
+            local services_failed && services_failed="$(print_services_failed)"
+            if [ -n "$services_failed" ]; then
+                echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
+            fi
+            gum_confirm_continue
             ;;
         'Upgrade')
             clear_screen && print_header
@@ -1064,7 +1078,11 @@ show_upgrade() { # Update packages
 
 show_orphans() { # Remove orphaned packages
     print_title "Remove Package Orphans"
-    ! gum_confirm "Continue?" && return 2
+    local txt="Removes packages that are no longer required by any installed package. This action helps keep the system clean and frees up disk space. It's recommended to run this periodically, especially after uninstalling software."
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE" --foreground "$COLOR_WHITE"
+    ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
+    clear_screen && print_header
+    print_title "Remove Package Orphans"
     local pkg_manager_args=() && [ "$ORPHANS_CONFIRM" = "false" ] && pkg_manager_args+=('--noconfirm')
     # Remove pacman orphans
     # Alternative: ! sudo /usr/bin/pacman -Rsu --noconfirm $(/usr/bin/pacman -Qqd) 2>/dev/null && print_fail "Failed" && return 3
@@ -1094,7 +1112,7 @@ show_orphans() { # Remove orphaned packages
 show_merge() { # Merge updated config files
     if ! command -v /usr/bin/pacdiff &>/dev/null || ! command -v meld &>/dev/null; then
         print_title "Install Pacdiff Tools"
-        ! gum_confirm "Continue?" && return 2
+        ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         ! sudo /usr/bin/pacman -Sq --needed "${pkg_manager_args[@]}" meld && print_warn "Canceled" && return 3
@@ -1107,7 +1125,11 @@ show_merge() { # Merge updated config files
         clear_screen && print_header # Clean install output & print new header
     fi
     print_title "Merge Pacdiff Configurations"
-    ! gum_confirm "Continue?" && return 2
+    local txt="Combines new configuration files with existing ones after package updates. This is necessary when pacman creates .pacnew files during updates to preserve user modifications. Use this action after system upgrades to ensure configurations are up-to-date."
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
+    clear_screen && print_header
+    print_title "Merge Pacdiff Configurations"
     # List & show pacdiff config files
     local pacdiff_files=() && while IFS= read -r line; do pacdiff_files+=("$line"); done < <(pacdiff -o)
     [ ${#pacdiff_files[@]} -eq 0 ] && print_info "Nothing to do" && return 0
@@ -1125,16 +1147,21 @@ show_merge() { # Merge updated config files
 show_refresh() { # Refresh mirrorlist with reflector
     if ! command -v /usr/bin/reflector &>/dev/null; then
         print_title "Install Reflector" # Install missing pkgs
-        ! gum_confirm "Continue?" && return 2
+        ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         ! sudo /usr/bin/pacman -Sq --needed "${pkg_manager_args[@]}" reflector && print_warn "Canceled" && return 3
         clear_screen && print_header # Clean install output & print new header
     fi
     print_title "Refresh Pacman Mirrorlist"
-    ! gum_confirm "Continue?" && return 2
+    local txt="Updates the list of package repositories for faster and more reliable downloads. This action is useful when experiencing slow download speeds or when mirrors become unresponsive. It's recommended to refresh the mirrorlist periodically or when changing locations."
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
+    clear_screen && print_header
+    print_title "New Pacman Mirrorlist"
+    local param && [ -n "$REFLECTOR_COUNTRY" ] && [ "$REFLECTOR_COUNTRY" != "none" ] && param="--country ${REFLECTOR_COUNTRY}"
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    ! gum_spin --title 'Waiting for Reflector. Please wait...' -- bash -c "reflector --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
+    ! gum_spin --title 'Waiting for Reflector. Please wait...' -- bash -c "reflector ${param} --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
     # Clean reflector result (list only servers)
     local mirrorlist_cleaned && mirrorlist_cleaned=$(grep -v '^#' "$MIRRORLIST_TMP" | sed '/^$/d;s/^[[:space:]#]*//')
     echo -e "$mirrorlist_cleaned" >"$MIRRORLIST_TMP"
@@ -1142,7 +1169,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     # Print cleaned mirrorlist
     while IFS= read -r line || [ -n "$line" ]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP")
     # Edit mirrorlist?
-    echo && gum_confirm "Edit Mirrorlist?" && clear_screen && print_header && print_title "New Mirrorlist" && if gum_write --show-line-numbers --height="6" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
+    echo && gum_confirm "Edit new Mirrorlist?" && clear_screen && print_header && print_title "New Mirrorlist" && if gum_write --show-line-numbers --height="6" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
         # Refresh & re-print new mirrorlist
         mv -f "${MIRRORLIST_TMP}.new" "$MIRRORLIST_TMP"
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
@@ -1152,7 +1179,7 @@ show_refresh() { # Refresh mirrorlist with reflector
         print_warn "Edit canceled"
     fi
     # Save mirrorlist?
-    ! gum_confirm "Save Mirrorlist?" && print_warn "New mirrorlist was ignored" && return 2
+    ! gum_confirm "Save new Mirrorlist?" && print_warn "New mirrorlist was ignored" && return 2
     # Check new mirrorlist
     ! [ -s "$MIRRORLIST_TMP" ] && print_fail "New mirrorlist is empty" && return 3
     # Save mirrorlist and set correct permissions
@@ -1170,7 +1197,7 @@ show_downgrade() { # Downgrade packages
     if ! command -v /usr/bin/downgrade &>/dev/null; then
         [ "$AUR_SUPPORT" = "false" ] && print_fail "AUR Helper is missing. The package 'downgrade' can not be installed" && return 3
         print_title "Install Downgrade"
-        ! gum_confirm "Continue?" && return 2
+        ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
         local pkg_manager_args=()
         [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
         [ "$AUR_SUPPORT" = "true" ] && [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
@@ -1178,9 +1205,14 @@ show_downgrade() { # Downgrade packages
         clear_screen && print_header # Clean install output & print new header
     fi
     print_title "Downgrade Pacman Packages"
+    local txt="Reverts official Arch packages to a previous version. This action is helpful when a recent update causes issues or incompatibilities. Use it cautiously and only when necessary, as it can lead to system instability."
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
+    clear_screen && print_header
+    print_title "Downgrade Pacman Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "20" --placeholder "Type to filter and toggle with CTRL + Space..." "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space... / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
     [ -z "$user_input" ] && print_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
@@ -1199,7 +1231,11 @@ show_downgrade() { # Downgrade packages
 
 show_clear_cache() { # Clear package cache
     print_title "Clear Package Cache"
-    ! gum_confirm "Continue?" && return 2
+    local txt="Removes old versions of installed packages from the package manager cache. This frees up disk space and is recommended periodically, especially on systems with limited storage. However, keeping some old versions can be useful for potential rollbacks."
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
+    clear_screen && print_header
+    print_title "Clear Package Cache"
     local pkg_manager="sudo /usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
     $pkg_manager -Scc
     return 0
@@ -1211,7 +1247,11 @@ show_clear_cache() { # Clear package cache
 
 show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit keyring)
     print_title "Reset Pacman Keyring"
-    ! gum_confirm "Continue?" && return 2
+    local txt="Restores pacman to its default state, clearing any errors or corrupted databases. This action resets the pacman keyring, removing all installed keys and re-initializing them. Use it as a troubleshooting step when encountering persistent pacman errors or keyring issues. Followed by a system update to ensure all packages are up-to-date and the system is stable."
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    ! gum_confirm "Continue?" && print_warn "Canceled" && return 2
+    clear_screen && print_header
+    print_title "Reset Pacman Keyring"
     sudo rm -f /var/lib/pacman/db.lck # Remove pacman lock if exists
     # Keyring reset
     ! sudo rm -rf /etc/pacman.d/gnupg && print_fail "Failed" && return 3
@@ -1240,7 +1280,8 @@ show_config() { # Config
     local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
     # Open editor with count of properties + 2
     # BUG: gum write does not accept height greater than 7
-    if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+    #if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+    if gum_write --show-line-numbers --height="7" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
