@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.8"
+VERSION="1.7.9"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -910,6 +910,7 @@ view_system_log() {
     else
         print_info "No System Log available"
     fi
+    return 0
 }
 
 view_system_services() {
@@ -919,6 +920,7 @@ view_system_services() {
         echo && print_title "User Services"
         print_user_services | while read -r line; do echo "${line}"; done
     fi
+    return 0
 }
 
 view_edit_blacklist() {
@@ -938,6 +940,7 @@ view_edit_blacklist() {
         print_warn "Canceled"
         gum_confirm_continue
     fi
+    return 0
 }
 
 show_dashboard() { # Dashboard
