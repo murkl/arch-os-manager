@@ -235,7 +235,12 @@ persist_state() {
         echo "LATEST_UPDATE_CHECK=\"${LATEST_UPDATE_CHECK}\""
         echo "LATEST_SYSTEM_UPGRADE=\"${LATEST_SYSTEM_UPGRADE}\""
         echo "LATEST_ARCH_LINUX_NEWS_DATE=\"${LATEST_ARCH_LINUX_NEWS_DATE}\""
-    } >"$STATE_DB" && return 0
+    } >"$STATE_DB" && source "$STATE_DB" && return 0
+    return 1
+}
+
+refresh_state() {
+    source "$STATE_DB" && return 0
     return 1
 }
 
@@ -545,6 +550,7 @@ show_news_info() { # Show Arch Linux News
         # Sync db
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news" && print_fail "Synchronize Database (news) failed" && return 3
+        refresh_state
 
         # Check unread news
         local unread_news="false" && [ "$LATEST_ARCH_LINUX_NEWS_DATE" != "$(print_news_value 1 1)" ] && unread_news="true"
@@ -589,6 +595,7 @@ show_update_info() { # Show package updates
 
     print_no_internet_info || return 3
     [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database ${sync_actions[*]} failed" && return 3
+    refresh_state
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -623,6 +630,7 @@ show_health_info() { # Show system health information
     [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
     print_no_internet_info || return 3
     [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database (updates, packages) failed" && return 3
+    refresh_state
 
     # Package info
     print_format_white 18 "Arch Packages" "$(pacman -Qn | wc -l)"
@@ -720,6 +728,7 @@ show_search() { # Search & manage packages
             # Sync db
             print_no_internet_info || return 3
             [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages" && print_fail "Synchronize Database (packages) failed" && return 3
+            refresh_state
 
             # Helper
             list_results() {
@@ -878,6 +887,7 @@ show_search() { # Search & manage packages
                     print_fail "Synchronize Database (updates) failed"
                     return 3
                 }
+                refresh_state
                 print_info "Downgrade successful"
             else
                 print_fail "Downgrading ${pkg_name} failed"
@@ -947,6 +957,24 @@ show_dashboard() { # Dashboard
 
     while (true); do
 
+        # Show refresh confirm if last check is older than 15 minutes
+        if [ -n "$LATEST_UPDATE_CHECK" ]; then
+
+            # Convert timestamps to seconds since epoch
+            local current_seconds last_check diff_minutes
+            current_seconds=$(date -d "$(date +"%Y-%m-%d %H:%M:%S")" +%s)
+            last_check=$(date -d "$LATEST_UPDATE_CHECK" +%s)
+
+            # Calculate the difference in minutes
+            diff_minutes=$(((current_seconds - last_check) / 60))
+
+            # Check if the difference is greater than 15 minutes
+            if [ $diff_minutes -gt 15 ] && gum_confirm "Refresh Database?"; then
+                ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+                refresh_state
+            fi
+        fi
+
         local options user_input system_logs
         [ "$DASHBOARD_SHOW_LOG" = "true" ] && view_system_log && echo
 
@@ -977,7 +1005,6 @@ show_dashboard() { # Dashboard
         # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
         # [ "$pending_orphans" -gt 0 ] && options+=("Remove Orphans")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
-        options+=("Refresh")
         options+=("Done")
         user_input=$(gum_choose --height=$((${#options[@]} + 3)) --selected="Done" "${options[@]}") || {
             print_warn "Canceled"
@@ -1011,11 +1038,6 @@ show_dashboard() { # Dashboard
                 [ $? != 2 ] && gum_confirm_continue
             fi
             return 2
-            ;;
-        'Refresh')
-            clear_screen && print_header
-            ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
-            continue
             ;;
         'Done') print_mesg "Done" && return 2 ;;
         *) print_fail "Option '${user_input}' is not available" && return 3 ;;
@@ -1075,6 +1097,7 @@ show_upgrade() { # Update packages
     # Resync packages & updates db
     print_no_internet_info || return 3
     ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+    refresh_state
 
     # Finish
     LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
@@ -1233,6 +1256,7 @@ show_downgrade() { # Downgrade packages
     ! sudo downgrade "${user_input[@]}" && print_warn "Canceled" && return 3
     print_no_internet_info || return 3
     ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" && print_fail "Synchronize Database (updates) failed" && return 3
+    refresh_state
     print_info "Downgrade successful"
     return 0
 }
@@ -1276,6 +1300,7 @@ show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit ke
     if sudo /usr/bin/pacman -Syyq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}"; then
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+        refresh_state
         print_info "Done"
     else
         print_warn "Canceled" && return 3
@@ -1298,6 +1323,7 @@ show_config() { # Config
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news packages updates" && print_fail "Synchronize Database (news, packages, updates) failed" && return 3
+        refresh_state
         print_info "Saved" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
