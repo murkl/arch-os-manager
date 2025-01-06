@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # SCRIPT VERSION
-VERSION="1.7.8"
+VERSION="1.7.9"
 
 # ENVIRONMENT
 : "${KITTY:=/usr/bin/kitty}"
@@ -235,7 +235,12 @@ persist_state() {
         echo "LATEST_UPDATE_CHECK=\"${LATEST_UPDATE_CHECK}\""
         echo "LATEST_SYSTEM_UPGRADE=\"${LATEST_SYSTEM_UPGRADE}\""
         echo "LATEST_ARCH_LINUX_NEWS_DATE=\"${LATEST_ARCH_LINUX_NEWS_DATE}\""
-    } >"$STATE_DB" && return 0
+    } >"$STATE_DB" && source "$STATE_DB" && return 0
+    return 1
+}
+
+refresh_state() {
+    source "$STATE_DB" && return 0
     return 1
 }
 
@@ -545,6 +550,7 @@ show_news_info() { # Show Arch Linux News
         # Sync db
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news" && print_fail "Synchronize Database (news) failed" && return 3
+        refresh_state
 
         # Check unread news
         local unread_news="false" && [ "$LATEST_ARCH_LINUX_NEWS_DATE" != "$(print_news_value 1 1)" ] && unread_news="true"
@@ -589,6 +595,7 @@ show_update_info() { # Show package updates
 
     print_no_internet_info || return 3
     [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database ${sync_actions[*]} failed" && return 3
+    refresh_state
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
@@ -623,6 +630,7 @@ show_health_info() { # Show system health information
     [ ! -f "$PACKAGES_DB" ] && sync_actions+=(packages)
     print_no_internet_info || return 3
     [ -n "${sync_actions[*]}" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync ${sync_actions[*]}" && print_fail "Synchronize Database (updates, packages) failed" && return 3
+    refresh_state
 
     # Package info
     print_format_white 18 "Arch Packages" "$(pacman -Qn | wc -l)"
@@ -708,6 +716,13 @@ show_health_info() { # Show system health information
 
 # shellcheck disable=SC2086
 show_search() { # Search & manage packages
+    local ret && gum_confirm --affirmative="Explore Packages" --negative="Remove Packages" "Operation Mode"
+    ret=$?
+    [ "$ret" = 130 ] && return 2
+    if [ "$ret" = 1 ]; then
+        show_remove_packages
+        return 2
+    fi
 
     local search_filter filter_pkgs_results pkg_name pkg_name_filter pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
@@ -715,11 +730,12 @@ show_search() { # Search & manage packages
         # Select package if not exists
         if [ -z "$pkg_name" ]; then
 
-            print_header && print_title "Search Package Database"
+            print_header && print_title "Explore Package Database"
 
             # Sync db
             print_no_internet_info || return 3
             [ ! -f "$PACKAGES_DB" ] && ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages" && print_fail "Synchronize Database (packages) failed" && return 3
+            refresh_state
 
             # Helper
             list_results() {
@@ -742,7 +758,7 @@ show_search() { # Search & manage packages
 
             # Search filter
             if [ -z "$search_filter" ]; then
-                ! search_filter=$(gum_input --placeholder="Full-Text Package Search... / Cancel with ESC or CTRL + C") && return 2
+                ! search_filter=$(gum_input --placeholder="Full-Text Package Search / Cancel with ESC or CTRL + C") && return 2
                 [ -z "$search_filter" ] && print_fail "Search was empty" && return 3
                 # Filter results
                 filter_pkgs_results="$(list_results "$search_filter" | tac)"
@@ -752,7 +768,7 @@ show_search() { # Search & manage packages
             print_format_green 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package... / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
                 unset search_filter
                 clear_screen
                 continue
@@ -878,6 +894,7 @@ show_search() { # Search & manage packages
                     print_fail "Synchronize Database (updates) failed"
                     return 3
                 }
+                refresh_state
                 print_info "Downgrade successful"
             else
                 print_fail "Downgrading ${pkg_name} failed"
@@ -910,6 +927,7 @@ view_system_log() {
     else
         print_info "No System Log available"
     fi
+    return 0
 }
 
 view_system_services() {
@@ -919,6 +937,7 @@ view_system_services() {
         echo && print_title "User Services"
         print_user_services | while read -r line; do echo "${line}"; done
     fi
+    return 0
 }
 
 view_edit_blacklist() {
@@ -938,11 +957,30 @@ view_edit_blacklist() {
         print_warn "Canceled"
         gum_confirm_continue
     fi
+    return 0
 }
 
 show_dashboard() { # Dashboard
 
     while (true); do
+
+        # Show refresh confirm if last check is older than 15 minutes
+        if [ -n "$LATEST_UPDATE_CHECK" ]; then
+
+            # Convert timestamps to seconds since epoch
+            local current_seconds last_check diff_minutes
+            current_seconds=$(date -d "$(date +"%Y-%m-%d %H:%M:%S")" +%s)
+            last_check=$(date -d "$LATEST_UPDATE_CHECK" +%s)
+
+            # Calculate the difference in minutes
+            diff_minutes=$(((current_seconds - last_check) / 60))
+
+            # Check if the difference is greater than 15 minutes
+            if [ $diff_minutes -gt 15 ] && gum_confirm "Refresh Database?"; then
+                ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+                refresh_state
+            fi
+        fi
 
         local options user_input system_logs
         [ "$DASHBOARD_SHOW_LOG" = "true" ] && view_system_log && echo
@@ -974,7 +1012,6 @@ show_dashboard() { # Dashboard
         # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
         # [ "$pending_orphans" -gt 0 ] && options+=("Remove Orphans")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
-        options+=("Refresh")
         options+=("Done")
         user_input=$(gum_choose --height=$((${#options[@]} + 3)) --selected="Done" "${options[@]}") || {
             print_warn "Canceled"
@@ -1009,11 +1046,6 @@ show_dashboard() { # Dashboard
             fi
             return 2
             ;;
-        'Refresh')
-            clear_screen && print_header
-            ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
-            continue
-            ;;
         'Done') print_mesg "Done" && return 2 ;;
         *) print_fail "Option '${user_input}' is not available" && return 3 ;;
         esac
@@ -1032,6 +1064,7 @@ show_upgrade() { # Update packages
     show_news_info || return $?
     show_update_info --sync-db || return $?
     if [ ! -s "$UPDATES_DB" ]; then
+        if [ "$UPGRADE_SHOW_HEALTH" = "true" ]; then echo && show_health_info || return $?; fi
         gum_confirm_continue
         return 2
     fi
@@ -1072,6 +1105,7 @@ show_upgrade() { # Update packages
     # Resync packages & updates db
     print_no_internet_info || return 3
     ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+    refresh_state
 
     # Finish
     LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
@@ -1109,6 +1143,32 @@ show_orphans() { # Remove orphaned packages
         else # Do Interactive flatpak orphans
             print_info "Remove Flatpak Orphans" && ! flatpak uninstall --unused && print_fail "Remove Flatpak Orphans failed" && return 3
         fi
+    fi
+    print_info "Done"
+    return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
+# REMOVE
+# ///////////////////////////////////////////////////////////////////
+
+show_remove_packages() { # Remove packages
+    print_title "Remove Packages"
+    # List
+    local user_input options pkg_manager
+    pkg_manager=/usr/bin/pacman
+    [ "$AUR_SUPPORT" = "true" ] && pkg_manager=/usr/bin/paru
+    mapfile -t options < <($pkg_manager -Qq) # Only packages from official db
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Installed Packages: $($pkg_manager -Qq | wc -l) / Toggle with CTRL + Space / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    [ -z "$user_input" ] && print_warn "No package selected" && return 3
+    mapfile -t user_input <<<"$user_input" # Convert string to array
+    # Print packages
+    for item in "${user_input[@]}"; do print_warn "${item}"; done
+    echo && ! gum_confirm "Remove selected packages?" && return 2
+    if [ "$AUR_SUPPORT" = "true" ]; then
+        /usr/bin/paru -Rsn "${user_input[@]}" || gum_confirm_continue
+    else
+        sudo /usr/bin/pacman -Rsn "${user_input[@]}" || gum_confirm_continue
     fi
     print_info "Done"
     return 0
@@ -1221,7 +1281,7 @@ show_downgrade() { # Downgrade packages
     print_title "Downgrade Pacman Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space... / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
     [ -z "$user_input" ] && print_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
@@ -1230,6 +1290,7 @@ show_downgrade() { # Downgrade packages
     ! sudo downgrade "${user_input[@]}" && print_warn "Canceled" && return 3
     print_no_internet_info || return 3
     ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" && print_fail "Synchronize Database (updates) failed" && return 3
+    refresh_state
     print_info "Downgrade successful"
     return 0
 }
@@ -1273,6 +1334,7 @@ show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit ke
     if sudo /usr/bin/pacman -Syyq --noconfirm archlinux-keyring && sudo /usr/bin/pacman -Suq "${pkg_manager_args[@]}"; then
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
+        refresh_state
         print_info "Done"
     else
         print_warn "Canceled" && return 3
@@ -1295,6 +1357,7 @@ show_config() { # Config
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news packages updates" && print_fail "Synchronize Database (news, packages, updates) failed" && return 3
+        refresh_state
         print_info "Saved" && return 0
     else
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
