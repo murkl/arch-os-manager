@@ -716,6 +716,13 @@ show_health_info() { # Show system health information
 
 # shellcheck disable=SC2086
 show_search() { # Search & manage packages
+    local ret && gum_confirm --affirmative="Explore Packages" --negative="Remove Packages" "Operation Mode"
+    ret=$?
+    [ "$ret" = 130 ] && return 2
+    if [ "$ret" = 1 ]; then
+        show_remove_packages
+        return 2
+    fi
 
     local search_filter filter_pkgs_results pkg_name pkg_name_filter pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
@@ -723,7 +730,7 @@ show_search() { # Search & manage packages
         # Select package if not exists
         if [ -z "$pkg_name" ]; then
 
-            print_header && print_title "Search Package Database"
+            print_header && print_title "Explore Package Database"
 
             # Sync db
             print_no_internet_info || return 3
@@ -1142,6 +1149,32 @@ show_orphans() { # Remove orphaned packages
 }
 
 # ///////////////////////////////////////////////////////////////////
+# REMOVE
+# ///////////////////////////////////////////////////////////////////
+
+show_remove_packages() { # Remove packages
+    print_title "Remove Packages"
+    # List
+    local user_input options pkg_manager
+    pkg_manager=/usr/bin/pacman
+    [ "$AUR_SUPPORT" = "true" ] && pkg_manager=/usr/bin/paru
+    mapfile -t options < <($pkg_manager -Qq) # Only packages from official db
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Installed Packages: $($pkg_manager -Qq | wc -l) / Toggle with CTRL + Space / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    [ -z "$user_input" ] && print_warn "No package selected" && return 3
+    mapfile -t user_input <<<"$user_input" # Convert string to array
+    # Print packages
+    for item in "${user_input[@]}"; do print_warn "${item}"; done
+    echo && ! gum_confirm "Remove selected packages?" && return 2
+    if [ "$AUR_SUPPORT" = "true" ]; then
+        /usr/bin/paru -Rsn "${user_input[@]}" || gum_confirm_continue
+    else
+        sudo /usr/bin/pacman -Rsn "${user_input[@]}" || gum_confirm_continue
+    fi
+    print_info "Done"
+    return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
 # MERGE
 # ///////////////////////////////////////////////////////////////////
 
@@ -1248,7 +1281,7 @@ show_downgrade() { # Downgrade packages
     print_title "Downgrade Pacman Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space... / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
     [ -z "$user_input" ] && print_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
