@@ -758,7 +758,7 @@ show_search() { # Search & manage packages
 
             # Search filter
             if [ -z "$search_filter" ]; then
-                ! search_filter=$(gum_input --placeholder="Full-Text Package Search... / Cancel with ESC or CTRL + C") && return 2
+                ! search_filter=$(gum_input --placeholder="Full-Text Package Search / Cancel with ESC or CTRL + C") && return 2
                 [ -z "$search_filter" ] && print_fail "Search was empty" && return 3
                 # Filter results
                 filter_pkgs_results="$(list_results "$search_filter" | tac)"
@@ -768,7 +768,7 @@ show_search() { # Search & manage packages
             print_format_green 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package... / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
                 unset search_filter
                 clear_screen
                 continue
