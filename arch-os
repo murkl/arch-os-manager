@@ -13,15 +13,18 @@ set -Eeo pipefail
 # ORIGIN:   Germany
 # LICENCE:  GPL 2.0
 
-# SCRIPT VERSION
-VERSION="1.7.9"
-
-# ENVIRONMENT
-: "${KITTY:=/usr/bin/kitty}"
-: "${GUM:=/usr/bin/gum}"
+# VERSIONS
+SCRIPT_VERSION="1.8.0"
+GUM_VERSION=0.15.2
+KITTY_VERSION=0.39.1
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
+ARCH_OS_BIN="${ARCH_OS_HOME}/bin"
+
+# ENVIRONMENT
+: "${KITTY:=${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-x86_64/bin/kitty}"
+: "${GUM:=${ARCH_OS_BIN}/gum-${GUM_VERSION}}"
 
 # CONFIG
 ARCH_OS_CONF="${ARCH_OS_HOME}/config/settings.conf"
@@ -48,6 +51,7 @@ INTERNET_TEST_IP=8.8.8.8
 COLOR_WHITE=7
 COLOR_GREEN=2
 COLOR_GREEN=2
+COLOR_BLUE=4
 COLOR_PURPLE=212
 
 # BASH COLORS
@@ -57,7 +61,10 @@ COLOR_WHITE_BASH="\033[37m"
 COLOR_RED_BASH="\033[31m"
 COLOR_GREEN_BASH="\033[32m"
 COLOR_YELLOW_BASH="\033[33m"
+COLOR_BLUE_BASH="\033[34m"
 COLOR_PURPLE_BASH="\033[35m"
+
+# BINARIES
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN FUNCTION
@@ -139,10 +146,10 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             local user_input user_input2 options options2
             clear_screen && print_header
-            options=("Dashboard" "Upgrade" "Actions" "Packages" "Config" "Help" "Quit")
+            options=("Cockpit" "Actions" "Upgrade" "Packages" "Services" "Config" "Help" "Quit")
             user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
-            'Dashboard') selected_action='dashboard' ;;
+            'Cockpit') selected_action='cockpit' ;;
             'Upgrade') selected_action='upgrade' ;;
             'Actions')
                 clear_screen && print_header
@@ -158,7 +165,8 @@ main() {
                 'Back') continue ;;
                 esac
                 ;;
-            'Packages') selected_action='pkg' ;;
+            'Packages') selected_action='package' ;;
+            'Services') selected_action='service' ;;
             'Config') selected_action='config' ;;
             'Help') selected_action='help' ;;
             'Quit') clear_screen && exit 2 ;;
@@ -171,8 +179,9 @@ main() {
         # Execute action
         local skip_confirm="false"
         case "$selected_action" in # Execute action
-        'pkg') { print_header && show_search; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'dashboard') { print_header && show_dashboard; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'package') { print_header && show_search; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'service') { print_header && show_services; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'cockpit') { print_header && show_dashboard; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'upgrade') { print_header && show_upgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'orphans') { print_header && show_orphans; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'merge') { print_header && show_merge; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -254,10 +263,14 @@ init_properties() {
 
     # Create working dirs
     mkdir -p "$ARCH_OS_HOME"
+    mkdir -p "$ARCH_OS_BIN"
     mkdir -p "$ARCH_OS_TMP"
     mkdir -p "${ARCH_OS_HOME}/config"
     mkdir -p "${ARCH_OS_HOME}/database"
     mkdir -p "${HOME}/.config/autostart"
+
+    # Make bin executable
+    #chmod +x "${ARCH_OS_BIN}"/*
 
     # Migrate: < 1.5.5
     [ -f "${ARCH_OS_HOME}/arch-os.conf" ] && mv -f "${ARCH_OS_HOME}/arch-os.conf" "${ARCH_OS_HOME}/settings.conf"
@@ -295,9 +308,9 @@ init_properties() {
     [ -z "$UPGRADE_SHOW_HEALTH" ] && UPGRADE_SHOW_HEALTH="true"
     [ -z "$HEALTH_ENABLE_UNKNOWN_PKG_LIST" ] && HEALTH_ENABLE_UNKNOWN_PKG_LIST="false"
     [ -z "$HEALTH_SHOW_LOG" ] && HEALTH_SHOW_LOG="true"
-    [ -z "$DASHBOARD_SHOW_LOG" ] && DASHBOARD_SHOW_LOG="false"
-    [ -z "$DASHBOARD_SHOW_SERVICES" ] && DASHBOARD_SHOW_SERVICES="false"
-    [ -z "$DASHBOARD_SHOW_USER_SERVICES" ] && DASHBOARD_SHOW_USER_SERVICES="false"
+    [ -z "$COCKPIT_SHOW_LOG" ] && COCKPIT_SHOW_LOG="false"
+    [ -z "$COCKPIT_SHOW_SERVICES" ] && COCKPIT_SHOW_SERVICES="false"
+    [ -z "$COCKPIT_SHOW_USER_SERVICES" ] && COCKPIT_SHOW_USER_SERVICES="false"
 
     return 0
 }
@@ -371,9 +384,9 @@ persist_properties() {
         echo "UPGRADE_SHOW_HEALTH=${UPGRADE_SHOW_HEALTH}"
         echo "HEALTH_ENABLE_UNKNOWN_PKG_LIST=${HEALTH_ENABLE_UNKNOWN_PKG_LIST}"
         echo "HEALTH_SHOW_LOG=${HEALTH_SHOW_LOG}"
-        echo "DASHBOARD_SHOW_LOG=${DASHBOARD_SHOW_LOG}"
-        echo "DASHBOARD_SHOW_SERVICES=${DASHBOARD_SHOW_SERVICES}"
-        echo "DASHBOARD_SHOW_USER_SERVICES=${DASHBOARD_SHOW_USER_SERVICES}"
+        echo "COCKPIT_SHOW_LOG=${COCKPIT_SHOW_LOG}"
+        echo "COCKPIT_SHOW_SERVICES=${COCKPIT_SHOW_SERVICES}"
+        echo "COCKPIT_SHOW_USER_SERVICES=${COCKPIT_SHOW_USER_SERVICES}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -504,12 +517,12 @@ action_notify_updates() { # Notify on new updates
                 -u critical \
                 -c device.added \
                 -h string:sound-name:message-new-instant \
-                -A "dashboard=Dashboard" \
+                -A "cockpit=Cockpit" \
                 -A "upgrade=Upgrade" \
                 "System Upgrade" \
                 "${update_txt}"
         )
-        [ "$notify_result" = "dashboard" ] && ${SELF} -k dashboard
+        [ "$notify_result" = "cockpit" ] && ${SELF} -k cockpit
         [ "$notify_result" = "upgrade" ] && ${SELF} -k upgrade
         return 2
     fi
@@ -724,11 +737,11 @@ show_search() { # Search & manage packages
         return 2
     fi
 
-    local search_filter filter_pkgs_results pkg_name pkg_name_filter pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
+    local search_filter filter_pkgs_results pkg_id pkg_name pkg_name_filter pkg_info_remote pkg_info_local pkg_is_aur pkg_is_installed
     while (true); do
 
         # Select package if not exists
-        if [ -z "$pkg_name" ]; then
+        if [ -z "$pkg_id" ]; then
 
             print_header && print_title "Explore Package Database"
 
@@ -742,14 +755,14 @@ show_search() { # Search & manage packages
                 local pkg_manager pkg_manager_result
                 pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
                 ! pkg_manager_result="$(LANG=en_US.UTF-8 $pkg_manager -Ss $1)" && return 1
-                local pkg_name pkg_desc
+                local pkg_id pkg_desc
                 echo "$pkg_manager_result" | while IFS= read -r line; do
-                    if [ -z "$pkg_name" ]; then
-                        pkg_name="$(echo -e "$line" | cut -d ' ' -f 1)"
+                    if [ -z "$pkg_id" ]; then
+                        pkg_id="$(echo -e "$line" | cut -d ' ' -f 1)"
                     else
                         pkg_desc=$(echo "${line}" | awk '{$1=$1; print}')
-                        echo -e "${pkg_name}: ${pkg_desc}" | awk -v len="$CONTENT_MAX_WIDTH" '{print (length($0) > len ? substr($0, 1, len) "..." : $0)}'
-                        unset pkg_name
+                        echo -e "${pkg_id}: ${pkg_desc}" | awk -v len="$CONTENT_MAX_WIDTH" '{print (length($0) > len ? substr($0, 1, len) "..." : $0)}'
+                        unset pkg_id
                     fi
                 done
             }
@@ -765,7 +778,7 @@ show_search() { # Search & manage packages
                 [ -z "$filter_pkgs_results" ] && print_warn "No Results" && return 3
             fi
 
-            print_format_green 11 "Search Filter" "$search_filter"
+            print_format_blue 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
             if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
@@ -775,7 +788,9 @@ show_search() { # Search & manage packages
             fi
 
             # Set package name
-            pkg_name="$(echo "$pkg_name_filter" | cut -d':' -f1 | cut -d'/' -f2)"
+            #pkg_id="$(echo "$pkg_name_filter" | cut -d':' -f1 | cut -d'/' -f2)"
+            pkg_id="$(echo "$pkg_name_filter" | cut -d':' -f1)"
+            pkg_name="$(echo "$pkg_id" | cut -d'/' -f2)"
         fi
 
         clear_screen && print_header
@@ -791,9 +806,12 @@ show_search() { # Search & manage packages
 
         # Fetch general package infos
         local pkg_manager="/usr/bin/pacman" && [ "$AUR_SUPPORT" = "true" ] && pkg_manager="/usr/bin/paru"
-        pkg_info_remote="$(LANG=en_US.UTF-8 $pkg_manager -Si $pkg_name)" # Uninstalled
+        pkg_info_remote="$(LANG=en_US.UTF-8 $pkg_manager -Si $pkg_id)" # Uninstalled
         pkg_is_aur="false" && [ "$(print_package_value "$pkg_info_remote" "Repository")" = "aur" ] && pkg_is_aur="true"
         pkg_is_installed="false" && /usr/bin/pacman -Q $pkg_name &>/dev/null && pkg_is_installed="true"
+
+        # Check if shown is aur but installed is official > not installed (e.g. lizardbyte/sunshine and aur/sunshine)
+        [ "$pkg_is_aur" = "true" ] && pacman -Qn "$pkg_name" &>/dev/null && pkg_is_installed="false"
 
         # Get installed package info
         if [ "$pkg_is_installed" = "true" ]; then
@@ -801,19 +819,21 @@ show_search() { # Search & manage packages
         fi
 
         # Print general package info
-        local pkg_text && pkg_text="${pkg_name}:$(print_package_value "$pkg_info_remote" "Version")"
-        print_format_white 18 "$(print_filled_space "Package")" "$pkg_text"
+        local pkg_repo && pkg_repo="$(print_package_value "$pkg_info_remote" "Repository")"
+        local pkg_version && pkg_version="$(print_package_value "$pkg_info_remote" "Version")"
+
+        if [ "$pkg_repo" = "core" ] || [ "$pkg_repo" = "extra" ]; then
+            print_format_white 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}:${pkg_version}"
+        elif [ "$pkg_repo" = "aur" ]; then
+            print_format_blue 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}:${pkg_version}"
+        else
+            print_format_yellow 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}:${pkg_version}"
+        fi
         print_format_white 18 "$(print_filled_space "Description")" "$(print_package_value "$pkg_info_remote" "Description")"
         local value && value="$(print_package_value "$pkg_info_remote" "URL")"
         [ -n "$value" ] && print_format_white 18 "$(print_filled_space "Website")" "$value"
 
-        # Repo
-        local pkg_repo && pkg_repo="$(print_package_value "$pkg_info_remote" "Repository")"
-        if [ "$pkg_repo" = "core" ] || [ "$pkg_repo" = "extra" ]; then
-            print_format_white 18 "$(print_filled_space "Repository")" "$pkg_repo"
-        else
-            print_format_yellow 18 "$(print_filled_space "Repository")" "$pkg_repo"
-        fi
+        # Dependencies
         print_format_white 18 "$(print_filled_space "Dependencies")" "$(print_package_value "$pkg_info_remote" "Depends On" | wc -w)"
 
         # Repo Info
@@ -857,7 +877,7 @@ show_search() { # Search & manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        ! user_input=$(gum_choose --selected="Done" --height=$((${#options[@]} + 3)) "${options[@]}") && print_warn "Canceled" && unset pkg_name && clear_screen && continue
+        ! user_input=$(gum_choose --selected="Done" --height=$((${#options[@]} + 3)) "${options[@]}") && print_warn "Canceled" && unset pkg_id && clear_screen && continue
         case "$user_input" in # Set user action to selected action
         'Install')
             ! gum_confirm "Install?" && clear_screen && continue
@@ -865,14 +885,14 @@ show_search() { # Search & manage packages
             [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
             if [ "$pkg_is_aur" = "true" ]; then
                 [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
-                if /usr/bin/paru -Sq "${pkg_manager_args[@]}" $pkg_name; then print_info "Install successful"; else print_fail "Installing ${pkg_name} failed"; fi
+                if /usr/bin/paru -Sq "${pkg_manager_args[@]}" $pkg_id; then print_info "Install successful"; else print_fail "Installing ${pkg_id} failed"; fi
             else
-                if sudo /usr/bin/pacman -Sq "${pkg_manager_args[@]}" $pkg_name; then print_info "Install successful"; else print_fail "Installing ${pkg_name} failed"; fi
+                if sudo /usr/bin/pacman -Sq "${pkg_manager_args[@]}" $pkg_id; then print_info "Install successful"; else print_fail "Installing ${pkg_id} failed"; fi
             fi
             ;;
         'Remove')
             ! gum_confirm "Remove?" && clear_screen && continue
-            if sudo /usr/bin/pacman -Rns $pkg_name; then print_info "Remove successful"; else print_fail "Removing ${pkg_name} failed"; fi
+            if sudo /usr/bin/pacman -Rns $pkg_id; then print_info "Remove successful"; else print_fail "Removing ${pkg_id} failed"; fi
             ;;
         'PKGBUILD')
             clear_screen && print_header
@@ -901,16 +921,28 @@ show_search() { # Search & manage packages
             fi
             ;;
         'Done')
-            unset pkg_name
+            unset pkg_id
             clear_screen
             continue
             ;;
-        *) unset pkg_name && print_fail "Action '${user_input}' is not available" && return 3 ;;
+        *) unset pkg_id && print_fail "Action '${user_input}' is not available" && return 3 ;;
         esac
         gum_confirm_continue
         clear_screen
     done
     return 0
+}
+
+# ///////////////////////////////////////////////////////////////////
+# SERVICES
+# ///////////////////////////////////////////////////////////////////
+
+show_services() {
+    view_system_services
+    local services_failed && services_failed="$(print_services_failed)"
+    if [ -n "$services_failed" ]; then
+        echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
+    fi
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -933,7 +965,7 @@ view_system_log() {
 view_system_services() {
     print_title "System Services"
     print_system_services | while read -r line; do echo "${line}"; done
-    if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
+    if [ "$COCKPIT_SHOW_USER_SERVICES" = "true" ]; then
         echo && print_title "User Services"
         print_user_services | while read -r line; do echo "${line}"; done
     fi
@@ -960,7 +992,7 @@ view_edit_blacklist() {
     return 0
 }
 
-show_dashboard() { # Dashboard
+show_dashboard() { # Cockpit
 
     while (true); do
 
@@ -976,17 +1008,24 @@ show_dashboard() { # Dashboard
             diff_minutes=$(((current_seconds - last_check) / 60))
 
             # Check if the difference is greater than 15 minutes
-            if [ $diff_minutes -gt 15 ] && gum_confirm "Refresh Database?"; then
+            if [ $diff_minutes -gt 15 ] && gum_confirm "Refresh Database ${LATEST_UPDATE_CHECK}?"; then
                 ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
                 refresh_state
             fi
+
+            print_title "Database Timestamp"
+            #print_format_white 18 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
+            #print_mesg "Sync Timestamp: ${LATEST_UPDATE_CHECK}"
+            print_info_bold "${LATEST_UPDATE_CHECK}"
+            echo
+
         fi
 
         local options user_input system_logs
-        [ "$DASHBOARD_SHOW_LOG" = "true" ] && view_system_log && echo
+        [ "$COCKPIT_SHOW_LOG" = "true" ] && view_system_log && echo
 
         # Show service health
-        [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && view_system_services && echo
+        [ "$COCKPIT_SHOW_SERVICES" = "true" ] && view_system_services && echo
 
         # Failed services
         services_failed="$(print_services_failed)"
@@ -1006,12 +1045,12 @@ show_dashboard() { # Dashboard
         # Show options menu
         echo && print_title "Options"
         options=()
-        [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("System Log")
-        [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Edit Blacklist")
-        [ "$DASHBOARD_SHOW_SERVICES" = "false" ] && options+=("Services")
+        [ "$COCKPIT_SHOW_LOG" = "false" ] && options+=("System Log")
+        [ "$COCKPIT_SHOW_LOG" = "true" ] && options+=("Edit Blacklist")
+        [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
+        #[ "$COCKPIT_SHOW_SERVICES" = "false" ] && options+=("Services")
         # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
         # [ "$pending_orphans" -gt 0 ] && options+=("Remove Orphans")
-        [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
         options+=("Done")
         user_input=$(gum_choose --height=$((${#options[@]} + 3)) --selected="Done" "${options[@]}") || {
             print_warn "Canceled"
@@ -1027,15 +1066,6 @@ show_dashboard() { # Dashboard
             ;;
         'Edit Blacklist')
             view_edit_blacklist
-            ;;
-        'Services')
-            clear_screen && print_header
-            view_system_services
-            local services_failed && services_failed="$(print_services_failed)"
-            if [ -n "$services_failed" ]; then
-                echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
-            fi
-            gum_confirm_continue
             ;;
         'Upgrade')
             clear_screen && print_header
@@ -1347,12 +1377,12 @@ show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit ke
 # ///////////////////////////////////////////////////////////////////
 
 show_config() { # Config
-    print_title "Edit Config"
+    print_title "Edit Configuration"
     local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
     # Open editor with count of properties + 2
     # BUG: gum write does not accept height greater than 7
-    #if gum_write --show-line-numbers --height="$((line_count + 2))" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-    if gum_write --show-line-numbers --height="7" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+    if gum_write --prompt="::" --show-line-numbers --height="$line_count" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+        # if gum_write --prompt="> " --show-line-numbers --height="20" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
@@ -1381,9 +1411,10 @@ show_help() { # Print help page
     print_title 'System Actions'
     print_mesg 'check            ➜  Print package updates (checkupdates)'
     print_mesg 'notify           ➜  Notify on new package updates (autostart)'
-    print_mesg 'dashboard        ➜  Show dashboard (logs, services, health)'
+    print_mesg 'cockpit          ➜  Show cockpit (logs, services, health)'
     print_mesg 'upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)'
-    print_mesg 'pkg              ➜  Search & manage packages (pacman, aur)'
+    print_mesg 'package          ➜  Search & manage packages (pacman, aur)'
+    print_mesg 'service          ➜  Manage services (system & user)'
     print_mesg 'orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)'
     print_mesg 'merge            ➜  Merge updated configurations (pacdiff, meld)'
     print_mesg 'refresh          ➜  Refresh & edit pacman mirrorlist (reflector)'
@@ -1393,7 +1424,7 @@ show_help() { # Print help page
 }
 
 # ///////////////////////////////////////////////////////////////////
-# VERSION
+# SCRIPT_VERSION
 # ///////////////////////////////////////////////////////////////////
 
 show_version() { # Print version page
@@ -1420,7 +1451,7 @@ print_header() {
 ███████ ██████  ██      ███████     ██    ██ ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    ' && gum_white --bold "System Manager ${VERSION}" && echo
+    ' && gum_white --bold "System Manager ${SCRIPT_VERSION}" && echo
         HEADER_PRINTED="true"
     fi
 }
@@ -1456,6 +1487,7 @@ gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor 
 # Gum colors
 gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
+gum_blue() { gum_style --foreground "$COLOR_BLUE" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
 
 # Print helper
@@ -1471,9 +1503,10 @@ print_format() { local space="$1" color="$2" key="$3" value="$4" && printf "${CO
 print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" "$2" "$3"; }
 print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" "$2" "$3"; }
 print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" "$2" "$3"; }
+print_format_blue() { print_format "$1" "$COLOR_BLUE_BASH" "$2" "$3"; }
 print_format_red() { print_format "$1" "$COLOR_RED_BASH" "$2" "$3"; }
 print_format_purple() { print_format "$1" "$COLOR_PURPLE_BASH" "$2" "$3"; }
-print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_green --bold "$2")"; }
+print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_blue --bold "$2")"; }
 
 # ///////////////////////////////////////////////////////////////////
 # KITTY FUNCTIONS

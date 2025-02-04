@@ -59,10 +59,11 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 
 - Check & list updates in _checkupdates_ format
 - Rich startup notification on available updates
-- Dashboard: System health info, packages & logs
+- Cockpit: System health info, packages & logs
 - Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages
+- Manage system & user services
 - Upgrade system packages
 - Remove orphaned packages
 - Clear Package cache
@@ -107,9 +108,10 @@ config           ➜  Edit config in built-in ediitor
 ```
 check            ➜  Print package updates (checkupdates)
 notify           ➜  Notify on new package updates (autostart)
-dashboard        ➜  Show dashboard (logs, services, health)
+cockpit          ➜  Show cockpit (logs, services, health)
 upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
-pkg              ➜  Search & manage packages (pacman, aur)
+package          ➜  Search & manage packages (pacman, aur)
+service          ➜  Manage services (system & user)
 orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)
 merge            ➜  Merge updated configurations (pacdiff, meld)
 refresh          ➜  Refresh & edit pacman mirrorlist (reflector)
@@ -159,9 +161,9 @@ NEWS_QUANTITY=3                       # Number of news to shown (disable: 0)
 UPGRADE_SHOW_HEALTH=false             # Show health view in upgrade (enable: true)
 HEALTH_ENABLE_UNKNOWN_PKG_LIST=false  # Show unknown package counter instead of name list (enable: true)
 HEALTH_SHOW_LOG=true                  # Show system log in healt (disable: false)
-DASHBOARD_SHOW_LOG=true               # Show system log in dashboard & health (disable: false)
-DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disable: false)
-DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
+COCKPIT_SHOW_LOG=true               # Show system log in cockpit & health (disable: false)
+COCKPIT_SHOW_SERVICES=true          # Show running services in cockpit (disable: false)
+COCKPIT_SHOW_USER_SERVICES=false    # Show user services in cockpit & health (enable: true)
 ```
 
 ### Configuration Files
@@ -200,7 +202,7 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <p><img src="./screenshots/notification.png"></p>
 <p><img src="./screenshots/upgrade.png"></p>
-<p><img src="./screenshots/dashboard.png"></p>
+<p><img src="./screenshots/cockpit.png"></p>
 <p><img src="./screenshots/pkg.png"></p>
 <p><img src="./screenshots/refresh.png"></p>
 <p><img src="./screenshots/uptodate.png"></p>
