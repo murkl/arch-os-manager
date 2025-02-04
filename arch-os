@@ -13,6 +13,9 @@ set -Eeo pipefail
 # ORIGIN:   Germany
 # LICENCE:  GPL 2.0
 
+# https://github.com/charmbracelet/gum/releases/download/v0.15.2/gum_0.15.2_Linux_x86_64.tar.gz
+# https://github.com/kovidgoyal/kitty/releases/download/v0.39.1/kitty-0.39.1-x86_64.txz
+
 # VERSIONS
 SCRIPT_VERSION="1.8.0"
 GUM_VERSION=0.15.2
@@ -24,7 +27,7 @@ ARCH_OS_BIN="${ARCH_OS_HOME}/bin"
 
 # ENVIRONMENT
 : "${KITTY:=${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-x86_64/bin/kitty}"
-: "${GUM:=${ARCH_OS_BIN}/gum-${GUM_VERSION}}"
+: "${GUM:=${ARCH_OS_BIN}/gum_${GUM_VERSION}_Linux_x86_64/gum}"
 
 # CONFIG
 ARCH_OS_CONF="${ARCH_OS_HOME}/config/settings.conf"
@@ -1379,10 +1382,8 @@ show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit ke
 show_config() { # Config
     print_title "Edit Configuration"
     local line_count && line_count=$(wc -l <"${ARCH_OS_CONF}") # Count properties by line
-    # Open editor with count of properties + 2
-    # BUG: gum write does not accept height greater than 7
-    if gum_write --prompt="::" --show-line-numbers --height="$line_count" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
-        # if gum_write --prompt="> " --show-line-numbers --height="20" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
+    # Open editor with count of properties
+    if gum_write --show-line-numbers --height="$line_count" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
         print_no_internet_info || return 3
@@ -1477,7 +1478,7 @@ gum() { "$GUM" "$@"; }
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
 gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
-gum_write() { gum write --width="120" --char-limit 0 "${@}"; }
+gum_write() { gum write --width="120" --prompt="" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
 gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
