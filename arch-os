@@ -535,11 +535,14 @@ print_no_internet_info() {
 # -------------------------------------------------------------------
 
 print_system_error_logs() { journalctl -p 3 -b --quiet --no-pager | grep -E '^[A-Za-z]{3} [ 0-9]{1,2} [0-9:]{8} ' | grep -vf <(awk 'NF' "$ARCH_OS_BLACKLIST"); }
-print_system_services() { systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do print_info "${line%% *}"; done; }
-print_user_services() { systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do print_info "${line%% *}"; done; }
-print_services_failed() {
-    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do print_format_red 0 "SYSTEM" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+print_system_services() { systemctl list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line%% *}"; done; }
+print_user_services() { systemctl --user list-units --type=service --state=running --plain --no-legend | while read -r line; do echo "${line%% *}"; done; }
+print_user_services_failed() {
     if systemctl --user --failed | grep -q 'failed'; then systemctl --user --failed --quiet | while read -r line; do print_format_red 0 "USER" "$(echo "${line//● /}" | awk '{print $1}')"; done; fi
+    return 0
+}
+print_system_services_failed() {
+    if systemctl --failed | grep -q 'failed'; then systemctl --failed --quiet | while read -r line; do echo "${line//● /}" | awk '{print $1}'; done; fi
     return 0
 }
 
@@ -649,8 +652,11 @@ show_health_info() { # Show system health information
     print_format_white 18 "System Services" "$(print_system_services | wc -l)"
     print_format_white 18 "User Services" "$(print_user_services | wc -l)"
 
-    # Service Failure
-    service_count=$(print_services_failed | wc -l)
+    service_count=$({
+        print_system_services_failed
+        print_user_services_failed
+    } | wc -l)
+
     if [ "$service_count" -gt "0" ]; then
         print_format_red 18 "Service Failure" "${service_count}"
     else
@@ -772,7 +778,7 @@ show_package_manager() { # Search & manage packages
             print_format_blue 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or Ctrl + c" "${search_result_array[@]}"); then
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Result: ${#search_result_array[@]} / Cancel with ESC or Ctrl + c" "${search_result_array[@]}"); then
                 unset search_filter
                 clear_screen
                 continue
@@ -930,7 +936,6 @@ show_package_manager() { # Search & manage packages
 # ///////////////////////////////////////////////////////////////////
 
 show_service_manager() {
-
     local op_user="false"
     local ret && gum_confirm --affirmative="System Services" --negative="User Services" "Operation Mode"
     ret=$?
@@ -938,42 +943,22 @@ show_service_manager() {
     if [ "$ret" = 1 ]; then
         op_user="true"
     fi
-
-    # print_system_services | while read -r line; do echo "${line}"; done
-    # if [ "$COCKPIT_SHOW_USER_SERVICES" = "true" ]; then
-    #     echo && print_title "User Services"
-    #     print_user_services | while read -r line; do echo "${line}"; done
-    # fi
-
     if [ "$op_user" = "true" ]; then
         print_title "User Services"
-        mapfile -t services < <({ systemctl --user list-unit-files --type=service --no-legend 2>/dev/null; } | awk '{print $1}' | sort -u)
-        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Cancel with ESC or Ctrl + c")
+        # --state=running
+        mapfile -t services < <({ systemctl --user list-unit-files --type=service --no-legend --state=enabled,disabled,static,alias,transient 2>/dev/null; } | awk '{print $1}' | sort -u)
+
+        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Services: ${#services[@]} / Cancel with ESC or Ctrl + c")
         [ -z "$selected_service" ] && return 2
         systemctl --user status "$selected_service" --no-pager
     else
         print_title "System Services"
-        mapfile -t services < <({ systemctl list-unit-files --type=service --no-legend 2>/dev/null; } | awk '{print $1}' | sort -u)
-        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Cancel with ESC or Ctrl + c")
+        # --state=running
+        mapfile -t services < <({ systemctl list-unit-files --type=service --no-legend --state=enabled,disabled,static,alias,indirect,enabled-runtime 2>/dev/null; } | awk '{print $1}' | sort -u)
+        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Services: ${#services[@]} / Cancel with ESC or Ctrl + c")
         [ -z "$selected_service" ] && return 2
         systemctl status "$selected_service" --no-pager
-
-        return 0
-
-        mapfile -t search_result_array < <(print_system_services)
-        if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or Ctrl + c" "${search_result_array[@]}"); then
-            unset search_filter
-            clear_screen
-
-        fi
-
-        local services_failed && services_failed="$(print_services_failed)"
-        if [ -n "$services_failed" ]; then
-            echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
-        fi
-
     fi
-
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -989,16 +974,6 @@ view_system_log() {
         echo -e "$system_logs" | while read -r line; do print_fail "$(trim_log "$line")" && ((log_counter++)) && [ $log_counter -gt 25 ] && echo && print_warn "You have more than 25 Logs. Output stopped..." && break; done
     else
         print_info "No System Log available"
-    fi
-    return 0
-}
-
-view_system_services() {
-    print_title "System Services"
-    print_system_services | while read -r line; do echo "${line}"; done
-    if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
-        echo && print_title "User Services"
-        print_user_services | while read -r line; do echo "${line}"; done
     fi
     return 0
 }
@@ -1049,12 +1024,25 @@ show_dashboard() { # Dashboard
         [ "$DASHBOARD_SHOW_LOG" = "true" ] && view_system_log && echo
 
         # Show service health
-        [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && view_system_services && echo
+        if [ "$DASHBOARD_SHOW_SERVICES" = "true" ]; then
+            print_title "System Services"
+            print_system_services | while read -r line; do print_info "${line}"; done
+            if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
+                echo && print_title "User Services"
+                print_user_services | while read -r line; do print_info "${line}"; done
+            fi
+            echo
+        fi
 
-        # Failed services
-        services_failed="$(print_services_failed)"
-        if [ -n "$services_failed" ]; then
-            print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done && echo
+        # Print Failed services (if exists)
+        local system_services_failed user_services_failed
+        system_services_failed="$(print_system_services_failed)"
+        user_services_failed="$(print_user_services_failed)"
+        if [ -n "$system_services_failed" ] || [ -n "$user_services_failed" ]; then
+            print_title "Failed Services"
+            [ -n "$system_services_failed" ] && echo -e "$system_services_failed" | while read -r line; do print_format_red 0 "SYSTEM" "${line}"; done
+            [ -n "$user_services_failed" ] && echo -e "$user_services_failed" | while read -r line; do print_format_red 0 "USER" "${line}"; done
+            echo # New line
         fi
 
         show_update_info
