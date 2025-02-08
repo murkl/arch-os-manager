@@ -760,7 +760,7 @@ show_package_manager() { # Search & manage packages
 
             # Search filter
             if [ -z "$search_filter" ]; then
-                ! search_filter=$(gum_input --placeholder="Full-Text Package Search / Cancel with ESC or CTRL + C") && return 2
+                ! search_filter=$(gum_input --placeholder="Full-Text Package Search / Cancel with ESC or Ctrl + c") && return 2
                 [ -z "$search_filter" ] && print_fail "Search was empty" && return 3
                 # Filter results
                 filter_pkgs_results="$(list_results "$search_filter" | tac)"
@@ -770,7 +770,7 @@ show_package_manager() { # Search & manage packages
             print_format_blue 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
-            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
+            if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or Ctrl + c" "${search_result_array[@]}"); then
                 unset search_filter
                 clear_screen
                 continue
@@ -812,12 +812,13 @@ show_package_manager() { # Search & manage packages
         local pkg_version && pkg_version="$(print_package_value "$pkg_info_remote" "Version")"
 
         if [ "$pkg_repo" = "core" ] || [ "$pkg_repo" = "extra" ]; then
-            print_format_white 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}:${pkg_version}"
+            print_format_white 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
         elif [ "$pkg_repo" = "aur" ]; then
-            print_format_blue 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}:${pkg_version}"
+            print_format_blue 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
         else
-            print_format_yellow 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}:${pkg_version}"
+            print_format_yellow 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
         fi
+        print_format_white 18 "$(print_filled_space "Version")" "${pkg_version}"
         print_format_white 18 "$(print_filled_space "Description")" "$(print_package_value "$pkg_info_remote" "Description")"
         local value && value="$(print_package_value "$pkg_info_remote" "URL")"
         [ -n "$value" ] && print_format_white 18 "$(print_filled_space "Website")" "$value"
@@ -945,20 +946,20 @@ show_service_manager() {
     if [ "$op_user" = "true" ]; then
         print_title "User Services"
         mapfile -t services < <({ systemctl --user list-unit-files --type=service --no-legend 2>/dev/null; } | awk '{print $1}' | sort -u)
-        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Cancel with ESC or CTRL + C")
+        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Cancel with ESC or Ctrl + c")
         [ -z "$selected_service" ] && return 2
         systemctl --user status "$selected_service" --no-pager
     else
         print_title "System Services"
         mapfile -t services < <({ systemctl list-unit-files --type=service --no-legend 2>/dev/null; } | awk '{print $1}' | sort -u)
-        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Cancel with ESC or CTRL + C")
+        selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Cancel with ESC or Ctrl + c")
         [ -z "$selected_service" ] && return 2
         systemctl status "$selected_service" --no-pager
 
         return 0
 
         mapfile -t search_result_array < <(print_system_services)
-        if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
+        if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or Ctrl + c" "${search_result_array[@]}"); then
             unset search_filter
             clear_screen
 
@@ -1003,10 +1004,8 @@ view_system_services() {
 view_edit_blacklist() {
     clear_screen && print_header && print_title "Edit Blacklist"
     local line_count && line_count=$(wc -l <"${ARCH_OS_BLACKLIST}") # Count properties by line
-    # Open editor with count of properties + 2
-    # BUG: gum write does not accept height greater than 7
-    #if gum_write --show-line-numbers --height="$((line_count + 2))" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
-    if gum_write --show-line-numbers --height="7" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
+    # Open editor with count of properties
+    if gum_write --show-line-numbers --height="$line_count" --placeholder="Add log message snippet to hide in system log view (line by line)..." --value="$(<"$ARCH_OS_BLACKLIST")" >"${ARCH_OS_BLACKLIST}.new"; then
         # If success: save/move file, remove spaces and re-init properties
         awk '{$1=$1; print}' "${ARCH_OS_BLACKLIST}.new" >"$ARCH_OS_BLACKLIST" && init_properties && persist_properties || return 1
         rm -f "${ARCH_OS_BLACKLIST}.new"
@@ -1056,15 +1055,9 @@ show_dashboard() { # Dashboard
         fi
 
         show_update_info
-        echo # Newline
-
-        print_title "Local Database"
-        #print_format_white 18 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
-        #print_mesg "Sync Timestamp: ${LATEST_UPDATE_CHECK}"
+        echo && print_title "Local Database"
         print_info "Timestamp: ${LATEST_UPDATE_CHECK}"
-        echo
-
-        show_health_info
+        echo && show_health_info
 
         # Fetch infos
         local pending_updates
@@ -1074,7 +1067,7 @@ show_dashboard() { # Dashboard
         # Show options menu
         echo && print_title "Options"
         options=()
-        options+=("Health Actions")
+        options+=("System Health")
         [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("System Log")
         [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Blacklist")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
@@ -1095,10 +1088,13 @@ show_dashboard() { # Dashboard
             [ "$user_input" = 'Edit Blacklist' ] && view_edit_blacklist
             ;;
 
-        'Health Actions')
+        'System Health')
             clear_screen && print_header
             local options=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
-            user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || continue
+            user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || {
+                clear_screen && print_header
+                continue
+            }
             case "$user_input" in # Set user action to selected action
             'Remove Orphans') show_orphans ;;
             'Merge Configurations') show_merge ;;
@@ -1108,8 +1104,9 @@ show_dashboard() { # Dashboard
             'Reset Pacman') show_reset_pacman ;;
             'Back') continue ;;
             esac
-
-            return 0
+            gum_confirm_continue
+            clear_screen && print_header
+            continue
             ;;
         'Blacklist')
             view_edit_blacklist
@@ -1236,7 +1233,7 @@ show_remove_packages() { # Remove packages
     pkg_manager=/usr/bin/pacman
     [ "$AUR_SUPPORT" = "true" ] && pkg_manager=/usr/bin/paru
     mapfile -t options < <($pkg_manager -Qq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Installed Packages: $($pkg_manager -Qq | wc -l) / Toggle with CTRL + Space / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Installed Packages: $($pkg_manager -Qq | wc -l) / Toggle with Tab / Cancel with ESC or Ctrl + c" "${options[@]}") && return 2
     [ -z "$user_input" ] && print_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
@@ -1358,7 +1355,7 @@ show_downgrade() { # Downgrade packages
     print_title "Downgrade Pacman Packages"
     local user_input options
     mapfile -t options < <(pacman -Qqn | uniq) # Only packages from official db
-    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space / Cancel with ESC or CTRL + C" "${options[@]}") && return 2
+    ! user_input=$(gum_filter --limit 25 --height "$CONTENT_MAX_HEIGHT" --placeholder "Type to filter and toggle with CTRL + Space / Cancel with ESC or Ctrl + c" "${options[@]}") && return 2
     [ -z "$user_input" ] && print_warn "No package selected" && return 3
     mapfile -t user_input <<<"$user_input" # Convert string to array
     # Print packages
