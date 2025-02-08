@@ -292,6 +292,7 @@ init_properties() {
     [ -z "$ARCH_DOWNLOAD_TIMEOUT" ] && ARCH_DOWNLOAD_TIMEOUT="false"
     [ -z "$FLATPAK_SUPPORT" ] && command -v /usr/bin/flatpak &>/dev/null && FLATPAK_SUPPORT="true"
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
+    [ -z "$FLATPAK_UPGRADE_ENABLED" ] && FLATPAK_UPGRADE_ENABLED="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
     [ -z "$UPGRADE_SHOW_HEALTH" ] && UPGRADE_SHOW_HEALTH="true"
@@ -366,6 +367,7 @@ persist_properties() {
         echo "AUR_REVIEW=${AUR_REVIEW}"
         echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
         echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
+        echo "FLATPAK_UPGRADE_ENABLED=${FLATPAK_UPGRADE_ENABLED}"
         echo "ORPHANS_CONFIRM=${ORPHANS_CONFIRM}"
         echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}"
         echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}"
@@ -1012,6 +1014,7 @@ view_edit_blacklist() {
         print_info "Saved"
         gum_confirm_continue
     else
+        clear_screen && print_header
         rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
         print_warn "Canceled"
         gum_confirm_continue
@@ -1056,7 +1059,7 @@ show_dashboard() { # Dashboard
 
         show_update_info
         echo && print_title "Local Database"
-        print_info "Timestamp: ${LATEST_UPDATE_CHECK}"
+        print_format_white 18 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
         echo && show_health_info
 
         # Fetch infos
@@ -1090,11 +1093,13 @@ show_dashboard() { # Dashboard
 
         'System Health')
             clear_screen && print_header
+            print_title "System Health"
             local options=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
-            user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || {
+            user_input=$(gum_choose --cursor " > " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || {
                 clear_screen && print_header
                 continue
             }
+            clear_screen && print_header
             case "$user_input" in # Set user action to selected action
             'Remove Orphans') show_orphans ;;
             'Merge Configurations') show_merge ;;
@@ -1102,7 +1107,7 @@ show_dashboard() { # Dashboard
             'Downgrade Packages') show_downgrade ;;
             'Clear Cache') show_clear_cache ;;
             'Reset Pacman') show_reset_pacman ;;
-            'Back') continue ;;
+            'Back') clear_screen && print_header && continue ;;
             esac
             gum_confirm_continue
             clear_screen && print_header
@@ -1163,7 +1168,7 @@ show_upgrade() { # Update packages
     fi
 
     # Upgrade flatpak packages
-    if [ "$FLATPAK_SUPPORT" = "true" ]; then
+    if [ "$FLATPAK_SUPPORT" = "true" ] && [ "$FLATPAK_UPGRADE_ENABLED" = "true" ]; then
         if [ -n "$(flatpak remote-ls --updates)" ]; then      # Check if flatpak updates available
             if [ "$FLATPAK_UPGRADE_CONFIRM" = "false" ]; then # Do auto flatpak update
                 ! gum_spin --title 'Upgrading Flatpak Apps...' -- bash -c "flatpak update -y --noninteractive" && print_fail "Flatpak Upgrade failed" && return 3
@@ -1317,6 +1322,7 @@ show_refresh() { # Refresh mirrorlist with reflector
         mv -f "${MIRRORLIST_TMP}.new" "$MIRRORLIST_TMP"
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
     else
+        clear_screen && print_header
         rm -f "${MIRRORLIST_TMP}.new"
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
         print_warn "Edit canceled"
@@ -1432,6 +1438,7 @@ show_config() { # Config
         refresh_state
         print_info "Saved" && return 0
     else
+        clear_screen && print_header
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
         print_warn "Canceled" && return 3
     fi
