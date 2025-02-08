@@ -990,6 +990,7 @@ view_edit_blacklist() {
         gum_confirm_continue
     else
         clear_screen && print_header
+        print_title "Edit Blacklist"
         rm -f "${ARCH_OS_BLACKLIST}.new" # Remove tmp properties
         print_warn "Canceled"
         gum_confirm_continue
@@ -1311,9 +1312,10 @@ show_refresh() { # Refresh mirrorlist with reflector
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
     else
         clear_screen && print_header
+        print_title "Edit New Mirrorlist"
         rm -f "${MIRRORLIST_TMP}.new"
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
-        print_warn "Edit canceled"
+        print_warn "Canceled"
     fi
     # Save mirrorlist?
     ! gum_confirm "Save new Mirrorlist?" && print_warn "New mirrorlist was ignored" && return 2
@@ -1427,6 +1429,7 @@ show_config() { # Config
         print_info "Saved" && return 0
     else
         clear_screen && print_header
+        print_title "Edit Configuration"
         rm -f "${ARCH_OS_CONF}.new" # Remove tmp properties
         print_warn "Canceled" && return 3
     fi
