@@ -147,27 +147,13 @@ main() {
 
         # Show menu if user action argument is NOT set
         local selected_action && if [ -z "$user_action" ]; then
-            local user_input user_input2 options options2
+            local user_input options
             clear_screen && print_header
-            options=("Cockpit" "Actions" "Upgrade" "Packages" "Services" "Config" "Help" "Quit")
+            options=("Dashboard" "Packages" "Services" "Config" "Help" "Quit")
             user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
-            'Cockpit') selected_action='cockpit' ;;
+            'Dashboard') selected_action='dashboard' ;;
             'Upgrade') selected_action='upgrade' ;;
-            'Actions')
-                clear_screen && print_header
-                options2=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
-                user_input2=$(gum_choose --cursor "> " --height=$((${#options2[@]} + 3)) --selected="$user_input2" "${options2[@]}") || continue
-                case "$user_input2" in # Set user action to selected action
-                'Remove Orphans') selected_action='orphans' ;;
-                'Merge Configurations') selected_action='merge' ;;
-                'Refresh Mirrorlist') selected_action='refresh' ;;
-                'Downgrade Packages') selected_action='downgrade' ;;
-                'Clear Cache') selected_action='cache' ;;
-                'Reset Pacman') selected_action='reset' ;;
-                'Back') continue ;;
-                esac
-                ;;
             'Packages') selected_action='package' ;;
             'Services') selected_action='service' ;;
             'Config') selected_action='config' ;;
@@ -182,9 +168,9 @@ main() {
         # Execute action
         local skip_confirm="false"
         case "$selected_action" in # Execute action
-        'package') { print_header && show_search; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'service') { print_header && show_services; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'cockpit') { print_header && show_dashboard; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'package') { print_header && show_package_manager; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'service') { print_header && show_service_manager; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'dashboard') { print_header && show_dashboard; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'upgrade') { print_header && show_upgrade; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'orphans') { print_header && show_orphans; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'merge') { print_header && show_merge; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
@@ -311,9 +297,9 @@ init_properties() {
     [ -z "$UPGRADE_SHOW_HEALTH" ] && UPGRADE_SHOW_HEALTH="true"
     [ -z "$HEALTH_ENABLE_UNKNOWN_PKG_LIST" ] && HEALTH_ENABLE_UNKNOWN_PKG_LIST="false"
     [ -z "$HEALTH_SHOW_LOG" ] && HEALTH_SHOW_LOG="true"
-    [ -z "$COCKPIT_SHOW_LOG" ] && COCKPIT_SHOW_LOG="false"
-    [ -z "$COCKPIT_SHOW_SERVICES" ] && COCKPIT_SHOW_SERVICES="false"
-    [ -z "$COCKPIT_SHOW_USER_SERVICES" ] && COCKPIT_SHOW_USER_SERVICES="false"
+    [ -z "$DASHBOARD_SHOW_LOG" ] && DASHBOARD_SHOW_LOG="false"
+    [ -z "$DASHBOARD_SHOW_SERVICES" ] && DASHBOARD_SHOW_SERVICES="false"
+    [ -z "$DASHBOARD_SHOW_USER_SERVICES" ] && DASHBOARD_SHOW_USER_SERVICES="false"
 
     return 0
 }
@@ -387,9 +373,9 @@ persist_properties() {
         echo "UPGRADE_SHOW_HEALTH=${UPGRADE_SHOW_HEALTH}"
         echo "HEALTH_ENABLE_UNKNOWN_PKG_LIST=${HEALTH_ENABLE_UNKNOWN_PKG_LIST}"
         echo "HEALTH_SHOW_LOG=${HEALTH_SHOW_LOG}"
-        echo "COCKPIT_SHOW_LOG=${COCKPIT_SHOW_LOG}"
-        echo "COCKPIT_SHOW_SERVICES=${COCKPIT_SHOW_SERVICES}"
-        echo "COCKPIT_SHOW_USER_SERVICES=${COCKPIT_SHOW_USER_SERVICES}"
+        echo "DASHBOARD_SHOW_LOG=${DASHBOARD_SHOW_LOG}"
+        echo "DASHBOARD_SHOW_SERVICES=${DASHBOARD_SHOW_SERVICES}"
+        echo "DASHBOARD_SHOW_USER_SERVICES=${DASHBOARD_SHOW_USER_SERVICES}"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -520,12 +506,12 @@ action_notify_updates() { # Notify on new updates
                 -u critical \
                 -c device.added \
                 -h string:sound-name:message-new-instant \
-                -A "cockpit=Cockpit" \
+                -A "dashboard=Dashboard" \
                 -A "upgrade=Upgrade" \
                 "System Upgrade" \
                 "${update_txt}"
         )
-        [ "$notify_result" = "cockpit" ] && ${SELF} -k cockpit
+        [ "$notify_result" = "dashboard" ] && ${SELF} -k dashboard
         [ "$notify_result" = "upgrade" ] && ${SELF} -k upgrade
         return 2
     fi
@@ -731,7 +717,7 @@ show_health_info() { # Show system health information
 # ///////////////////////////////////////////////////////////////////
 
 # shellcheck disable=SC2086
-show_search() { # Search & manage packages
+show_package_manager() { # Search & manage packages
     local ret && gum_confirm --affirmative="Explore Packages" --negative="Remove Packages" "Operation Mode"
     ret=$?
     [ "$ret" = 130 ] && return 2
@@ -942,45 +928,44 @@ show_search() { # Search & manage packages
 
 show_services() {
     print_title "Service Manager"
-   # print_system_services | while read -r line; do echo "${line}"; done
-   # if [ "$COCKPIT_SHOW_USER_SERVICES" = "true" ]; then
-   #     echo && print_title "User Services"
-   #     print_user_services | while read -r line; do echo "${line}"; done
-   # fi
+    # print_system_services | while read -r line; do echo "${line}"; done
+    # if [ "$COCKPIT_SHOW_USER_SERVICES" = "true" ]; then
+    #     echo && print_title "User Services"
+    #     print_user_services | while read -r line; do echo "${line}"; done
+    # fi
 
-# Lade System- und User-Dienste (mit Deduplizierung)
-mapfile -t services < <(
-  {
-    # Systemweite Dienste
-    systemctl list-unit-files --type=service --no-legend
-    # User-Dienste (unterdrücke Fehler falls keine vorhanden)
-    systemctl --user list-unit-files --type=service --no-legend 2>/dev/null
-  } | awk '{print $1}' | sort -u
-)
+    # Lade System- und User-Dienste (mit Deduplizierung)
+    mapfile -t services < <(
+        {
+            # Systemweite Dienste
+            systemctl list-unit-files --type=service --no-legend
+            # User-Dienste (unterdrücke Fehler falls keine vorhanden)
+            systemctl --user list-unit-files --type=service --no-legend 2>/dev/null
+        } | awk '{print $1}' | sort -u
+    )
 
+    # Interaktive Auswahl mit gum
+    selected_service=$(printf "%s\n" "${services[@]}" |
+        gum filter --placeholder "Wähle einen Dienst (System/User)...")
 
-# Interaktive Auswahl mit gum
-selected_service=$(printf "%s\n" "${services[@]}" | \
-  gum filter --placeholder "Wähle einen Dienst (System/User)...")
+    # Optional: Statusabfrage mit automatischer Scope-Erkennung
+    if [[ $selected_service == *"@." ]]; then
+        scope="--user"
+    else
+        scope=""
+    fi
 
-# Optional: Statusabfrage mit automatischer Scope-Erkennung
-if [[ $selected_service == *"@." ]]; then
-  scope="--user"
-else
-  scope=""
-fi
+    echo "Ausgewählter Dienst: $selected_service"
+    #systemctl $scope status "$selected_service" --no-pager
+    systemctl status "$selected_service" --no-pager
 
-echo "Ausgewählter Dienst: $selected_service"
-#systemctl $scope status "$selected_service" --no-pager
-systemctl status "$selected_service" --no-pager
-
-exit
+    exit
 
     mapfile -t search_result_array < <(print_system_services)
     if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
         unset search_filter
         clear_screen
-        
+
     fi
 
     local services_failed && services_failed="$(print_services_failed)"
@@ -1009,7 +994,7 @@ view_system_log() {
 view_system_services() {
     print_title "System Services"
     print_system_services | while read -r line; do echo "${line}"; done
-    if [ "$COCKPIT_SHOW_USER_SERVICES" = "true" ]; then
+    if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
         echo && print_title "User Services"
         print_user_services | while read -r line; do echo "${line}"; done
     fi
@@ -1036,7 +1021,7 @@ view_edit_blacklist() {
     return 0
 }
 
-show_dashboard() { # Cockpit
+show_dashboard() { # Dashboard
 
     while (true); do
 
@@ -1052,7 +1037,7 @@ show_dashboard() { # Cockpit
             diff_minutes=$(((current_seconds - last_check) / 60))
 
             # Check if the difference is greater than 15 minutes
-            if [ $diff_minutes -gt 15 ] && gum_confirm "Refresh Database ${LATEST_UPDATE_CHECK}?"; then
+            if [ $diff_minutes -gt 15 ] && gum_confirm "Refresh local Database from ${LATEST_UPDATE_CHECK}?"; then
                 ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync packages updates" && print_fail "Synchronize Database (packages, updates) failed" && return 3
                 refresh_state
             fi
@@ -1060,16 +1045,16 @@ show_dashboard() { # Cockpit
             print_title "Database Timestamp"
             #print_format_white 18 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
             #print_mesg "Sync Timestamp: ${LATEST_UPDATE_CHECK}"
-            print_info_bold "${LATEST_UPDATE_CHECK}"
+            print_info "${LATEST_UPDATE_CHECK}"
             echo
 
         fi
 
         local options user_input system_logs
-        [ "$COCKPIT_SHOW_LOG" = "true" ] && view_system_log && echo
+        [ "$DASHBOARD_SHOW_LOG" = "true" ] && view_system_log && echo
 
         # Show service health
-        [ "$COCKPIT_SHOW_SERVICES" = "true" ] && view_system_services && echo
+        [ "$DASHBOARD_SHOW_SERVICES" = "true" ] && view_system_services && echo
 
         # Failed services
         services_failed="$(print_services_failed)"
@@ -1089,10 +1074,11 @@ show_dashboard() { # Cockpit
         # Show options menu
         echo && print_title "Options"
         options=()
-        [ "$COCKPIT_SHOW_LOG" = "false" ] && options+=("System Log")
-        [ "$COCKPIT_SHOW_LOG" = "true" ] && options+=("Edit Blacklist")
+        [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("System Log")
+        options+=("Actions")
+        [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Blacklist")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
-        #[ "$COCKPIT_SHOW_SERVICES" = "false" ] && options+=("Services")
+        #[ "$DASHBOARD_SHOW_SERVICES" = "false" ] && options+=("Services")
         # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
         # [ "$pending_orphans" -gt 0 ] && options+=("Remove Orphans")
         options+=("Done")
@@ -1108,7 +1094,22 @@ show_dashboard() { # Cockpit
             local user_input && ! user_input=$(gum_choose --height=5 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
             [ "$user_input" = 'Edit Blacklist' ] && view_edit_blacklist
             ;;
-        'Edit Blacklist')
+
+        'Actions')
+            clear_screen && print_header
+            local options=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
+            user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || continue
+            case "$user_input" in # Set user action to selected action
+            'Remove Orphans') show_orphans ;;
+            'Merge Configurations') show_merge ;;
+            'Refresh Mirrorlist') show_refresh ;;
+            'Downgrade Packages') show_downgrade ;;
+            'Clear Cache') show_clear_cache ;;
+            'Reset Pacman') show_reset_pacman ;;
+            'Back') continue ;;
+            esac
+            ;;
+        'Blacklist')
             view_edit_blacklist
             ;;
         'Upgrade')
@@ -1453,7 +1454,7 @@ show_help() { # Print help page
     print_title 'System Actions'
     print_mesg 'check            ➜  Print package updates (checkupdates)'
     print_mesg 'notify           ➜  Notify on new package updates (autostart)'
-    print_mesg 'cockpit          ➜  Show cockpit (logs, services, health)'
+    print_mesg 'dashboard        ➜  Show dashboard (logs, services, health)'
     print_mesg 'upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)'
     print_mesg 'package          ➜  Search & manage packages (pacman, aur)'
     print_mesg 'service          ➜  Manage services (system & user)'
