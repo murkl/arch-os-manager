@@ -941,7 +941,48 @@ show_search() { # Search & manage packages
 # ///////////////////////////////////////////////////////////////////
 
 show_services() {
-    view_system_services
+    print_title "Service Manager"
+   # print_system_services | while read -r line; do echo "${line}"; done
+   # if [ "$COCKPIT_SHOW_USER_SERVICES" = "true" ]; then
+   #     echo && print_title "User Services"
+   #     print_user_services | while read -r line; do echo "${line}"; done
+   # fi
+
+# Lade System- und User-Dienste (mit Deduplizierung)
+mapfile -t services < <(
+  {
+    # Systemweite Dienste
+    systemctl list-unit-files --type=service --no-legend
+    # User-Dienste (unterdrücke Fehler falls keine vorhanden)
+    systemctl --user list-unit-files --type=service --no-legend 2>/dev/null
+  } | awk '{print $1}' | sort -u
+)
+
+
+# Interaktive Auswahl mit gum
+selected_service=$(printf "%s\n" "${services[@]}" | \
+  gum filter --placeholder "Wähle einen Dienst (System/User)...")
+
+# Optional: Statusabfrage mit automatischer Scope-Erkennung
+if [[ $selected_service == *"@." ]]; then
+  scope="--user"
+else
+  scope=""
+fi
+
+echo "Ausgewählter Dienst: $selected_service"
+#systemctl $scope status "$selected_service" --no-pager
+systemctl status "$selected_service" --no-pager
+
+exit
+
+    mapfile -t search_result_array < <(print_system_services)
+    if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Search Package / Cancel with ESC or CTRL + C" "${search_result_array[@]}"); then
+        unset search_filter
+        clear_screen
+        
+    fi
+
     local services_failed && services_failed="$(print_services_failed)"
     if [ -n "$services_failed" ]; then
         echo && print_title "Failed Services" && echo -e "$services_failed" | while read -r line; do echo "${line}"; done
