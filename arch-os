@@ -291,7 +291,7 @@ init_properties() {
     [ -z "$ARCH_UPGRADE_CONFIRM" ] && ARCH_UPGRADE_CONFIRM="true"
     [ -z "$ARCH_DOWNLOAD_TIMEOUT" ] && ARCH_DOWNLOAD_TIMEOUT="false"
     [ -z "$FLATPAK_SUPPORT" ] && command -v /usr/bin/flatpak &>/dev/null && FLATPAK_SUPPORT="true"
-    [ -z "$FLATPAK_UPGRADE_ENABLED" ] && FLATPAK_UPGRADE_ENABLED="true"
+    [ -z "$FLATPAK_UPGRADE_ENABLED" ] && FLATPAK_UPGRADE_ENABLED="false"
     [ -z "$FLATPAK_UPGRADE_CONFIRM" ] && FLATPAK_UPGRADE_CONFIRM="false"
     [ -z "$NEWS_QUANTITY" ] && NEWS_QUANTITY="3"
     [ -z "$ORPHANS_CONFIRM" ] && ORPHANS_CONFIRM="false"
