@@ -35,16 +35,16 @@ arch-os
 
 ## Install from GitHub
 
-1. Clone GitHub Repo:
-
-```
-git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
-```
-
 1. Install [Dependencies](#install-dependencies-optional):
 
 ```
 sudo pacman -S git base-devel pacman-contrib
+```
+
+2. Clone GitHub Repo:
+
+```
+git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ```
 
 3. Run Arch OS Manager:
