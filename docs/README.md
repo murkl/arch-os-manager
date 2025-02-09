@@ -35,16 +35,16 @@ arch-os
 
 ## Install from GitHub
 
-1. Clone GitHub Repo:
-
-```
-git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
-```
-
 1. Install [Dependencies](#install-dependencies-optional):
 
 ```
-./arch-os --install
+sudo pacman -S git base-devel pacman-contrib
+```
+
+2. Clone GitHub Repo:
+
+```
+git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 ```
 
 3. Run Arch OS Manager:
@@ -63,6 +63,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages
+- Manage system & user services
 - Upgrade system packages
 - Remove orphaned packages
 - Clear Package cache
@@ -75,6 +76,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 Install these **optional** dependencies to equip Arch OS Manager with additional features:
 
 - `paru`: Add support for manage AUR packages
+- `libnotify`: Add notification support
 - `flatpak`: Add support for manage Flatpak packages
 - `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
@@ -109,7 +111,8 @@ check            ➜  Print package updates (checkupdates)
 notify           ➜  Notify on new package updates (autostart)
 dashboard        ➜  Show dashboard (logs, services, health)
 upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
-pkg              ➜  Search & manage packages (pacman, aur)
+package          ➜  Search & manage packages (pacman, aur)
+service          ➜  Manage services (system & user)
 orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)
 merge            ➜  Merge updated configurations (pacdiff, meld)
 refresh          ➜  Refresh & edit pacman mirrorlist (reflector)
@@ -118,17 +121,30 @@ cache            ➜  Clear package cache (pacman, aur)
 reset            ➜  Reset pacman keyring & upgrade (pacman)
 ```
 
-### Install Dependencies _(optional)_
+### Install Dependencies
 
 Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
 
-#### Pacman Packages
+#### Pacman Packages (mandatory)
 
 ```
-git base-devel pacman-contrib reflector flatpak gum kitty libnotify fzf xdg-utils meld
+git base-devel pacman-contrib
 ```
 
-#### AUR Packages
+#### Binary Packages (mandatory)
+
+These packages are downloaded to `~/.arch-os/bin`:
+
+- `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
+- `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
+
+#### Pacman Packages (optional)
+
+```
+reflector libnotify fzf xdg-utils meld
+```
+
+#### AUR Packages (optional)
 
 These packages are built and installed manually from the AUR-Git repository using `makepkg`:
 
@@ -147,14 +163,15 @@ CONTENT_MAX_HEIGHT=16                 # Max lines in packages & downgrade (max: 
 REFLECTOR_COUNTRY=none                # Set prefered reflector country (example: Germany,France)
 ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)
 ARCH_DOWNLOAD_TIMEOUT=false           # Disable pacman/paru download timeout (enable: true)
-AUR_MANAGER_REPO=paru                 # Set AUR manager package for --install (paru, paru-bin, paru-git)
 AUR_SUPPORT=true                      # Enable AUR support (disable: false)
+AUR_MANAGER_REPO=paru                 # Set AUR manager package for --install (paru, paru-bin, paru-git)
 AUR_REVIEW=false                      # Disable AUR review (enable: true)
 FLATPAK_SUPPORT=true                  # Enable flatpak support (disable: false)
+FLATPAK_UPGRADE_ENABLED=false         # Disable flatpak upgrade to use GNOME Software instead (enable: true)
 FLATPAK_UPGRADE_CONFIRM=false         # Disable confirm flatpak upgrade (experimental) (enable: true)
-ORPHANS_CONFIRM=false                 # Disable confirm remove orphans (enable: true)
 AUTOSTART_NOTIFY=true                 # Enable update notify on system boot (disable: false)
 AUTOSTART_DELAY=30                    # Delay update check after boot in seconds (min: 10)
+ORPHANS_CONFIRM=false                 # Disable confirm remove orphans (enable: true)
 NEWS_QUANTITY=3                       # Number of news to shown (disable: 0)
 UPGRADE_SHOW_HEALTH=false             # Show health view in upgrade (enable: true)
 HEALTH_ENABLE_UNKNOWN_PKG_LIST=false  # Show unknown package counter instead of name list (enable: true)
