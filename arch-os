@@ -22,10 +22,11 @@ GUM_VERSION=0.15.2
 KITTY_VERSION=0.39.1
 
 # HOME
-ARCH_OS_HOME="${HOME}/.arch-os"
-ARCH_OS_BIN="${ARCH_OS_HOME}/bin"
+: "${ARCH_USER:=${USER}}"
+ARCH_OS_HOME="/home/${ARCH_USER}/.arch-os"
 
 # ENVIRONMENT
+ARCH_OS_BIN="${ARCH_OS_HOME}/bin"
 : "${KITTY:=${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-x86_64/bin/kitty}"
 : "${GUM:=${ARCH_OS_BIN}/gum_${GUM_VERSION}_Linux_x86_64/gum}"
 
@@ -75,6 +76,10 @@ COLOR_PURPLE_BASH="\033[35m"
 
 main() {
 
+    # Init
+    gum_init "$@"
+    kitty_init "$@"
+
     # Init properties
     init_properties && persist_properties
 
@@ -85,10 +90,7 @@ main() {
     }
 
     # Check dependencies
-    if ! command -v "$GUM" &>/dev/null; then echo "ERROR: gum not found. Install with: sudo pacman -S gum" >&2 && exit 1; fi
-    if ! command -v "$KITTY" &>/dev/null; then echo "ERROR: kitty not found. Install with: sudo pacman -S kitty" >&2 && exit 1; fi
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found. Install with: sudo pacman -S pacman-contrib" >&2 && exit 1; fi
-    if ! command -v /usr/bin/notify-send &>/dev/null; then echo "ERROR: notify-send not found. Install with: sudo pacman -S libnotify" >&2 && exit 1; fi
 
     # Set Traps
     trap 'trap_error $? ${FUNCNAME} ${LINENO}' ERR # Set error trap
@@ -343,6 +345,19 @@ persist_properties() {
         }
     fi
 
+    # Check notify-send binary
+    if [ "$AUTOSTART_NOTIFY" = "true" ]; then
+        local error && unset error
+        [ -z "$error" ] && ! command -v /usr/bin/notify-send &>/dev/null && error="/usr/bin/notify-send not found"
+        [ -z "$error" ] && ! /usr/bin/notify-send --version &>/dev/null && error="/usr/bin/notify-send is not working"
+        [ -n "$error" ] && {
+            print_fail "$error"
+            notify_send "Error" "$error"
+            ! gum_confirm --timeout=3s "Disable AUTOSTART_NOTIFY?" && print_fail "Canceled" && exit 3
+            AUTOSTART_NOTIFY="false" && print_warn "AUTOSTART_NOTIFY was disabled"
+        }
+    fi
+
     # Toggle settings
     if [ "$AUTOSTART_NOTIFY" = "true" ]; then
         {
@@ -501,6 +516,7 @@ action_notify_updates() { # Notify on new updates
     if [ "$update_count" -gt 0 ]; then
         [ "$update_count" = 1 ] && update_txt="<b>${update_count}</b> Update available"
         [ "$update_count" -gt 1 ] && update_txt="<b>${update_count}</b> Updates available"
+        ! command -v /usr/bin/notify-send &>/dev/null && return 3
         notify_result=$(
             notify-send \
                 -a "Arch OS Manager" \
@@ -1048,7 +1064,7 @@ show_dashboard() { # Dashboard
 
         show_update_info
         echo && print_title "Local Database"
-        print_format_white 18 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
+        print_format_white 0 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
         echo && show_health_info
 
         # Fetch infos
@@ -1471,7 +1487,7 @@ show_version() { # Print version page
     print_title "Version Information"
     print_mesg "$(kitty --version)"
     print_mesg "$(gum --version)"
-    print_mesg "$(notify-send --version)"
+    command -v /usr/bin/notify-send &>/dev/null && print_mesg "$(notify-send --version)"
     [ "$FLATPAK_SUPPORT" = "true" ] && print_mesg "$(flatpak --version)"
     [ "$AUR_SUPPORT" = "true" ] && print_mesg "$(/usr/bin/paru --version)"
     print_mesg "$(/usr/bin/checkupdates --version)"
@@ -1509,11 +1525,10 @@ print_filled_space() {
 }
 
 # System
-notify_send() { notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0; }
+notify_send() { command -v /usr/bin/notify-send &>/dev/null && notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0; }
 clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear and remove scrollback buffer
 
 # Gum wrapper
-gum() { "$GUM" "$@"; }
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
 gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
@@ -1549,13 +1564,8 @@ print_format_purple() { print_format "$1" "$COLOR_PURPLE_BASH" "$2" "$3"; }
 print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_blue --bold "$2")"; }
 
 # ///////////////////////////////////////////////////////////////////
-# KITTY FUNCTIONS
+# KITTY CONFIG
 # ///////////////////////////////////////////////////////////////////
-
-kitty() {
-    [ ! -f "$ARCH_OS_KITTY_CONF" ] && echo "$kitty_conf_template" >"$ARCH_OS_KITTY_CONF" # Create kitty.conf if not exists
-    "$KITTY" --detach --class "arch-os" --name "Arch OS" -c "$ARCH_OS_KITTY_CONF" "$@"
-}
 
 # https://sw.kovidgoyal.net/kitty/conf/
 kitty_conf_template='
@@ -1623,7 +1633,7 @@ install_script_dependencies() {
 
     # Install system packages
     echo ":: Install Arch OS Manager Dependencies"
-    pacman_install git base-devel pacman-contrib reflector flatpak gum kitty libnotify fzf xdg-utils meld
+    pacman_install git base-devel pacman-contrib reflector flatpak libnotify fzf xdg-utils meld
 
     # Create backup
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
@@ -1645,6 +1655,72 @@ install_script_dependencies() {
 }
 
 # ///////////////////////////////////////////////////////////////////
+# BINARIES
+# ///////////////////////////////////////////////////////////////////
+
+# Gum bin
+gum() {
+    if [ -n "$GUM" ] && [ -x "$GUM" ]; then "$GUM" "$@"; else
+        {
+            echo "Error: GUM='${GUM}' is not found or executable" >&2
+            exit 1
+        }
+    fi
+}
+
+# Kitty bin
+kitty() {
+    [ ! -f "$ARCH_OS_KITTY_CONF" ] && echo "$kitty_conf_template" >"$ARCH_OS_KITTY_CONF" # Create kitty.conf if not exists
+    if [ -n "$KITTY" ] && [ -x "$KITTY" ]; then "$KITTY" --detach --class "arch-os" --name "Arch OS" -c "$ARCH_OS_KITTY_CONF" "$@"; else
+        {
+            echo "Error: KITTY='${KITTY}' is not found or executable" >&2
+            exit 1
+        }
+    fi
+}
+
+# ///////////////////////////////////////////////////////////////////
+# INIT
+# ///////////////////////////////////////////////////////////////////
+
+# Gum init
+gum_init() {
+    if ! command -v "$GUM" &>/dev/null; then
+        clear && print_info "Installing Gum Binary..."
+        local tmp_file uname_local download_url
+        mkdir -p "$ARCH_OS_BIN"
+        uname_local="$(uname -s)_$(uname -m)" # gum_0.15.2_Linux_x86_64
+        tmp_file="${ARCH_OS_BIN}/gum_${GUM_VERSION}_${uname_local}.tar.gz.tmp"
+        # https://github.com/charmbracelet/gum/releases
+        download_url="https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_${uname_local}.tar.gz"
+        if ! curl -Lsf "$download_url" >"${tmp_file}"; then print_fail "Error downloading ${download_url}" && exit 1; fi
+        if ! tar -xf "${tmp_file}" --directory "${ARCH_OS_BIN}"; then print_fail "Error extracting ${tmp_file}" && exit 1; fi
+        rm -f "${tmp_file}"
+    fi
+    # Check again
+    if [ ! -x "${GUM}" ]; then print_fail "Error executing ${GUM}" && exit 1; fi
+}
+
+# Kitty init
+kitty_init() {
+    if ! command -v "$KITTY" &>/dev/null; then
+        clear && print_info "Installing Kitty Binary..."
+        local tmp_file uname_local download_url output_dir
+        uname_local="$(uname -m)" # kitty-0.39.1-x86_64.txz
+        output_dir="${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-${uname_local}"
+        tmp_file="${output_dir}/kitty-${KITTY_VERSION}-${uname_local}.txz"
+        #https://github.com/kovidgoyal/kitty/releases/download/v0.39.1/kitty-0.39.1-x86_64.txz
+        download_url="https://github.com/kovidgoyal/kitty/releases/download/v${KITTY_VERSION}/kitty-${KITTY_VERSION}-${uname_local}.txz"
+        mkdir -p "$output_dir"
+        if ! curl -Lsf "$download_url" >"${tmp_file}"; then print_fail "Error downloading ${download_url}" && exit 1; fi
+        if ! tar -xf "${tmp_file}" --directory "${output_dir}"; then print_fail "Error extracting ${tmp_file}" && exit 1; fi
+        rm -f "${tmp_file}"
+    fi
+    # Check again
+    if [ ! -x "${KITTY}" ]; then print_fail "Error executing ${KITTY}" && exit 1; fi
+}
+
+# ///////////////////////////////////////////////////////////////////
 # START SCRIPT
 # ///////////////////////////////////////////////////////////////////
 
@@ -1660,6 +1736,7 @@ SELF="$WORKING_DIR/$(basename "$0")"
 
 # -------------------------------------------------------------------
 
-main "$@" # Start main function
+# Start main function
+main "$@"
 
 # -------------------------------------------------------------------

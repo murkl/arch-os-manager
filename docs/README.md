@@ -44,7 +44,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 1. Install [Dependencies](#install-dependencies-optional):
 
 ```
-./arch-os --install
+sudo pacman -S git base-devel pacman-contrib
 ```
 
 3. Run Arch OS Manager:
@@ -76,6 +76,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 Install these **optional** dependencies to equip Arch OS Manager with additional features:
 
 - `paru`: Add support for manage AUR packages
+- `libnotify`: Add notification support
 - `flatpak`: Add support for manage Flatpak packages
 - `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
@@ -127,8 +128,15 @@ Use parameter `--install` to install and preconfigure **all required packages** 
 #### Pacman Packages
 
 ```
-git base-devel pacman-contrib reflector flatpak gum kitty libnotify fzf xdg-utils meld
+git base-devel pacman-contrib reflector flatpak libnotify fzf xdg-utils meld
 ```
+
+#### Binary Packages
+
+These packages are mandatory and downloaded to `~/.arch-os/bin`:
+
+- `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
+- `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
 
 #### AUR Packages
 
