@@ -17,7 +17,7 @@ clear && set -Eeo pipefail
 # https://github.com/kovidgoyal/kitty/releases/download/v0.39.1/kitty-0.39.1-x86_64.txz
 
 # VERSIONS
-SCRIPT_VERSION="1.8.0"
+SCRIPT_VERSION="1.8.1"
 GUM_VERSION=0.15.2
 KITTY_VERSION=0.39.1
 
