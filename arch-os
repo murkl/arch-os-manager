@@ -1505,12 +1505,11 @@ show_version() { # Print version page
 print_header() {
     if [ "$HEADER_PRINTED" = "false" ]; then
         clear && printf '\e[3J' && gum_purple '
- █████  ██████   ██████ ██   ██      ██████  ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
-███████ ██████  ██      ███████     ██    ██ ███████ 
-██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
-██   ██ ██   ██  ██████ ██   ██      ██████  ███████
-    ' && gum_white --bold "System Manager ${SCRIPT_VERSION}" && echo
+ ▗▄▖ ▗▄▄▖  ▗▄▄▖▗▖ ▗▖     ▗▄▖  ▗▄▄▖
+▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌ ▐▌    ▐▌ ▐▌▐▌   
+▐▛▀▜▌▐▛▀▚▖▐▌   ▐▛▀▜▌    ▐▌ ▐▌ ▝▀▚▖
+▐▌ ▐▌▐▌ ▐▌▝▚▄▄▖▐▌ ▐▌    ▝▚▄▞▘▗▄▄▞▘
+' && gum_white --bold "System Manager ${SCRIPT_VERSION}" && echo
         HEADER_PRINTED="true"
     fi
 }
