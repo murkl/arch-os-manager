@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
 
-clear && set -Eeo pipefail
+set -Eeo pipefail
 
 # ///////////////////////////////////////////////////////////////////
 #                         ARCH OS MANAGER
@@ -152,7 +152,7 @@ main() {
             local user_input options
             clear_screen && print_header
             options=("Dashboard" "Packages" "Services" "Config" "Help" "Quit")
-            user_input=$(gum_choose --cursor "> " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
+            user_input=$(gum_choose --cursor " " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             'Dashboard') selected_action='dashboard' ;;
             'Upgrade') selected_action='upgrade' ;;
@@ -1047,10 +1047,12 @@ show_dashboard() { # Dashboard
         if [ "$DASHBOARD_SHOW_SERVICES" = "true" ]; then
             print_title "System Services"
             print_system_services | while read -r line; do print_info "${line}"; done
-            if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
-                echo && print_title "User Services"
-                print_user_services | while read -r line; do print_info "${line}"; done
-            fi
+            echo
+        fi
+
+        if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
+            print_title "User Services"
+            print_user_services | while read -r line; do print_info "${line}"; done
             echo
         fi
 
@@ -1080,7 +1082,7 @@ show_dashboard() { # Dashboard
         options=()
         options+=("System Health")
         [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("System Log")
-        [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Blacklist")
+        [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("Edit Blacklist")
         [ "$pending_updates" -gt 0 ] && options+=("Upgrade")
         #[ "$DASHBOARD_SHOW_SERVICES" = "false" ] && options+=("Services")
         # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
@@ -1103,7 +1105,7 @@ show_dashboard() { # Dashboard
             clear_screen && print_header
             print_title "System Health"
             local options=("Remove Orphans" "Merge Configurations" "Refresh Mirrorlist" "Downgrade Packages" "Clear Cache" "Reset Pacman" "Back")
-            user_input=$(gum_choose --cursor " > " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || {
+            user_input=$(gum_choose --cursor "  " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || {
                 clear_screen && print_header
                 continue
             }
@@ -1121,7 +1123,7 @@ show_dashboard() { # Dashboard
             clear_screen && print_header
             continue
             ;;
-        'Blacklist')
+        'Edit Blacklist')
             view_edit_blacklist
             ;;
         'Upgrade')
@@ -1539,10 +1541,10 @@ clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear an
 # Gum wrapper
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
-gum_filter() { gum filter --width="120" --prompt " > " --indicator " >" --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_filter() { gum filter --width="120" --prompt "  " --indicator " " --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_write() { gum write --width="120" --prompt="" --char-limit 0 "${@}"; }
-gum_choose() { gum choose --no-show-help --header="" --cursor " > " "${@}"; }
-gum_input() { gum input --no-show-help --prompt " > " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_choose() { gum choose --no-show-help --header="" --cursor "  " "${@}"; }
+gum_input() { gum input --no-show-help --prompt "  " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
 gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
 gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
