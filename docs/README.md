@@ -142,7 +142,7 @@ These packages are downloaded to `~/.arch-os/bin`:
 #### Pacman Packages (optional - all features)
 
 ```
-reflector flatpak libnotify fzf bat xdg-utils meld
+reflector libnotify fzf bat xdg-utils meld
 ```
 
 #### AUR Packages (optional - all features)

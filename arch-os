@@ -1643,7 +1643,7 @@ install_script_dependencies() {
 
     # Install system packages
     echo ":: Install Arch OS Manager Dependencies"
-    pacman_install git base-devel pacman-contrib reflector flatpak libnotify fzf bat xdg-utils meld
+    pacman_install git base-devel pacman-contrib reflector libnotify fzf bat xdg-utils meld
 
     # Create backup
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
