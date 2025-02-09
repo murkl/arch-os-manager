@@ -139,13 +139,13 @@ These packages are downloaded to `~/.arch-os/bin`:
 - `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
 - `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
 
-#### Pacman Packages (optional - all features)
+#### Pacman Packages (optional)
 
 ```
 reflector libnotify fzf bat xdg-utils meld
 ```
 
-#### AUR Packages (optional - all features)
+#### AUR Packages (optional)
 
 These packages are built and installed manually from the AUR-Git repository using `makepkg`:
 
