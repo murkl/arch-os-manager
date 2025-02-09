@@ -35,7 +35,7 @@ arch-os
 
 ## Install from GitHub
 
-1. Install [Dependencies](#install-dependencies-optional):
+1. Install [Dependencies](#install-dependencies):
 
 ```
 sudo pacman -S git base-devel pacman-contrib
