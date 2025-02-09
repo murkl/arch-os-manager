@@ -122,14 +122,14 @@ cache            ➜  Clear package cache (pacman, aur)
 reset            ➜  Reset pacman keyring & upgrade (pacman)
 ```
 
-### Install Dependencies _(optional)_
+### Install Dependencies
 
 Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
 
-#### Pacman Packages (all features)
+#### Pacman Packages (mandatory)
 
 ```
-git base-devel pacman-contrib reflector flatpak libnotify fzf bat xdg-utils meld
+git base-devel pacman-contrib
 ```
 
 #### Binary Packages (mandatory)
@@ -139,7 +139,13 @@ These packages are downloaded to `~/.arch-os/bin`:
 - `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
 - `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
 
-#### AUR Packages (all features)
+#### Pacman Packages (optional - all features)
+
+```
+reflector flatpak libnotify fzf bat xdg-utils meld
+```
+
+#### AUR Packages (optional - all features)
 
 These packages are built and installed manually from the AUR-Git repository using `makepkg`:
 
