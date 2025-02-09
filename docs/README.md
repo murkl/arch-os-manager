@@ -77,6 +77,7 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 
 - `paru`: Add support for manage AUR packages
 - `libnotify`: Add notification support
+- `bat`: Add colorize output support
 - `flatpak`: Add support for manage Flatpak packages
 - `reflector`: Add support for refresh Pacman mirrorlist
 - `downgrade`: Add support for downgrade packages
@@ -128,7 +129,7 @@ Use parameter `--install` to install and preconfigure **all required packages** 
 #### Pacman Packages
 
 ```
-git base-devel pacman-contrib reflector flatpak libnotify fzf xdg-utils meld
+git base-devel pacman-contrib reflector flatpak libnotify fzf bat xdg-utils meld
 ```
 
 #### Binary Packages
