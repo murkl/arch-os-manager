@@ -126,20 +126,20 @@ reset            ➜  Reset pacman keyring & upgrade (pacman)
 
 Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
 
-#### Pacman Packages
+#### Pacman Packages (all features)
 
 ```
 git base-devel pacman-contrib reflector flatpak libnotify fzf bat xdg-utils meld
 ```
 
-#### Binary Packages
+#### Binary Packages (mandatory)
 
-These packages are mandatory and downloaded to `~/.arch-os/bin`:
+These packages are downloaded to `~/.arch-os/bin`:
 
 - `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
 - `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
 
-#### AUR Packages
+#### AUR Packages ((all features))
 
 These packages are built and installed manually from the AUR-Git repository using `makepkg`:
 
