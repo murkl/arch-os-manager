@@ -963,21 +963,16 @@ show_service_manager() {
         print_title "User Services"
         # --state=running
         mapfile -t services < <({ systemctl --user list-unit-files --type=service --no-legend --state=enabled,disabled,static,alias,transient 2>/dev/null; } | awk '{print $1}' | sort -u)
-
         selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Services: ${#services[@]} / Cancel with ESC or Ctrl + c")
         [ -z "$selected_service" ] && return 2
-
-        command -v /usr/bin/bat &>/dev/null && systemctl --user status "$selected_service" --no-pager -l --full | bat --paging=never --language=syslog
-        ! command -v /usr/bin/bat &>/dev/null && systemctl --user status "$selected_service" --no-pager -l --full
+        systemctl --user status "$selected_service" --no-pager -l --full
     else
         print_title "System Services"
         # --state=running
         mapfile -t services < <({ systemctl list-unit-files --type=service --no-legend --state=enabled,disabled,static,alias,indirect,enabled-runtime 2>/dev/null; } | awk '{print $1}' | sort -u)
         selected_service=$(printf "%s\n" "${services[@]}" | gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Services: ${#services[@]} / Cancel with ESC or Ctrl + c")
         [ -z "$selected_service" ] && return 2
-
-        command -v /usr/bin/bat &>/dev/null && systemctl status "$selected_service" | bat --paging=never --language=syslog
-        ! command -v /usr/bin/bat &>/dev/null && systemctl status "$selected_service" --no-pager --no-log --full
+        systemctl status "$selected_service" --no-pager -l --full
     fi
 }
 
@@ -1643,7 +1638,7 @@ install_script_dependencies() {
 
     # Install system packages
     echo ":: Install Arch OS Manager Dependencies"
-    pacman_install git base-devel pacman-contrib reflector libnotify fzf bat xdg-utils meld
+    pacman_install git base-devel pacman-contrib reflector libnotify fzf xdg-utils meld
 
     # Create backup
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
