@@ -891,7 +891,7 @@ show_package_manager() { # Search & manage packages
         options+=("Done")
         # Show menu
         local user_input=''
-        ! user_input=$(gum_choose --selected="Done" --height=$((${#options[@]} + 3)) "${options[@]}") && print_warn "Canceled" && unset pkg_id && clear_screen && continue
+        ! user_input=$(gum_choose --height=$((${#options[@]} + 3)) "${options[@]}") && print_warn "Canceled" && unset pkg_id && clear_screen && continue
         case "$user_input" in # Set user action to selected action
         'Install')
             ! gum_confirm "Install?" && clear_screen && continue
@@ -1083,7 +1083,7 @@ show_dashboard() { # Dashboard
         # [ "$pending_merges" -gt 0 ] && options+=("Merge Configurations")
         # [ "$pending_orphans" -gt 0 ] && options+=("Remove Orphans")
         options+=("Done")
-        user_input=$(gum_choose --height=$((${#options[@]} + 3)) --selected="Done" "${options[@]}") || {
+        user_input=$(gum_choose --height=$((${#options[@]} + 3)) "${options[@]}") || {
             print_warn "Canceled"
             return 2
         }
@@ -1092,7 +1092,7 @@ show_dashboard() { # Dashboard
             clear_screen && print_header
             view_system_log
             echo && print_title "Options"
-            local user_input && ! user_input=$(gum_choose --height=5 --selected="Done" "Edit Blacklist" "Done") && clear_screen && print_header && continue
+            local user_input && ! user_input=$(gum_choose --height=5 "Edit Blacklist" "Done") && clear_screen && print_header && continue
             [ "$user_input" = 'Edit Blacklist' ] && view_edit_blacklist
             ;;
 
@@ -1525,7 +1525,9 @@ print_filled_space() {
 }
 
 # System
-notify_send() { command -v /usr/bin/notify-send &>/dev/null && notify-send --app-name "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0; }
+notify_send() {
+    command -v /usr/bin/notify-send &>/dev/null && notify-send -a "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0
+}
 clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear and remove scrollback buffer
 
 # Gum wrapper
@@ -1686,6 +1688,7 @@ kitty() {
 # Gum init
 gum_init() {
     if ! command -v "$GUM" &>/dev/null; then
+        notify_send "Gum Binary" "Initialize. Please wait..."
         print_info "$(print_timestamp) | Arch OS | Initialize Gum Binary..."
         local tmp_file uname_local download_url
         mkdir -p "$ARCH_OS_BIN"
@@ -1704,6 +1707,7 @@ gum_init() {
 # Kitty init
 kitty_init() {
     if ! command -v "$KITTY" &>/dev/null; then
+        notify_send "Kitty Binary" "Initialize. Please wait..."
         print_info "$(print_timestamp) | Arch OS | Initialize Kitty Binary..."
         local tmp_file uname_local download_url output_dir
         uname_local="$(uname -m)" # kitty-0.39.1-x86_64.txz
