@@ -84,7 +84,7 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 - `xdg-utils`: Add support for open news in browser
 - `gnome-shell-extensions`: Add support for GNOME Extensions
 
-**Note:** _see [Install Dependencies](#install-dependencies-optional) for more information_
+**Note:** _see [Install Dependencies](#install-dependencies) for more information_
 
 ## Usage
 
