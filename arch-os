@@ -151,16 +151,16 @@ main() {
         local selected_action && if [ -z "$user_action" ]; then
             local user_input options
             clear_screen && print_header
-            options=("Dashboard" "Packages" "Services" "Config" "Help" "Quit")
+            options=("󰨝  Dashboard" "  Packages" "  Services" "  Config" "󰋗  Help" "󰜺  Quit")
             user_input=$(gum_choose --cursor " " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
-            'Dashboard') selected_action='dashboard' ;;
-            'Upgrade') selected_action='upgrade' ;;
-            'Packages') selected_action='package' ;;
-            'Services') selected_action='service' ;;
-            'Config') selected_action='config' ;;
-            'Help') selected_action='help' ;;
-            'Quit') clear_screen && exit 2 ;;
+            *Dashboard) selected_action='dashboard' ;;
+            *Upgrade) selected_action='upgrade' ;;
+            *Packages) selected_action='package' ;;
+            *Services) selected_action='service' ;;
+            *Config) selected_action='config' ;;
+            *Help) selected_action='help' ;;
+            *Quit) clear_screen && exit 2 ;;
             esac
         fi
 
@@ -622,7 +622,7 @@ show_update_info() { # Show package updates
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
-        print_info "  Your system is up to date" # 󰄴      󰾩    
+        print_info "Your system is up to date" #   󰄴      󰾩  
         return 0
     fi
 
@@ -1069,7 +1069,7 @@ show_dashboard() { # Dashboard
 
         show_update_info
         echo && print_title "Database Timestamp"
-        print_info "  ${LATEST_UPDATE_CHECK}"
+        print_info "${LATEST_UPDATE_CHECK}" # 
         echo && show_health_info
 
         # Fetch infos
@@ -1515,7 +1515,7 @@ print_header() {
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████ 
 '
-        gum_white --bold "System Manager                                ${SCRIPT_VERSION}" && echo
+        gum_white --bold "System Manager                               󰣇 ${SCRIPT_VERSION}" && echo
         HEADER_PRINTED="true"
     fi
 }
