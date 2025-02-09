@@ -622,7 +622,7 @@ show_update_info() { # Show package updates
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
-        print_info "Your system is up to date"
+        print_info "  Your system is up to date" # 󰄴      󰾩    
         return 0
     fi
 
@@ -1068,8 +1068,8 @@ show_dashboard() { # Dashboard
         fi
 
         show_update_info
-        echo && print_title "Local Database"
-        print_format_white 0 "Sync Timestamp" "${LATEST_UPDATE_CHECK}"
+        echo && print_title "Database Timestamp"
+        print_info "  ${LATEST_UPDATE_CHECK}"
         echo && show_health_info
 
         # Fetch infos

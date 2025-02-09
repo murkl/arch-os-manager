@@ -134,6 +134,8 @@ sudo pacman -S ttf-firacode-nerd
 gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
 ```
 
+Source: [Nerd Fonts](https://www.nerdfonts.com/cheat-sheet)
+
 #### Pacman Packages (mandatory)
 
 ```
