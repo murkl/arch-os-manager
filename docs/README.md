@@ -139,7 +139,7 @@ These packages are downloaded to `~/.arch-os/bin`:
 - `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
 - `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
 
-#### AUR Packages ((all features))
+#### AUR Packages (all features)
 
 These packages are built and installed manually from the AUR-Git repository using `makepkg`:
 
