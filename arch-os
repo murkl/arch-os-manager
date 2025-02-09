@@ -1643,7 +1643,7 @@ install_script_dependencies() {
 
     # Install system packages
     echo ":: Install Arch OS Manager Dependencies"
-    pacman_install git base-devel pacman-contrib reflector libnotify fzf xdg-utils meld
+    pacman_install git base-devel pacman-contrib reflector libnotify ttf-firacode-nerd fzf xdg-utils meld
 
     # Create backup
     [ -f /etc/paru.conf ] && sudo cp -f /etc/paru.conf "/etc/paru.conf.$(date +"%Y%m%d%H%M%S")"
@@ -1659,6 +1659,9 @@ install_script_dependencies() {
     # Install downgrade
     echo ":: Install Downgrade..."
     aur_install downgrade || return 1
+
+    # Set font
+    command -v gsettings &>/dev/null && gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
 
     echo ":: Successfully completed"
     return 0

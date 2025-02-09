@@ -125,6 +125,15 @@ reset            ➜  Reset pacman keyring & upgrade (pacman)
 
 Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
 
+#### Install & Set Font
+
+Install and set font for fancy icons:
+
+```
+sudo pacman -S ttf-firacode-nerd
+gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+```
+
 #### Pacman Packages (mandatory)
 
 ```
