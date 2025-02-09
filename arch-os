@@ -742,7 +742,7 @@ show_health_info() { # Show system health information
 
 # shellcheck disable=SC2086
 show_package_manager() { # Search & manage packages
-    local ret && gum_confirm --affirmative="Explore Packages" --negative="Remove Packages" "Operation Mode"
+    local ret && gum_confirm --affirmative="Explore Packages" --negative="Remove Packages" "// Package Manager"
     ret=$?
     [ "$ret" = 130 ] && return 2
     if [ "$ret" = 1 ]; then
@@ -953,7 +953,7 @@ show_package_manager() { # Search & manage packages
 
 show_service_manager() {
     local op_user="false"
-    local ret && gum_confirm --affirmative="System Services" --negative="User Services" "Operation Mode"
+    local ret && gum_confirm --affirmative="System Services" --negative="User Services" "// Service Manager"
     ret=$?
     [ "$ret" = 130 ] && return 2
     if [ "$ret" = 1 ]; then
