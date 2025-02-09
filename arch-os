@@ -894,7 +894,7 @@ show_package_manager() { # Search & manage packages
         ! user_input=$(gum_choose --height=$((${#options[@]} + 3)) "${options[@]}") && print_warn "Canceled" && unset pkg_id && clear_screen && continue
         case "$user_input" in # Set user action to selected action
         'Install')
-            ! gum_confirm "> Install $pkg_id?" && clear_screen && continue
+            ! gum_confirm " Install: $pkg_id?" && clear_screen && continue
             local pkg_manager_args=()
             [ "$ARCH_DOWNLOAD_TIMEOUT" = "false" ] && pkg_manager_args+=('--disable-download-timeout')
             if [ "$pkg_is_aur" = "true" ]; then
@@ -905,7 +905,7 @@ show_package_manager() { # Search & manage packages
             fi
             ;;
         'Remove')
-            ! gum_confirm "> Remove ${pkg_id}?" && clear_screen && continue
+            ! gum_confirm " Remove: ${pkg_id}?" && clear_screen && continue
             if sudo /usr/bin/pacman -Rns $pkg_id; then print_info "Remove successful"; else print_fail "Removing ${pkg_id} failed"; fi
             ;;
         'PKGBUILD')
@@ -921,7 +921,7 @@ show_package_manager() { # Search & manage packages
             [ -n "$comments" ] && /usr/bin/paru -Gc $pkg_name
             ;;
         'Downgrade')
-            ! gum_confirm "> Downgrade $pkg_name?" && clear_screen && continue
+            ! gum_confirm " Downgrade: $pkg_name?" && clear_screen && continue
             if sudo downgrade $pkg_name; then
                 print_no_internet_info || return 3
                 gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync updates" || {
@@ -1515,7 +1515,7 @@ print_header() {
 ██   ██ ██   ██ ██      ██   ██     ██    ██      ██ 
 ██   ██ ██   ██  ██████ ██   ██      ██████  ███████ 
 '
-        gum_white --bold "System Manager                               󰣇 ${SCRIPT_VERSION}" && echo
+        gum_white --bold "System Manager                              󰣇  ${SCRIPT_VERSION}" && echo
         HEADER_PRINTED="true"
     fi
 }
