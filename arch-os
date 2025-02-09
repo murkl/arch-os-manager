@@ -1699,7 +1699,7 @@ kitty() {
 # Gum init
 gum_init() {
     if ! command -v "$GUM" &>/dev/null; then
-        notify_send "Gum Binary" "Initialize. Please wait..."
+        #notify_send "Gum Binary" "Initialize ${GUM_VERSION}. Please wait..."
         print_info "$(print_timestamp) | Arch OS | Initialize Gum Binary ${GUM_VERSION}..."
         local tmp_file uname_local download_url
         mkdir -p "$ARCH_OS_BIN"
@@ -1718,7 +1718,7 @@ gum_init() {
 # Kitty init
 kitty_init() {
     if ! command -v "$KITTY" &>/dev/null; then
-        notify_send "Kitty Binary" "Initialize. Please wait..."
+        #notify_send "Kitty Binary" "Initialize ${KITTY_VERSION}. Please wait..."
         print_info "$(print_timestamp) | Arch OS | Initialize Kitty Binary ${KITTY_VERSION}..."
         local tmp_file uname_local download_url output_dir
         uname_local="$(uname -m)" # kitty-0.39.1-x86_64.txz
