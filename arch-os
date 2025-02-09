@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1090
 
-set -Eeo pipefail
+clear && set -Eeo pipefail
 
 # ///////////////////////////////////////////////////////////////////
 #                         ARCH OS MANAGER
@@ -101,7 +101,7 @@ main() {
 
     # Init (only create dir structure & files)
     if [ "$1" = '--init' ]; then
-        print_info "$(print_timestamp) | Successfully initialized"
+        print_info "$(print_timestamp) | Arch OS | Successfully initialized"
         exit 2
     fi
 
@@ -1686,7 +1686,7 @@ kitty() {
 # Gum init
 gum_init() {
     if ! command -v "$GUM" &>/dev/null; then
-        clear && print_info "Installing Gum Binary..."
+        print_info "$(print_timestamp) | Arch OS | Initialize Gum Binary..."
         local tmp_file uname_local download_url
         mkdir -p "$ARCH_OS_BIN"
         uname_local="$(uname -s)_$(uname -m)" # gum_0.15.2_Linux_x86_64
@@ -1704,7 +1704,7 @@ gum_init() {
 # Kitty init
 kitty_init() {
     if ! command -v "$KITTY" &>/dev/null; then
-        clear && print_info "Installing Kitty Binary..."
+        print_info "$(print_timestamp) | Arch OS | Initialize Kitty Binary..."
         local tmp_file uname_local download_url output_dir
         uname_local="$(uname -m)" # kitty-0.39.1-x86_64.txz
         output_dir="${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-${uname_local}"
