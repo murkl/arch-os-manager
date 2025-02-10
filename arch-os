@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.1"
+SCRIPT_VERSION="1.8.2"
 GUM_VERSION="0.15.2"
 KITTY_VERSION="0.39.1"
 
@@ -620,7 +620,7 @@ show_update_info() { # Show package updates
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
-        print_info_bold "󰕥  Your system is up to date" # 󰕥   󰄴      󰾩  
+        gum_white --bold "󰕥  Your system is up to date" # 󰕥   󰄴      󰾩  
         return 0
     fi
 
