@@ -127,7 +127,7 @@ Use parameter `--install` to install and preconfigure **all required packages** 
 
 #### Install & Set Font
 
-Install and set font for fancy icons:
+Install and set font icons that are used to display information:
 
 ```
 sudo pacman -S ttf-firacode-nerd

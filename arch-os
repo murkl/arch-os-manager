@@ -620,7 +620,7 @@ show_update_info() { # Show package updates
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
-        print_info "Your system is up to date" #   󰄴      󰾩  
+        print_info_bold "󰕥  Your system is up to date" # 󰕥   󰄴      󰾩  
         return 0
     fi
 
@@ -636,7 +636,7 @@ show_update_info() { # Show package updates
     # Print updates
     while IFS=',' read -r manager package version update; do
         printf "${COLOR_BOLD_BASH}:: ${COLOR_BOLD_BASH}%-${pkg_length}s  ${COLOR_RESET_BASH}%-${version_length}s  %-3s  ${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%-${update_length}s  ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%-s  ${COLOR_RESET_BASH}%-${manager_length}s\n" \
-            "$package" "$version" "➜" "$update" "∷" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣
+            "  $package" "$version" "➜" "$update" "" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣
     done <"$UPDATES_DB"
 }
 
@@ -1068,8 +1068,8 @@ show_dashboard() { # Dashboard
         show_update_info
 
         if [ -n "$LATEST_UPDATE_CHECK" ] && [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
-            echo && print_title "Database Timestamp"
-            print_info "${LATEST_UPDATE_CHECK}" # 
+            echo && print_title "Local Database"
+            print_info_bold "  ${LATEST_UPDATE_CHECK}" #  󱘿 
         fi
 
         echo && show_health_info
@@ -1082,7 +1082,7 @@ show_dashboard() { # Dashboard
         # Show options menu
         echo && print_title "Options"
         options=()
-        options+=("  System Health")
+        options+=("󰢏  System Health")
         [ "$DASHBOARD_SHOW_LOG" = "false" ] && options+=("󰧭  System Log")
         [ "$DASHBOARD_SHOW_LOG" = "true" ] && options+=("  Edit Blacklist")
         [ "$pending_updates" -gt 0 ] && options+=("  Upgrade")
