@@ -35,7 +35,7 @@ arch-os
 
 ## Install from GitHub
 
-1. Install [Dependencies](#install-dependencies-optional):
+1. Install [Dependencies](#install-dependencies):
 
 ```
 sudo pacman -S git base-devel pacman-contrib
@@ -84,7 +84,7 @@ Install these **optional** dependencies to equip Arch OS Manager with additional
 - `xdg-utils`: Add support for open news in browser
 - `gnome-shell-extensions`: Add support for GNOME Extensions
 
-**Note:** _see [Install Dependencies](#install-dependencies-optional) for more information_
+**Note:** _see [Install Dependencies](#install-dependencies) for more information_
 
 ## Usage
 
@@ -124,6 +124,17 @@ reset            ➜  Reset pacman keyring & upgrade (pacman)
 ### Install Dependencies
 
 Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
+
+#### Install & Set Font
+
+Install and set font icons that are used to display information:
+
+```
+sudo pacman -S ttf-firacode-nerd
+gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+```
+
+Source: [Nerd Fonts](https://www.nerdfonts.com/cheat-sheet)
 
 #### Pacman Packages (mandatory)
 
@@ -179,6 +190,7 @@ HEALTH_SHOW_LOG=true                  # Show system log in healt (disable: false
 DASHBOARD_SHOW_LOG=true               # Show system log in dashboard & health (disable: false)
 DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disable: false)
 DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
+DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: false)
 ```
 
 ### Configuration Files
@@ -233,7 +245,7 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 # Install dependencies
 ./arch-os --install
 
-# Init Arch OS Manager (dirs & files)
+# Init Arch OS Manager (binaries, dirs & files)
 ./arch-os --init
 
 # Sync all databases
