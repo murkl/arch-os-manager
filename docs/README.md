@@ -190,6 +190,7 @@ HEALTH_SHOW_LOG=true                  # Show system log in healt (disable: false
 DASHBOARD_SHOW_LOG=true               # Show system log in dashboard & health (disable: false)
 DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disable: false)
 DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
+DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: false)
 ```
 
 ### Configuration Files
