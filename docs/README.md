@@ -245,7 +245,7 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 # Install dependencies
 ./arch-os --install
 
-# Init Arch OS Manager (dirs & files)
+# Init Arch OS Manager (binaries, dirs & files)
 ./arch-os --init
 
 # Sync all databases
