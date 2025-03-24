@@ -14,9 +14,9 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.2"
-GUM_VERSION="0.15.2"
-KITTY_VERSION="0.39.1"
+SCRIPT_VERSION="1.8.3"
+GUM_VERSION="0.16.0"
+KITTY_VERSION="0.40.1"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -48,11 +48,10 @@ HEADER_PRINTED="false"
 INTERNET_TEST_IP=8.8.8.8
 
 # GUM COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
-COLOR_WHITE=7
-COLOR_GREEN=2
-COLOR_GREEN=2
-COLOR_BLUE=4
-COLOR_PURPLE=212
+COLOR_WHITE_GUM=7
+COLOR_GREEN_GUM=2
+COLOR_BLUE_GUM=4
+COLOR_PURPLE_GUM=212
 
 # BASH COLORS
 COLOR_RESET_BASH="\033[0m"
@@ -63,8 +62,6 @@ COLOR_GREEN_BASH="\033[32m"
 COLOR_YELLOW_BASH="\033[33m"
 COLOR_BLUE_BASH="\033[34m"
 COLOR_PURPLE_BASH="\033[35m"
-
-# BINARIES
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN FUNCTION
@@ -620,7 +617,7 @@ show_update_info() { # Show package updates
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
-        gum_white --bold "󰕥  Your system is up to date" # 󰕥   󰄴      󰾩  
+        gum_join "$(gum_green --bold "󰕥  ")" "$(gum_green --bold "Your system is up to date")" # 󰕥   󰄴      󰾩  
         return 0
     fi
 
@@ -1068,8 +1065,9 @@ show_dashboard() { # Dashboard
         show_update_info
 
         if [ -n "$LATEST_UPDATE_CHECK" ] && [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
-            echo && print_title "Local Database"
-            gum_white --bold "  ${LATEST_UPDATE_CHECK}" #  󱘿 
+            echo && print_title "Local Information"
+            print_format 18 "$COLOR_WHITE_BASH" " " "Database Timestamp" "${LATEST_UPDATE_CHECK}" #  󱘿 
+            print_format 18 "$COLOR_WHITE_BASH" " " "Upgrade Timestamp" "${LATEST_SYSTEM_UPGRADE}"
         fi
 
         echo && show_health_info
@@ -1168,12 +1166,14 @@ show_upgrade() { # Update packages
 
     # Upgrade system packages
     ! sudo /usr/bin/pacman -Syuq "${pkg_manager_args[@]}" && print_fail "System Upgrade failed" && return 3
+    LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
 
     # Upgrade AUR packages
     if [ "$AUR_SUPPORT" = "true" ]; then
         print_info "Upgrading AUR Packages..."
         [ "$AUR_REVIEW" = "false" ] && pkg_manager_args+=('--skipreview')
         ! /usr/bin/paru -Suaq "${pkg_manager_args[@]}" && print_fail "AUR Upgrade failed" && return 3
+        LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
     fi
 
     # Upgrade flatpak packages
@@ -1184,6 +1184,7 @@ show_upgrade() { # Update packages
             else # Do Interactive flatpak update
                 print_info "Upgrading Flatpak Apps" && ! flatpak update && print_fail "Flatpak Upgrade failed" && return 3
             fi
+            LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
             print_info "Flatpak Upgrade completed"
         else # Up to date
             print_info "Flatpak is up to date"
@@ -1196,7 +1197,6 @@ show_upgrade() { # Update packages
     refresh_state
 
     # Finish
-    LATEST_SYSTEM_UPGRADE="$(print_timestamp)" && persist_state
     print_info "System Upgrade completed"
     echo # Print new line
     if [ "$UPGRADE_SHOW_HEALTH" = "true" ]; then show_health_info || return $?; fi
@@ -1210,7 +1210,7 @@ show_upgrade() { # Update packages
 show_orphans() { # Remove orphaned packages
     print_title "Remove Package Orphans"
     local txt="Removes packages that are no longer required by any installed package. This action helps keep the system clean and frees up disk space. It's recommended to run this periodically, especially after uninstalling software."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE" --foreground "$COLOR_WHITE"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM" --foreground "$COLOR_WHITE_GUM"
     ! gum_confirm " Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
     print_title "Remove Package Orphans"
@@ -1283,7 +1283,7 @@ show_merge() { # Merge updated config files
     fi
     print_title "Merge Pacdiff Configurations"
     local txt="Combines new configuration files with existing ones after package updates. This is necessary when pacman creates .pacnew files during updates to preserve user modifications. Use this action after system upgrades to ensure configurations are up-to-date."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
     ! gum_confirm " Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
     print_title "Merge Pacdiff Configurations"
@@ -1312,13 +1312,13 @@ show_refresh() { # Refresh mirrorlist with reflector
     fi
     print_title "Refresh Pacman Mirrorlist"
     local txt="Updates the list of package repositories for faster and more reliable downloads. This action is useful when experiencing slow download speeds or when mirrors become unresponsive. It's recommended to refresh the mirrorlist periodically or when changing locations."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
     ! gum_confirm " Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
     print_title "New Pacman Mirrorlist"
     local param && [ -n "$REFLECTOR_COUNTRY" ] && [ "$REFLECTOR_COUNTRY" != "none" ] && param="--country ${REFLECTOR_COUNTRY}"
     # Refresh mirrorlist with reflector and return if user press ctrl + c
-    ! gum_spin --title 'Waiting for Reflector. Please wait...' -- bash -c "reflector ${param} --latest 5 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
+    ! gum_spin --title 'Waiting for Reflector. Please wait...' -- bash -c "reflector ${param} --age 12 --latest 10 --protocol https --sort rate --save $MIRRORLIST_TMP &> /dev/null; wait; exit 0" && print_fail "Failed" && return 3
     # Clean reflector result (list only servers)
     local mirrorlist_cleaned && mirrorlist_cleaned=$(grep -v '^#' "$MIRRORLIST_TMP" | sed '/^$/d;s/^[[:space:]#]*//')
     echo -e "$mirrorlist_cleaned" >"$MIRRORLIST_TMP"
@@ -1326,7 +1326,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     # Print cleaned mirrorlist
     while IFS= read -r line || [ -n "$line" ]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP")
     # Edit mirrorlist?
-    echo && gum_confirm "Edit new Mirrorlist?" && clear_screen && print_header && print_title "New Mirrorlist" && if gum_write --show-line-numbers --height="6" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
+    echo && gum_confirm "Edit new Mirrorlist?" && clear_screen && print_header && print_title "New Mirrorlist" && if gum_write --show-line-numbers --height="10" --value="$(cat "$MIRRORLIST_TMP")" >"${MIRRORLIST_TMP}.new"; then
         # Refresh & re-print new mirrorlist
         mv -f "${MIRRORLIST_TMP}.new" "$MIRRORLIST_TMP"
         while IFS= read -r line || [[ -n "$line" ]]; do print_info "$line"; done < <(cat "$MIRRORLIST_TMP") && echo
@@ -1365,7 +1365,7 @@ show_downgrade() { # Downgrade packages
     fi
     print_title "Downgrade Pacman Packages"
     local txt="Reverts official Arch packages to a previous version. This action is helpful when a recent update causes issues or incompatibilities. Use it cautiously and only when necessary, as it can lead to system instability."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
     ! gum_confirm " Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
     print_title "Downgrade Pacman Packages"
@@ -1392,7 +1392,7 @@ show_downgrade() { # Downgrade packages
 show_clear_cache() { # Clear package cache
     print_title "Clear Package Cache"
     local txt="Removes old versions of installed packages from the package manager cache. This frees up disk space and is recommended periodically, especially on systems with limited storage. However, keeping some old versions can be useful for potential rollbacks."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
     ! gum_confirm " Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
     print_title "Clear Package Cache"
@@ -1408,7 +1408,7 @@ show_clear_cache() { # Clear package cache
 show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit keyring)
     print_title "Reset Pacman Keyring"
     local txt="Restores pacman to its default state, clearing any errors or corrupted databases. This action resets the pacman keyring, removing all installed keys and re-initializing them. Use it as a troubleshooting step when encountering persistent pacman errors or keyring issues. Followed by a system update to ensure all packages are up-to-date and the system is stable."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
     ! gum_confirm " Continue?" && print_warn "Canceled" && return 2
     clear_screen && print_header
     print_title "Reset Pacman Keyring"
@@ -1540,19 +1540,19 @@ clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear an
 # Gum wrapper
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
-gum_filter() { gum filter --width="120" --prompt "  " --indicator " " --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_filter() { gum filter --width="120" --prompt "  " --indicator " " --header.foreground "$COLOR_PURPLE_GUM" "${@}"; }
 gum_write() { gum write --width="120" --prompt="" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "  " "${@}"; }
-gum_input() { gum input --no-show-help --prompt "  " --prompt.foreground "$COLOR_PURPLE" --header.foreground "$COLOR_PURPLE" "${@}"; }
+gum_input() { gum input --no-show-help --prompt "  " --prompt.foreground "$COLOR_PURPLE_GUM" --header.foreground "$COLOR_PURPLE_GUM" "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
-gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE" "$@"; }
+gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE_GUM" "$@"; }
 gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
 
 # Gum colors
-gum_white() { gum_style --foreground "$COLOR_WHITE" "${@}"; }
-gum_green() { gum_style --foreground "$COLOR_GREEN" "${@}"; }
-gum_blue() { gum_style --foreground "$COLOR_BLUE" "${@}"; }
-gum_purple() { gum_style --foreground "$COLOR_PURPLE" "${@}"; }
+gum_white() { gum_style --foreground "$COLOR_WHITE_GUM" "${@}"; }
+gum_green() { gum_style --foreground "$COLOR_GREEN_GUM" "${@}"; }
+gum_blue() { gum_style --foreground "$COLOR_BLUE_GUM" "${@}"; }
+gum_purple() { gum_style --foreground "$COLOR_PURPLE_GUM" "${@}"; }
 
 # Print helper
 print_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
@@ -1563,13 +1563,13 @@ print_fail() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}
 print_mesg() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" "::" "$*"; }
 
 # Print format | ⟲ ⥄ ⇦ ➤ ➜ ≣
-print_format() { local space="$1" color="$2" key="$3" value="$4" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "::" "$(print_filled_space "$space" "$key")" " ➜ " "$value"; }
-print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" "$2" "$3"; }
-print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" "$2" "$3"; }
-print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" "$2" "$3"; }
-print_format_blue() { print_format "$1" "$COLOR_BLUE_BASH" "$2" "$3"; }
-print_format_red() { print_format "$1" "$COLOR_RED_BASH" "$2" "$3"; }
-print_format_purple() { print_format "$1" "$COLOR_PURPLE_BASH" "$2" "$3"; }
+print_format() { local space="$1" color="$2" icon="$3" key="$4" value="$5" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "$icon" "$(print_filled_space "$space" "$key")" " ➜ " "$value"; }
+print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" " " "$2" "$3"; }
+print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" " " "$2" "$3"; }
+print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" " " "$2" "$3"; }
+print_format_blue() { print_format "$1" "$COLOR_BLUE_BASH" " " "$2" "$3"; }
+print_format_red() { print_format "$1" "$COLOR_RED_BASH" " " "$2" "$3"; }
+print_format_purple() { print_format "$1" "$COLOR_PURPLE_BASH" " " "$2" "$3"; }
 print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_blue --bold "$2")"; }
 
 # ///////////////////////////////////////////////////////////////////
@@ -1578,6 +1578,7 @@ print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bol
 
 # https://sw.kovidgoyal.net/kitty/conf/
 kitty_conf_template='
+update_check_interval 0
 hide_window_decorations yes
 remember_window_size true
 initial_window_width 1080

@@ -254,10 +254,11 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 
 ## Credits
 
-- https://archlinux.org
+- https://www.nerdfonts.com/cheat-sheet
 - https://github.com/RaphaelRochet/arch-update
 - https://github.com/Morganamilo/paru
 - https://github.com/kovidgoyal/kitty
 - https://github.com/charmbracelet/gum
 - https://github.com/archlinux-downgrade/downgrade
 - https://meldmerge.org
+- https://archlinux.org
