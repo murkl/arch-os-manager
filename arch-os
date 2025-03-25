@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC2034
 
 set -Eeo pipefail
 
@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.4"
+SCRIPT_VERSION="1.8.5"
 GUM_VERSION="0.16.0"
 KITTY_VERSION="0.40.1"
 
@@ -47,21 +47,33 @@ HEADER_PRINTED="false"
 # INTERNET TEST
 INTERNET_TEST_IP=8.8.8.8
 
-# GUM COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
-COLOR_WHITE_GUM=7
-COLOR_GREEN_GUM=2
-COLOR_BLUE_GUM=4
-COLOR_PURPLE_GUM=212
+# DEFAULT COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
+COLOR_FOREGROUND_DEFAULT=110 # 110 #87afd7
+COLOR_BACKGROUND_DEFAULT=236 # 236 #303030
+
+# GUM COLORS
+COLOR_WHITE_GUM=231  # 231 #ffffff
+COLOR_RED_GUM=167    # 167 #d75f5f
+COLOR_GREEN_GUM=107  # 107 #87af5f
+COLOR_YELLOW_GUM=179 # 179 #d7af5f
+COLOR_BLUE_GUM=67    # 67 #5f87af
+COLOR_PURPLE_GUM=139 # 139 #af87af
+COLOR_CYAN_GUM=110   # 110 #87afd7
+COLOR_ORANGE_GUM=173 # 173 #d7875f
+COLOR_GRAY_GUM=236   # 236 #303030
 
 # BASH COLORS
-COLOR_RESET_BASH="\033[0m"
-COLOR_BOLD_BASH="\033[1m"
-COLOR_WHITE_BASH="\033[37m"
-COLOR_RED_BASH="\033[31m"
-COLOR_GREEN_BASH="\033[32m"
-COLOR_YELLOW_BASH="\033[33m"
-COLOR_BLUE_BASH="\033[34m"
-COLOR_PURPLE_BASH="\033[35m"
+COLOR_WHITE_BASH="\033[38;5;231m"  # 231 #ffffff
+COLOR_RED_BASH="\033[38;5;167m"    # 167 #d75f5f
+COLOR_GREEN_BASH="\033[38;5;107m"  # 107 #87af5f
+COLOR_YELLOW_BASH="\033[38;5;179m" # 179 #d7af5f
+COLOR_BLUE_BASH="\033[38;5;67m"    # 67 #5f87af
+COLOR_PURPLE_BASH="\033[38;5;139m" # 139 #af87af
+COLOR_CYAN_BASH="\033[38;5;110m"   # 110 #87afd7
+COLOR_ORANGE_BASH="\033[38;5;173m" # 173 #d7875f
+COLOR_GRAY_BASH="\033[38;5;236m"   # 236 #303030
+COLOR_BOLD_BASH="\033[1m"          # Bold
+COLOR_RESET_BASH="\033[0m"         # Reset
 
 # ///////////////////////////////////////////////////////////////////
 # MAIN FUNCTION
@@ -275,6 +287,8 @@ init_properties() {
     touch "$ARCH_OS_BLACKLIST"
 
     # Set default properties
+    [ -z "$COLOR_FOREGROUND" ] && COLOR_FOREGROUND="${COLOR_FOREGROUND_DEFAULT}"
+    [ -z "$COLOR_BACKGROUND" ] && COLOR_BACKGROUND="${COLOR_BACKGROUND_DEFAULT}"
     [ -z "$REFLECTOR_COUNTRY" ] && REFLECTOR_COUNTRY="none"
     [ -z "$CONTENT_MAX_WIDTH" ] && CONTENT_MAX_WIDTH="110"
     [ -z "$CONTENT_MAX_HEIGHT" ] && CONTENT_MAX_HEIGHT="16"
@@ -297,6 +311,33 @@ init_properties() {
     [ -z "$DASHBOARD_SHOW_SERVICES" ] && DASHBOARD_SHOW_SERVICES="false"
     [ -z "$DASHBOARD_SHOW_USER_SERVICES" ] && DASHBOARD_SHOW_USER_SERVICES="false"
     [ -z "$DASHBOARD_SHOW_TIMESTAMP" ] && DASHBOARD_SHOW_TIMESTAMP="true"
+
+    # Export GUM Colors
+    # Choose
+    export GUM_CHOOSE_CURSOR_FOREGROUND="${COLOR_FOREGROUND}"
+    export GUM_CHOOSE_SELECTED_FOREGROUND="${COLOR_FOREGROUND}"
+    export GUM_CHOOSE_CURSOR="${COLOR_FOREGROUND}"
+    export GUM_CHOOSE_HEADER_FOREGROUND="${COLOR_FOREGROUND}"
+
+    # Filter
+    export GUM_FILTER_INDICATOR_FOREGROUND="${COLOR_FOREGROUND}"
+    export GUM_FILTER_MATCH_FOREGROUND="${COLOR_FOREGROUND}"
+    export GUM_FILTER_CURSOR_FOREGROUND="${COLOR_FOREGROUND}"
+
+    # Input
+    export GUM_INPUT_CURSOR_FOREGROUND="${COLOR_FOREGROUND}"
+    export GUM_INPUT_PROMPT_FOREGROUND="${COLOR_FOREGROUND}"
+
+    # Spin
+    export GUM_SPIN_SPINNER_FOREGROUND="${COLOR_FOREGROUND}"
+
+    # Write
+    export GUM_WRITE_CURSOR_FOREGROUND="${COLOR_FOREGROUND}"
+
+    # Confirm
+    export GUM_CONFIRM_SELECTED_FOREGROUND="${COLOR_BACKGROUND}"
+    export GUM_CONFIRM_SELECTED_BACKGROUND="${COLOR_FOREGROUND}"
+    export GUM_CONFIRM_PROMPT_FOREGROUND="${COLOR_FOREGROUND}"
 
     return 0
 }
@@ -366,6 +407,8 @@ persist_properties() {
     fi
 
     { # Write properties
+        echo "COLOR_FOREGROUND=${COLOR_FOREGROUND}"
+        echo "COLOR_BACKGROUND=${COLOR_BACKGROUND}"
         echo "CONTENT_MAX_WIDTH=${CONTENT_MAX_WIDTH}"
         echo "CONTENT_MAX_HEIGHT=${CONTENT_MAX_HEIGHT}"
         echo "REFLECTOR_COUNTRY=${REFLECTOR_COUNTRY}"
@@ -575,7 +618,7 @@ show_news_info() { # Show Arch Linux News
 
         # Print news
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && print_green_bold "$(print_news_value "$i" 1)  $(print_news_value "$i" 3)" && continue
+            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && print_purple_bold "$(print_news_value "$i" 1)  $(print_news_value "$i" 3)" && continue
             print_white "$(print_news_value "$i" 1)  $(print_news_value "$i" 3)"
         done
 
@@ -632,8 +675,8 @@ show_update_info() { # Show package updates
 
     # Print updates
     while IFS=',' read -r manager package version update; do
-        printf "${COLOR_BOLD_BASH}  ${COLOR_BOLD_BASH}%-${pkg_length}s  ${COLOR_RESET_BASH}%-${version_length}s  %-3s  ${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%-${update_length}s  ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%-s  ${COLOR_RESET_BASH}%-${manager_length}s\n" \
-            "$package" "$version" "➜" "$update" "" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣
+        printf "${COLOR_BOLD_BASH}  ${COLOR_BOLD_BASH}%-${pkg_length}s  ${COLOR_RESET_BASH}${COLOR_PURPLE_BASH}%-${version_length}s  ${COLOR_RESET_BASH}%-3s  ${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%-${update_length}s  ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%-s  ${COLOR_RESET_BASH}%-${manager_length}s\n" \
+            "$package" "$version" "" "$update" "" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣ 󰁕 
     done <"$UPDATES_DB"
 }
 
@@ -1041,13 +1084,13 @@ show_dashboard() { # Dashboard
         # Show service health
         if [ "$DASHBOARD_SHOW_SERVICES" = "true" ]; then
             print_title "System Services"
-            print_system_services | while read -r line; do print_green "${line}"; done
+            print_system_services | while read -r line; do print_blue "${line}"; done
             echo
         fi
 
         if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
             print_title "User Services"
-            print_user_services | while read -r line; do print_green "${line}"; done
+            print_user_services | while read -r line; do print_blue "${line}"; done
             echo
         fi
 
@@ -1066,8 +1109,8 @@ show_dashboard() { # Dashboard
 
         if [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
             echo && print_title "Local Information"
-            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Database" "${LATEST_UPDATE_CHECK:-Unavailable}"  #  󱘿 
-            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE:-Unavailable}" #  󱍸
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Database" "${LATEST_UPDATE_CHECK:-unavailable}"  #  󱘿 
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE:-unavailable}" #  󱍸
         fi
 
         echo && show_health_info
@@ -1210,7 +1253,7 @@ show_upgrade() { # Update packages
 show_orphans() { # Remove orphaned packages
     print_title "Remove Package Orphans"
     local txt="Removes packages that are no longer required by any installed package. This action helps keep the system clean and frees up disk space. It's recommended to run this periodically, especially after uninstalling software."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM" --foreground "$COLOR_WHITE_GUM"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
     clear_screen && print_header
     print_title "Remove Package Orphans"
@@ -1283,7 +1326,7 @@ show_merge() { # Merge updated config files
     fi
     print_title "Merge Pacdiff Configurations"
     local txt="Combines new configuration files with existing ones after package updates. This is necessary when pacman creates .pacnew files during updates to preserve user modifications. Use this action after system upgrades to ensure configurations are up-to-date."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
     clear_screen && print_header
     print_title "Merge Pacdiff Configurations"
@@ -1312,7 +1355,7 @@ show_refresh() { # Refresh mirrorlist with reflector
     fi
     print_title "Refresh Pacman Mirrorlist"
     local txt="Updates the list of package repositories for faster and more reliable downloads. This action is useful when experiencing slow download speeds or when mirrors become unresponsive. It's recommended to refresh the mirrorlist periodically or when changing locations."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
     clear_screen && print_header
     print_title "New Pacman Mirrorlist"
@@ -1365,7 +1408,7 @@ show_downgrade() { # Downgrade packages
     fi
     print_title "Downgrade Pacman Packages"
     local txt="Reverts official Arch packages to a previous version. This action is helpful when a recent update causes issues or incompatibilities. Use it cautiously and only when necessary, as it can lead to system instability."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
     clear_screen && print_header
     print_title "Downgrade Pacman Packages"
@@ -1392,7 +1435,7 @@ show_downgrade() { # Downgrade packages
 show_clear_cache() { # Clear package cache
     print_title "Clear Package Cache"
     local txt="Removes old versions of installed packages from the package manager cache. This frees up disk space and is recommended periodically, especially on systems with limited storage. However, keeping some old versions can be useful for potential rollbacks."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
     clear_screen && print_header
     print_title "Clear Package Cache"
@@ -1408,7 +1451,7 @@ show_clear_cache() { # Clear package cache
 show_reset_pacman() { # Reset Pacman (if update failed, try to reset & reinit keyring)
     print_title "Reset Pacman Keyring"
     local txt="Restores pacman to its default state, clearing any errors or corrupted databases. This action resets the pacman keyring, removing all installed keys and re-initializing them. Use it as a troubleshooting step when encountering persistent pacman errors or keyring issues. Followed by a system update to ensure all packages are up-to-date and the system is stable."
-    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2" --border-foreground "$COLOR_PURPLE_GUM"
+    echo "$txt" | fold -s -w "$CONTENT_MAX_WIDTH" | gum_style --border rounded --margin "0 0" --padding "1 2"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
     clear_screen && print_header
     print_title "Reset Pacman Keyring"
@@ -1443,6 +1486,8 @@ show_config() { # Config
     if gum_write --show-line-numbers --height="$line_count" --value="$(<"$ARCH_OS_CONF")" >"${ARCH_OS_CONF}.new"; then
         # If success: save/move file and re-init properties
         mv "${ARCH_OS_CONF}.new" "${ARCH_OS_CONF}" && init_properties && persist_properties
+        clear_screen && print_header
+        print_title "Edit Configuration"
         print_no_internet_info || return 3
         ! gum_spin --title 'Synchronize Database. Please wait...' -- bash -c "${SELF} --sync news packages updates" && print_red "Synchronize Database (news, packages, updates) failed" && return 3
         refresh_state
@@ -1463,7 +1508,7 @@ show_help() { # Print help page
     print_title 'GitHub'
     print_white 'https://github.com/murkl/arch-os-manager' && echo
     print_title 'Usage'
-    print_green_bold 'arch-os [--kitty | -k] [action]' && echo
+    print_purple_bold 'arch-os [--kitty | -k] [action]' && echo
     print_title 'App Actions'
     print_white 'help             ➜  Open help page'
     print_white 'version          ➜  Print version info'
@@ -1507,7 +1552,7 @@ print_header() {
     # 
     # •
     if [ "$HEADER_PRINTED" = "false" ]; then
-        clear && printf '\e[3J' && gum_purple '
+        clear && printf '\e[3J' && gum_main '
  █████  ██████   ██████ ██   ██      ██████  ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
 ███████ ██████  ██      ███████     ██    ██ ███████ 
@@ -1540,32 +1585,33 @@ clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear an
 # Gum wrapper
 gum_style() { gum style "${@}"; }
 gum_join() { gum join "${@}"; }
-gum_filter() { gum filter --width="120" --prompt "  " --indicator " " --header.foreground "$COLOR_PURPLE_GUM" "${@}"; }
+gum_filter() { gum filter --width="120" --prompt "  " --indicator " " "${@}"; }
 gum_write() { gum write --width="120" --prompt="" --char-limit 0 "${@}"; }
 gum_choose() { gum choose --no-show-help --header="" --cursor "  " "${@}"; }
-gum_input() { gum input --no-show-help --prompt "  " --prompt.foreground "$COLOR_PURPLE_GUM" --header.foreground "$COLOR_PURPLE_GUM" "${@}"; }
+gum_input() { gum input --no-show-help --prompt "  " "${@}"; }
 gum_spin() { gum spin --spinner dot "${@}"; }
-gum_confirm() { gum confirm --no-show-help --prompt.foreground "$COLOR_PURPLE_GUM" "$@"; }
+gum_confirm() { gum confirm --no-show-help "$@"; }
 gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
 
 # Gum colors
+gum_main() { gum_style --foreground "$COLOR_FOREGROUND" "${@}"; }
 gum_white() { gum_style --foreground "$COLOR_WHITE_GUM" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN_GUM" "${@}"; }
 gum_blue() { gum_style --foreground "$COLOR_BLUE_GUM" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE_GUM" "${@}"; }
 
 # Print helper
-print_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "${*}")"; }
-print_green() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
-print_green_bold() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
-print_purple() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
-print_yellow() { printf "${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
-print_red() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "${*}")"; }
 print_white() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_red() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_green() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_yellow() { printf "${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_purple() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_purple_bold() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 
 # Print format | ⟲ ⥄ ⇦ ➤ ➜ ≣
 print_format() { local space="$1" color="$2" icon="$3" key="$4" value="$5" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "$icon" "$(print_filled_space "$space" "$key")" " ➜ " "$value"; }
-print_format_title() { gum_join "$(gum_purple --bold "// ")" "$(gum_purple --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_blue --bold "$2")"; }
+print_format_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_blue --bold "$2")"; }
 print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" " " "$2" "$3"; }
 print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" " " "$2" "$3"; }
 print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" " " "$2" "$3"; }
