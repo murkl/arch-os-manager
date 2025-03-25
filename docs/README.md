@@ -169,6 +169,8 @@ Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/et
 Edit the config with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
+COLOR_FOREGROUND=108                  # Color foreground (see color chart)
+COLOR_BACKGROUND=236                  # Color background (see color chart)
 CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 50)
 CONTENT_MAX_HEIGHT=16                 # Max lines in packages & downgrade (max: 100)
 REFLECTOR_COUNTRY=none                # Set prefered reflector country (example: Germany,France)
@@ -192,6 +194,8 @@ DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disa
 DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
 DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: false)
 ```
+
+<p><img src="./color-chart.png"></p>
 
 ### Configuration Files
 
@@ -254,6 +258,7 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 
 ## Credits
 
+- https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
 - https://www.nerdfonts.com/cheat-sheet
 - https://github.com/RaphaelRochet/arch-update
 - https://github.com/Morganamilo/paru
