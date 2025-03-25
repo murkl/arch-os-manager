@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.3"
+SCRIPT_VERSION="1.8.4"
 GUM_VERSION="0.16.0"
 KITTY_VERSION="0.40.1"
 
@@ -1064,10 +1064,10 @@ show_dashboard() { # Dashboard
 
         show_update_info
 
-        if [ -n "$LATEST_UPDATE_CHECK" ] && [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
+        if [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
             echo && print_title "Local Information"
-            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Database" "${LATEST_UPDATE_CHECK}" #  󱘿 
-            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE}" #  󱍸
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Database" "${LATEST_UPDATE_CHECK:-Unavailable}"  #  󱘿 
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE:-Unavailable}" #  󱍸
         fi
 
         echo && show_health_info
