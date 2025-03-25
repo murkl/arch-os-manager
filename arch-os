@@ -1066,8 +1066,8 @@ show_dashboard() { # Dashboard
 
         if [ -n "$LATEST_UPDATE_CHECK" ] && [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
             echo && print_title "Local Information"
-            print_format 18 "$COLOR_WHITE_BASH" " " "Database Timestamp" "${LATEST_UPDATE_CHECK}" #  󱘿 
-            print_format 18 "$COLOR_WHITE_BASH" " " "Upgrade Timestamp" "${LATEST_SYSTEM_UPGRADE}"
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Database" "${LATEST_UPDATE_CHECK}" #  󱘿 
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE}"
         fi
 
         echo && show_health_info
