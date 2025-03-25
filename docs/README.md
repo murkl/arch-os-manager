@@ -195,7 +195,13 @@ DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health
 DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: false)
 ```
 
+<details>
+
+<summary style="font-weight: bold;" id="color-chart">Color Chart</summary>
+
 <p><img src="./color-chart.png"></p>
+
+</details>
 
 ### Configuration Files
 
@@ -225,9 +231,11 @@ dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty
 dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
 ```
 
-<div align="center">
+<details>
 
-## Screenshots
+<summary><h2 style="display: inline;" id="screenshots">Screenshots</h2></summary>
+
+<div align="center">
 
 <sub><b>This screenshots may outdated.</b></sub>
 
@@ -240,7 +248,13 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 </div>
 
-## Development
+</details>
+
+<br>
+
+<details>
+
+<summary><h2 style="display: inline;" id="development">Development</h2></summary>
 
 ```
 # Start with custom binaries (gum & kitty)
@@ -256,7 +270,13 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 ./arch-os --sync
 ```
 
-## Credits
+</details>
+
+<br>
+
+<details>
+
+<summary><h2 style="display: inline;" id="credits">Credits</h2></summary>
 
 - https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
 - https://www.nerdfonts.com/cheat-sheet
@@ -267,3 +287,5 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 - https://github.com/archlinux-downgrade/downgrade
 - https://meldmerge.org
 - https://archlinux.org
+
+</details>
