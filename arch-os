@@ -617,7 +617,7 @@ show_update_info() { # Show package updates
 
     # Check if updates available
     if ! [ -s "$UPDATES_DB" ]; then
-        gum_join "$(gum_green --bold "󰕥  ")" "$(gum_green --bold "Your system is up to date")" # 󰕥   󰄴      󰾩  
+        gum_join "$(gum_green --bold "󰕥  ")" "$(gum_white --bold "Your system is up to date")" # 󰕥   󰄴      󰾩  
         return 0
     fi
 
@@ -1067,7 +1067,7 @@ show_dashboard() { # Dashboard
         if [ -n "$LATEST_UPDATE_CHECK" ] && [ "$DASHBOARD_SHOW_TIMESTAMP" = "true" ]; then
             echo && print_title "Local Information"
             print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Database" "${LATEST_UPDATE_CHECK}" #  󱘿 
-            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE}"
+            print_format 18 "$COLOR_WHITE_BASH" " " "Timestamp Upgrade" "${LATEST_SYSTEM_UPGRADE}" #  󱍸
         fi
 
         echo && show_health_info
