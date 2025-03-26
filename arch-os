@@ -323,6 +323,7 @@ init_properties() {
     export GUM_FILTER_INDICATOR_FOREGROUND="${COLOR_FOREGROUND}"
     export GUM_FILTER_MATCH_FOREGROUND="${COLOR_FOREGROUND}"
     export GUM_FILTER_CURSOR_FOREGROUND="${COLOR_FOREGROUND}"
+    export GUM_FILTER_UNSELECTED_PREFIX_FOREGROUND="${COLOR_FOREGROUND}"
 
     # Input
     export GUM_INPUT_CURSOR_FOREGROUND="${COLOR_FOREGROUND}"
@@ -830,7 +831,7 @@ show_package_manager() { # Search & manage packages
                 [ -z "$filter_pkgs_results" ] && print_yellow "No Results" && return 3
             fi
 
-            print_format_blue 11 "Search Filter" "$search_filter"
+            print_format_purple 11 "Search Filter" "$search_filter"
 
             mapfile -t search_result_array < <(echo "$filter_pkgs_results")
             if ! pkg_name_filter=$(gum_filter --limit 1 --height "$CONTENT_MAX_HEIGHT" --placeholder "Result: ${#search_result_array[@]}" "${search_result_array[@]}"); then
