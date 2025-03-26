@@ -169,9 +169,9 @@ Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/et
 Edit the config with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
-COLOR_FOREGROUND=108                  # Color foreground (see color chart)
+COLOR_FOREGROUND=110                  # Color foreground (see color chart)
 COLOR_BACKGROUND=236                  # Color background (see color chart)
-CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 50)
+CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 80)
 CONTENT_MAX_HEIGHT=16                 # Max lines in packages & downgrade (max: 100)
 REFLECTOR_COUNTRY=none                # Set prefered reflector country (example: Germany,France)
 ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)

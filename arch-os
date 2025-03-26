@@ -48,30 +48,30 @@ HEADER_PRINTED="false"
 INTERNET_TEST_IP=8.8.8.8
 
 # DEFAULT COLORS (https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
-COLOR_FOREGROUND_DEFAULT=110 # 110 #87afd7
-COLOR_BACKGROUND_DEFAULT=236 # 236 #303030
+COLOR_FOREGROUND_DEFAULT=110 # #87afd7
+COLOR_BACKGROUND_DEFAULT=236 # #303030
 
 # GUM COLORS
-COLOR_WHITE_GUM=231  # 231 #ffffff
-COLOR_RED_GUM=167    # 167 #d75f5f
-COLOR_GREEN_GUM=107  # 107 #87af5f
-COLOR_YELLOW_GUM=179 # 179 #d7af5f
-COLOR_BLUE_GUM=67    # 67 #5f87af
-COLOR_PURPLE_GUM=139 # 139 #af87af
-COLOR_CYAN_GUM=110   # 110 #87afd7
-COLOR_ORANGE_GUM=173 # 173 #d7875f
-COLOR_GRAY_GUM=236   # 236 #303030
+COLOR_WHITE_GUM=231  #  #ffffff
+COLOR_RED_GUM=167    #  #d75f5f
+COLOR_GREEN_GUM=108  #  #87af87
+COLOR_YELLOW_GUM=179 #  #d7af5f
+COLOR_BLUE_GUM=67    #  #5f87af
+COLOR_PURPLE_GUM=139 #  #af87af
+COLOR_CYAN_GUM=110   #  #87afd7
+COLOR_ORANGE_GUM=173 #  #d7875f
+COLOR_GRAY_GUM=236   #  #303030
 
 # BASH COLORS
-COLOR_WHITE_BASH="\033[38;5;231m"  # 231 #ffffff
-COLOR_RED_BASH="\033[38;5;167m"    # 167 #d75f5f
-COLOR_GREEN_BASH="\033[38;5;107m"  # 107 #87af5f
-COLOR_YELLOW_BASH="\033[38;5;179m" # 179 #d7af5f
-COLOR_BLUE_BASH="\033[38;5;67m"    # 67 #5f87af
-COLOR_PURPLE_BASH="\033[38;5;139m" # 139 #af87af
-COLOR_CYAN_BASH="\033[38;5;110m"   # 110 #87afd7
-COLOR_ORANGE_BASH="\033[38;5;173m" # 173 #d7875f
-COLOR_GRAY_BASH="\033[38;5;236m"   # 236 #303030
+COLOR_WHITE_BASH="\033[38;5;231m"  #  #ffffff
+COLOR_RED_BASH="\033[38;5;167m"    #  #d75f5f
+COLOR_GREEN_BASH="\033[38;5;108m"  #  #87af87
+COLOR_YELLOW_BASH="\033[38;5;179m" #  #d7af5f
+COLOR_BLUE_BASH="\033[38;5;67m"    #  #5f87af
+COLOR_PURPLE_BASH="\033[38;5;139m" #  #af87af
+COLOR_CYAN_BASH="\033[38;5;110m"   #  #87afd7
+COLOR_ORANGE_BASH="\033[38;5;173m" #  #d7875f
+COLOR_GRAY_BASH="\033[38;5;236m"   #  #303030
 COLOR_BOLD_BASH="\033[1m"          # Bold
 COLOR_RESET_BASH="\033[0m"         # Reset
 
@@ -350,7 +350,7 @@ persist_properties() {
     [ "$NEWS_QUANTITY" -gt 10 ] && NEWS_QUANTITY="10"             # Set to max 10
     [ "$NEWS_QUANTITY" -lt 0 ] && NEWS_QUANTITY="0"               # Set to min 0
     [ "$CONTENT_MAX_WIDTH" -gt 500 ] && CONTENT_MAX_WIDTH="500"   # Set to max 500
-    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="50"     # Set to min 50
+    [ "$CONTENT_MAX_WIDTH" -lt 50 ] && CONTENT_MAX_WIDTH="80"     # Set to min 80
     [ "$CONTENT_MAX_HEIGHT" -gt 100 ] && CONTENT_MAX_HEIGHT="100" # Set to max 100
     [ "$CONTENT_MAX_HEIGHT" -lt 5 ] && CONTENT_MAX_HEIGHT="5"     # Set to min 5
 
@@ -618,7 +618,7 @@ show_news_info() { # Show Arch Linux News
 
         # Print news
         for ((i = 1; i <= NEWS_QUANTITY; i++)); do
-            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && print_purple_bold "$(print_news_value "$i" 1)  $(print_news_value "$i" 3)" && continue
+            [ "$i" = "1" ] && [ "$unread_news" = "true" ] && print_green_bold "$(print_news_value "$i" 1)  $(print_news_value "$i" 3)" && continue
             print_white "$(print_news_value "$i" 1)  $(print_news_value "$i" 3)"
         done
 
@@ -675,8 +675,8 @@ show_update_info() { # Show package updates
 
     # Print updates
     while IFS=',' read -r manager package version update; do
-        printf "${COLOR_BOLD_BASH}  ${COLOR_BOLD_BASH}%-${pkg_length}s  ${COLOR_RESET_BASH}${COLOR_PURPLE_BASH}%-${version_length}s  ${COLOR_RESET_BASH}%-3s  ${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%-${update_length}s  ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%-s  ${COLOR_RESET_BASH}%-${manager_length}s\n" \
-            "$package" "$version" "" "$update" "" "$manager" # ⟲ ⥄ ⇦ ➤ ➜ ≣ 󰁕 
+        printf "${COLOR_BOLD_BASH}  ${COLOR_BOLD_BASH}%-${pkg_length}s  ${COLOR_RESET_BASH}${COLOR_WHITE_BASH}%-${version_length}s  ${COLOR_RESET_BASH}%-3s  ${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%-${update_length}s  ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%-s  ${COLOR_RESET_BASH}%-${manager_length}s\n" \
+            "$package" "$version" "󰜷" "$update" "" "$manager" # ⟲ ⥄ ⇦ ➤ 󰜴 ≣    
     done <"$UPDATES_DB"
 }
 
@@ -894,6 +894,7 @@ show_package_manager() { # Search & manage packages
             print_format_white 18 "$(print_filled_space "AUR Maintainer")" "$(print_package_value "$pkg_info_remote" "Maintainer")"
             print_format_white 18 "$(print_filled_space "AUR Votes")" "$(print_package_value "$pkg_info_remote" "Votes")"
             print_format_white 18 "$(print_filled_space "AUR Popularity")" "$(print_package_value "$pkg_info_remote" "Popularity")"
+            #print_format_white 18 "$(print_filled_space "AUR Modified")" "$(print_package_value "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
             print_format_white 18 "$(print_filled_space "AUR Modified")" "$(print_package_value "$pkg_info_remote" "Last Modified" | date -f - "+%Y-%m-%d %H:%M")"
 
             # Check outdated packages
@@ -1084,13 +1085,13 @@ show_dashboard() { # Dashboard
         # Show service health
         if [ "$DASHBOARD_SHOW_SERVICES" = "true" ]; then
             print_title "System Services"
-            print_system_services | while read -r line; do print_blue "${line}"; done
+            print_system_services | while read -r line; do print_green "${line}"; done
             echo
         fi
 
         if [ "$DASHBOARD_SHOW_USER_SERVICES" = "true" ]; then
             print_title "User Services"
-            print_user_services | while read -r line; do print_blue "${line}"; done
+            print_user_services | while read -r line; do print_green "${line}"; done
             echo
         fi
 
@@ -1508,24 +1509,24 @@ show_help() { # Print help page
     print_title 'GitHub'
     print_white 'https://github.com/murkl/arch-os-manager' && echo
     print_title 'Usage'
-    print_purple_bold 'arch-os [--kitty | -k] [action]' && echo
+    print_green_bold 'arch-os [--kitty | -k] [action]' && echo
     print_title 'App Actions'
-    print_white 'help             ➜  Open help page'
-    print_white 'version          ➜  Print version info'
-    print_white 'config           ➜  Edit config in built-in ediitor' && echo
+    print_white 'help             󰜴  Open help page'
+    print_white 'version          󰜴  Print version info'
+    print_white 'config           󰜴  Edit config in built-in ediitor' && echo
     print_title 'System Actions'
-    print_white 'check            ➜  Print package updates (checkupdates)'
-    print_white 'notify           ➜  Notify on new package updates (autostart)'
-    print_white 'dashboard        ➜  Show dashboard (logs, services, health)'
-    print_white 'upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)'
-    print_white 'package          ➜  Search & manage packages (pacman, aur)'
-    print_white 'service          ➜  Manage services (system & user)'
-    print_white 'orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)'
-    print_white 'merge            ➜  Merge updated configurations (pacdiff, meld)'
-    print_white 'refresh          ➜  Refresh & edit pacman mirrorlist (reflector)'
-    print_white 'downgrade        ➜  Downgrade packages (pacman)'
-    print_white 'cache            ➜  Clear package cache (pacman, aur)'
-    print_white 'reset            ➜  Reset pacman keyring & upgrade (pacman)'
+    print_white 'check            󰜴  Print package updates (checkupdates)'
+    print_white 'notify           󰜴  Notify on new package updates (autostart)'
+    print_white 'dashboard        󰜴  Show dashboard (logs, services, health)'
+    print_white 'upgrade          󰜴  System upgrade (news, health, pacman, aur, flatpak)'
+    print_white 'package          󰜴  Search & manage packages (pacman, aur)'
+    print_white 'service          󰜴  Manage services (system & user)'
+    print_white 'orphans          󰜴  Remove orphaned packages (pacman, aur, flatpak)'
+    print_white 'merge            󰜴  Merge updated configurations (pacdiff, meld)'
+    print_white 'refresh          󰜴  Refresh & edit pacman mirrorlist (reflector)'
+    print_white 'downgrade        󰜴  Downgrade packages (pacman)'
+    print_white 'cache            󰜴  Clear package cache (pacman, aur)'
+    print_white 'reset            󰜴  Reset pacman keyring & upgrade (pacman)'
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -1604,14 +1605,15 @@ gum_purple() { gum_style --foreground "$COLOR_PURPLE_GUM" "${@}"; }
 print_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "${*}")"; }
 print_white() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 print_red() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
-print_green() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_blue() { printf "${COLOR_BOLD_BASH}${COLOR_BLUE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 print_yellow() { printf "${COLOR_BOLD_BASH}${COLOR_YELLOW_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 print_purple() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
-print_purple_bold() { printf "${COLOR_BOLD_BASH}${COLOR_PURPLE_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_green() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
+print_green_bold() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RESET_BASH}${COLOR_BOLD_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 
-# Print format | ⟲ ⥄ ⇦ ➤ ➜ ≣
-print_format() { local space="$1" color="$2" icon="$3" key="$4" value="$5" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "$icon" "$(print_filled_space "$space" "$key")" " ➜ " "$value"; }
-print_format_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "$1")" "$(gum_white --bold "  ➜  ")" "$(gum_blue --bold "$2")"; }
+# Print format | ⟲ ⥄ ⇦ ➤ 󰜴 ≣
+print_format() { local space="$1" color="$2" icon="$3" key="$4" value="$5" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "$icon" "$(print_filled_space "$space" "$key")" " 󰜴 " "$value"; }
+print_format_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "$1")" "$(gum_white --bold "  󰜴  ")" "$(gum_purple --bold "$2")"; }
 print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" " " "$2" "$3"; }
 print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" " " "$2" "$3"; }
 print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" " " "$2" "$3"; }
