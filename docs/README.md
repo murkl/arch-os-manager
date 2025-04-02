@@ -169,7 +169,9 @@ Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/et
 Edit the config with the built-in editor in Arch OS Manager or edit the config file manually.
 
 ```
-CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 50)
+COLOR_FOREGROUND=110                  # Color foreground (see color chart)
+COLOR_BACKGROUND=236                  # Color background (see color chart)
+CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 80)
 CONTENT_MAX_HEIGHT=16                 # Max lines in packages & downgrade (max: 100)
 REFLECTOR_COUNTRY=none                # Set prefered reflector country (example: Germany,France)
 ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)
@@ -192,6 +194,16 @@ DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disa
 DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
 DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: false)
 ```
+
+<details>
+
+<summary style="font-weight: bold;" id="color-chart">Color Chart</summary>
+
+<p><img src="./color-chart.png"></p>
+
+Source: [Link](https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
+
+</details>
 
 ### Configuration Files
 
@@ -221,22 +233,28 @@ dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty
 dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
 ```
 
-<div align="center">
+<details>
 
-## Screenshots
+<summary><h2 style="display: inline;" id="screenshots">Screenshots</h2></summary>
+
+<div align="center">
 
 <sub><b>This screenshots may outdated.</b></sub>
 
+
 <p><img src="./screenshots/notification.png"></p>
-<p><img src="./screenshots/upgrade.png"></p>
 <p><img src="./screenshots/dashboard.png"></p>
-<p><img src="./screenshots/pkg.png"></p>
-<p><img src="./screenshots/refresh.png"></p>
-<p><img src="./screenshots/uptodate.png"></p>
+<p><img src="./screenshots/health.png"></p>
+<p><img src="./screenshots/upgrade.png"></p>
+<p><img src="./screenshots/package.png"></p>
 
 </div>
 
-## Development
+</details>
+
+<details>
+
+<summary><h2 style="display: inline;" id="development">Development</h2></summary>
 
 ```
 # Start with custom binaries (gum & kitty)
@@ -252,7 +270,11 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 ./arch-os --sync
 ```
 
-## Credits
+</details>
+
+<details>
+
+<summary><h2 style="display: inline;" id="credits">Credits</h2></summary>
 
 - https://www.nerdfonts.com/cheat-sheet
 - https://github.com/RaphaelRochet/arch-update
@@ -262,3 +284,5 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 - https://github.com/archlinux-downgrade/downgrade
 - https://meldmerge.org
 - https://archlinux.org
+
+</details>
