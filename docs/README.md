@@ -201,7 +201,7 @@ DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: f
 
 <p><img src="./color-chart.png"></p>
 
-**Source: [Link](https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)**
+Source: [Link](https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
 
 </details>
 
@@ -241,12 +241,12 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
+
 <p><img src="./screenshots/notification.png"></p>
-<p><img src="./screenshots/upgrade.png"></p>
 <p><img src="./screenshots/dashboard.png"></p>
-<p><img src="./screenshots/pkg.png"></p>
-<p><img src="./screenshots/refresh.png"></p>
-<p><img src="./screenshots/uptodate.png"></p>
+<p><img src="./screenshots/health.png"></p>
+<p><img src="./screenshots/upgrade.png"></p>
+<p><img src="./screenshots/package.png"></p>
 
 </div>
 
