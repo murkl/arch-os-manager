@@ -201,6 +201,8 @@ DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: f
 
 <p><img src="./color-chart.png"></p>
 
+**Source: [Link](https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)**
+
 </details>
 
 ### Configuration Files
@@ -274,7 +276,6 @@ GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 
 <summary><h2 style="display: inline;" id="credits">Credits</h2></summary>
 
-- https://github.com/muesli/termenv?tab=readme-ov-file#color-chart
 - https://www.nerdfonts.com/cheat-sheet
 - https://github.com/RaphaelRochet/arch-update
 - https://github.com/Morganamilo/paru

@@ -339,7 +339,7 @@ init_properties() {
     export GUM_CONFIRM_SELECTED_BACKGROUND="${COLOR_FOREGROUND}"
     export GUM_CONFIRM_PROMPT_FOREGROUND="${COLOR_FOREGROUND}"
     export GUM_CONFIRM_UNSELECTED_FOREGROUND="${COLOR_FOREGROUND}"
-    export GUM_CONFIRM_UNSELECTED_BACKGROUND="${COLOR_BACKGROUND}"
+    #export GUM_CONFIRM_UNSELECTED_BACKGROUND="${COLOR_BLACK_GUM}"
 
     return 0
 }
@@ -878,7 +878,7 @@ show_package_manager() { # Search & manage packages
         if [ "$pkg_repo" = "core" ] || [ "$pkg_repo" = "extra" ]; then
             print_format_white 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
         elif [ "$pkg_repo" = "aur" ]; then
-            print_format_blue 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
+            print_format_cyan 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
         else
             print_format_yellow 18 "$(print_filled_space "Package")" "${pkg_repo}/${pkg_name}"
         fi
@@ -1555,7 +1555,7 @@ print_header() {
     # 
     # •
     if [ "$HEADER_PRINTED" = "false" ]; then
-        clear && printf '\e[3J' && gum_main '
+        clear && printf '\e[3J' && gum_foreground '
  █████  ██████   ██████ ██   ██      ██████  ███████ 
 ██   ██ ██   ██ ██      ██   ██     ██    ██ ██      
 ███████ ██████  ██      ███████     ██    ██ ███████ 
@@ -1597,14 +1597,14 @@ gum_confirm() { gum confirm --no-show-help "$@"; }
 gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
 
 # Gum colors
-gum_main() { gum_style --foreground "$COLOR_FOREGROUND" "${@}"; }
+gum_foreground() { gum_style --foreground "$COLOR_FOREGROUND" "${@}"; }
 gum_white() { gum_style --foreground "$COLOR_WHITE_GUM" "${@}"; }
 gum_green() { gum_style --foreground "$COLOR_GREEN_GUM" "${@}"; }
 gum_blue() { gum_style --foreground "$COLOR_BLUE_GUM" "${@}"; }
 gum_purple() { gum_style --foreground "$COLOR_PURPLE_GUM" "${@}"; }
 
 # Print helper
-print_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "${*}")"; }
+print_title() { gum_join "$(gum_foreground --bold "// ")" "$(gum_foreground --bold "${*}")"; }
 print_white() { printf "${COLOR_BOLD_BASH}${COLOR_WHITE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 print_red() { printf "${COLOR_BOLD_BASH}${COLOR_RED_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
 print_blue() { printf "${COLOR_BOLD_BASH}${COLOR_BLUE_BASH}%s ${COLOR_RESET_BASH}%s${COLOR_RESET_BASH}\n" " " "$*"; }
@@ -1615,11 +1615,12 @@ print_green_bold() { printf "${COLOR_BOLD_BASH}${COLOR_GREEN_BASH}%s ${COLOR_RES
 
 # Print format | ⟲ ⥄ ⇦ ➤ 󰜴 ≣
 print_format() { local space="$1" color="$2" icon="$3" key="$4" value="$5" && printf "${COLOR_BOLD_BASH}${color}%s${COLOR_RESET_BASH} %s ${COLOR_BOLD_BASH}%s ${color}%s ${COLOR_RESET_BASH}\n" "$icon" "$(print_filled_space "$space" "$key")" " 󰜴 " "$value"; }
-print_format_title() { gum_join "$(gum_main --bold "// ")" "$(gum_main --bold "$1")" "$(gum_white --bold "  󰜴  ")" "$(gum_purple --bold "$2")"; }
+print_format_title() { gum_join "$(gum_foreground --bold "// ")" "$(gum_foreground --bold "$1")" "$(gum_white --bold "  󰜴  ")" "$(gum_purple --bold "$2")"; }
 print_format_white() { print_format "$1" "$COLOR_WHITE_BASH" " " "$2" "$3"; }
 print_format_green() { print_format "$1" "$COLOR_GREEN_BASH" " " "$2" "$3"; }
 print_format_yellow() { print_format "$1" "$COLOR_YELLOW_BASH" " " "$2" "$3"; }
 print_format_blue() { print_format "$1" "$COLOR_BLUE_BASH" " " "$2" "$3"; }
+print_format_cyan() { print_format "$1" "$COLOR_CYAN_BASH" " " "$2" "$3"; }
 print_format_red() { print_format "$1" "$COLOR_RED_BASH" " " "$2" "$3"; }
 print_format_purple() { print_format "$1" "$COLOR_PURPLE_BASH" " " "$2" "$3"; }
 
