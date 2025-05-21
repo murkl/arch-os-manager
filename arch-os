@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.5"
+SCRIPT_VERSION="1.8.6"
 GUM_VERSION="0.16.0"
 KITTY_VERSION="0.41.0"
 
@@ -25,6 +25,7 @@ ARCH_OS_BIN="${ARCH_OS_HOME}/bin"
 # ENVIRONMENT
 : "${KITTY:=${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-x86_64/bin/kitty}"
 : "${GUM:=${ARCH_OS_BIN}/gum_${GUM_VERSION}_Linux_x86_64/gum}"
+: "${FORCE:=false}"
 
 # CONFIG
 ARCH_OS_CONF="${ARCH_OS_HOME}/config/settings.conf"
@@ -149,12 +150,18 @@ main() {
     # -------------------------------------------------------------------
 
     while (true); do
-
         # Show menu if user action argument is NOT set
         local selected_action && if [ -z "$user_action" ]; then
             local user_input options
             clear_screen && print_header
-            options=("  Dashboard" "  Packages" "  Services" "  Config" "󰋗  Help" "  Quit")
+            options=() # 󱛟 
+            options+=("  Dashboard")
+            [ "$(findmnt -n -o FSTYPE --target /)" = "btrfs" ] && options+=("  Snapshots")
+            options+=("  Packages")
+            options+=("  Services")
+            options+=("  Config")
+            options+=("󰋗  Help")
+            options+=("  Quit")
             user_input=$(gum_choose --cursor " " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             *Dashboard) selected_action='dashboard' ;;
@@ -1520,6 +1527,7 @@ show_help() { # Print help page
     print_white 'check            󰜴  Print package updates (checkupdates)'
     print_white 'notify           󰜴  Notify on new package updates (autostart)'
     print_white 'dashboard        󰜴  Show dashboard (logs, services, health)'
+    print_white 'snapshot         󰜴  Manage snapshots (browse, create, revert, delete)'
     print_white 'upgrade          󰜴  System upgrade (news, health, pacman, aur, flatpak)'
     print_white 'package          󰜴  Search & manage packages (pacman, aur)'
     print_white 'service          󰜴  Manage services (system & user)'
@@ -1712,8 +1720,18 @@ install_script_dependencies() {
     echo ":: Install Downgrade..."
     aur_install downgrade || return 1
 
-    # Set font
-    command -v gsettings &>/dev/null && gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+    if [ "$FORCE" = "true" ]; then
+
+        # Set font
+        echo ":: Set Nerd Icon Font..."
+        command -v gsettings &>/dev/null && gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+
+        # Set GNOME shell extension settings
+        echo ":: Set GNOME shell extension settings..."
+        dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
+        dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
+        dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
+    fi
 
     echo ":: Successfully completed"
     return 0

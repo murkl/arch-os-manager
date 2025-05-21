@@ -60,6 +60,7 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Check & list updates in _checkupdates_ format
 - Rich startup notification on available updates
 - Dashboard: System health info, packages & logs
+- BTRFS Snapshot Management
 - Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages
@@ -123,7 +124,7 @@ reset            ➜  Reset pacman keyring & upgrade (pacman)
 
 ### Install Dependencies
 
-Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager.
+Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager. Use with parameter `FORCE=true ./arch-os --install` to install incl. Font & GNOME Shell ectension settings.
 
 #### Install & Set Font
 
@@ -241,7 +242,6 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 
 <sub><b>This screenshots may outdated.</b></sub>
 
-
 <p><img src="./screenshots/notification.png"></p>
 <p><img src="./screenshots/dashboard.png"></p>
 <p><img src="./screenshots/health.png"></p>
@@ -259,6 +259,9 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 ```
 # Start with custom binaries (gum & kitty)
 GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
+
+# Force mode
+FORCE=false
 
 # Install dependencies
 ./arch-os --install
