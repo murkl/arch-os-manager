@@ -60,7 +60,6 @@ git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
 - Check & list updates in _checkupdates_ format
 - Rich startup notification on available updates
 - Dashboard: System health info, packages & logs
-- BTRFS Snapshot Management
 - Show unread/latest Arch Linux news
 - Notice on orphaned packages & pacdiff files
 - Search & manage packages

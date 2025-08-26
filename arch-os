@@ -15,8 +15,8 @@ set -Eeo pipefail
 
 # VERSIONS
 SCRIPT_VERSION="1.8.6"
-GUM_VERSION="0.16.0"
-KITTY_VERSION="0.41.0"
+GUM_VERSION="0.16.2"
+KITTY_VERSION="0.42.2"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -156,7 +156,6 @@ main() {
             clear_screen && print_header
             options=() # 󱛟 
             options+=("  Dashboard")
-            [ "$(findmnt -n -o FSTYPE --target /)" = "btrfs" ] && options+=("  Snapshots")
             options+=("  Packages")
             options+=("  Services")
             options+=("  Config")
@@ -1527,7 +1526,6 @@ show_help() { # Print help page
     print_white 'check            󰜴  Print package updates (checkupdates)'
     print_white 'notify           󰜴  Notify on new package updates (autostart)'
     print_white 'dashboard        󰜴  Show dashboard (logs, services, health)'
-    print_white 'snapshot         󰜴  Manage snapshots (browse, create, revert, delete)'
     print_white 'upgrade          󰜴  System upgrade (news, health, pacman, aur, flatpak)'
     print_white 'package          󰜴  Search & manage packages (pacman, aur)'
     print_white 'service          󰜴  Manage services (system & user)'
@@ -1723,14 +1721,18 @@ install_script_dependencies() {
     if [ "$FORCE" = "true" ]; then
 
         # Set font
-        echo ":: Set Nerd Icon Font..."
-        command -v gsettings &>/dev/null && gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+        if command -v gsettings &>/dev/null; then
+            echo ":: Set Nerd Icon Font..."
+            gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+        fi
 
         # Set GNOME shell extension settings
-        echo ":: Set GNOME shell extension settings..."
-        dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
-        dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
-        dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
+        if command -v dconf &>/dev/null; then
+            echo ":: Set GNOME shell extension settings..."
+            dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
+            dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
+            dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
+        fi
     fi
 
     echo ":: Successfully completed"
