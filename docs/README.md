@@ -256,9 +256,9 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 <summary><h2 style="display: inline;" id="development">Development</h2></summary>
 
 ```
-# Start with custom binaries (gum & kitty)
-GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
-
+# Start with custom binaries
+GUM=/my/custom/gum ./arch-os
+KITTY=/my/custom/kitty ./arch-os --kitty
 
 # Install dependencies
 ./arch-os --install
