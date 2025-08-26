@@ -123,7 +123,7 @@ reset            ➜  Reset pacman keyring & upgrade (pacman)
 
 ### Install Dependencies
 
-Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager. Use parameter `--install-gnome` to install incl. Font & GNOME Shell ectension settings.
+Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager. Use parameter `--install-gnome` to install incl. Font & GNOME Shell extension settings.
 
 #### Install & Set Font
 
