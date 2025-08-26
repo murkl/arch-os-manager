@@ -123,7 +123,7 @@ reset            ➜  Reset pacman keyring & upgrade (pacman)
 
 ### Install Dependencies
 
-Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager. Use with parameter `FORCE=true ./arch-os --install` to install incl. Font & GNOME Shell ectension settings.
+Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager. Use parameter `--install-gnome` to install incl. Font & GNOME Shell ectension settings.
 
 #### Install & Set Font
 
@@ -259,11 +259,10 @@ dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --
 # Start with custom binaries (gum & kitty)
 GUM=/my/custom/gum KITTY=/my/custom/kitty ./arch-os
 
-# Force mode
-FORCE=false
 
 # Install dependencies
 ./arch-os --install
+./arch-os --install-gnome
 
 # Init Arch OS Manager (binaries, dirs & files)
 ./arch-os --init

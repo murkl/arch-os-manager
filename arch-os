@@ -25,7 +25,6 @@ ARCH_OS_BIN="${ARCH_OS_HOME}/bin"
 # ENVIRONMENT
 : "${KITTY:=${ARCH_OS_BIN}/kitty-${KITTY_VERSION}-x86_64/bin/kitty}"
 : "${GUM:=${ARCH_OS_BIN}/gum_${GUM_VERSION}_Linux_x86_64/gum}"
-: "${FORCE:=false}"
 
 # CONFIG
 ARCH_OS_CONF="${ARCH_OS_HOME}/config/settings.conf"
@@ -88,10 +87,10 @@ main() {
     init_properties && persist_properties
 
     # Install
-    [ "$1" = '--install' ] && {
-        install_script_dependencies && exit 0
+    if [ "$1" = '--install' ] || [ "$1" = '--install-gnome' ]; then
+        install_script_dependencies "$1" && exit 0
         exit 1
-    }
+    fi
 
     # Check dependencies
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found. Install with: sudo pacman -S pacman-contrib" >&2 && exit 1; fi
@@ -1718,7 +1717,7 @@ install_script_dependencies() {
     echo ":: Install Downgrade..."
     aur_install downgrade || return 1
 
-    if [ "$FORCE" = "true" ]; then
+    if [ "$1" = "--install-gnome" ]; then
 
         # Set font
         if command -v gsettings &>/dev/null; then
