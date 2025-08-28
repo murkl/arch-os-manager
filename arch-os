@@ -14,9 +14,9 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.5"
-GUM_VERSION="0.16.0"
-KITTY_VERSION="0.41.0"
+SCRIPT_VERSION="1.8.6"
+GUM_VERSION="0.16.2"
+KITTY_VERSION="0.42.2"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -87,10 +87,10 @@ main() {
     init_properties && persist_properties
 
     # Install
-    [ "$1" = '--install' ] && {
-        install_script_dependencies && exit 0
+    if [ "$1" = '--install' ] || [ "$1" = '--install-gnome' ]; then
+        install_script_dependencies "$1" && exit 0
         exit 1
-    }
+    fi
 
     # Check dependencies
     if ! command -v /usr/bin/checkupdates &>/dev/null; then echo "ERROR: checkupdates not found. Install with: sudo pacman -S pacman-contrib" >&2 && exit 1; fi
@@ -149,12 +149,17 @@ main() {
     # -------------------------------------------------------------------
 
     while (true); do
-
         # Show menu if user action argument is NOT set
         local selected_action && if [ -z "$user_action" ]; then
             local user_input options
             clear_screen && print_header
-            options=("  Dashboard" "  Packages" "  Services" "  Config" "󰋗  Help" "  Quit")
+            options=() # 󱛟 
+            options+=("  Dashboard")
+            options+=("  Packages")
+            options+=("  Services")
+            options+=("  Config")
+            options+=("󰋗  Help")
+            options+=("  Quit")
             user_input=$(gum_choose --cursor " " --height=$((${#options[@]} + 3)) --selected="$user_input" "${options[@]}") || { clear_screen && exit 2; }
             case "$user_input" in # Set user action to selected action
             *Dashboard) selected_action='dashboard' ;;
@@ -1666,6 +1671,9 @@ color6                  #88C0D0
 color14                 #88C0D0
 color7                  #E5E9F0
 color15                 #E5E9F0
+
+# Workaround caused by mesa bug
+linux_display_server x11
 '
 
 # ///////////////////////////////////////////////////////////////////
@@ -1712,8 +1720,22 @@ install_script_dependencies() {
     echo ":: Install Downgrade..."
     aur_install downgrade || return 1
 
-    # Set font
-    command -v gsettings &>/dev/null && gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+    if [ "$1" = "--install-gnome" ]; then
+
+        # Set font
+        if command -v gsettings &>/dev/null; then
+            echo ":: Set Nerd Icon Font..."
+            gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
+        fi
+
+        # Set GNOME shell extension settings
+        if command -v dconf &>/dev/null; then
+            echo ":: Set GNOME shell extension settings..."
+            dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
+            dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
+            dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
+        fi
+    fi
 
     echo ":: Successfully completed"
     return 0
