@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.7"
+SCRIPT_VERSION="1.8.8"
 GUM_VERSION="0.17.0"
 KITTY_VERSION="0.43.1"
 
@@ -132,7 +132,7 @@ main() {
         shift # Shift argument to next
         # Start kitty if not already present
         if [ "$TERM" != "xterm-kitty" ]; then
-            kitty "$SELF" "$@" # Open script in kitty instance
+            $KITTY "$SELF" "$@" # Open script in kitty instance
             exit 2
         fi
     fi
@@ -563,7 +563,7 @@ action_notify_updates() { # Notify on new updates
         [ "$update_count" -gt 1 ] && update_txt="<b>${update_count}</b> Updates available"
         ! command -v /usr/bin/notify-send &>/dev/null && return 3
         notify_result=$(
-            notify-send \
+            /usr/bin/notify-send \
                 -a "Arch OS Manager" \
                 -i "${WORKING_DIR}/docs/logo.svg" \
                 -u critical \
@@ -1546,9 +1546,9 @@ show_version() { # Print version page
     [ "$AUR_SUPPORT" = "true" ] && print_white "$(/usr/bin/paru --version)"
     [ "$FLATPAK_SUPPORT" = "true" ] && print_white "$(flatpak --version)"
     print_white "$(/usr/bin/checkupdates --version)"
-    command -v /usr/bin/notify-send &>/dev/null && print_white "$(notify-send --version)"
-    print_white "$(kitty --version)"
-    print_white "$(gum --version)"
+    command -v /usr/bin/notify-send &>/dev/null && print_white "$(/usr/bin/notify-send --version)"
+    print_white "$($KITTY --version)"
+    print_white "$($GUM --version)"
     return 0
 }
 
@@ -1585,21 +1585,19 @@ print_filled_space() {
 }
 
 # System
-notify_send() {
-    command -v /usr/bin/notify-send &>/dev/null && notify-send -a "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0
-}
+notify_send() { command -v /usr/bin/notify-send &>/dev/null && /usr/bin/notify-send -a "Arch OS Manager" -i "${WORKING_DIR}/docs/logo.svg" "$1" "$2" || return 0; }
 clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear and remove scrollback buffer
 
 # Gum wrapper
-gum_style() { gum style "${@}"; }
-gum_join() { gum join "${@}"; }
-gum_filter() { gum filter --width="120" --prompt "  " --indicator " " "${@}"; }
-gum_write() { gum write --width="120" --prompt="" --char-limit 0 "${@}"; }
-gum_choose() { gum choose --no-show-help --header="" --cursor "  " "${@}"; }
-gum_input() { gum input --no-show-help --prompt "  " "${@}"; }
-gum_spin() { gum spin --spinner dot "${@}"; }
-gum_confirm() { gum confirm --no-show-help "$@"; }
-gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
+gum_style() { $GUM style "${@}"; }
+gum_join() { $GUM join "${@}"; }
+gum_filter() { $GUM filter --width="120" --prompt "  " --indicator " " "${@}"; }
+gum_write() { $GUM write --width="120" --prompt="" --char-limit 0 "${@}"; }
+gum_choose() { $GUM choose --no-show-help --header="" --cursor "  " "${@}"; }
+gum_input() { $GUM input --no-show-help --prompt "  " "${@}"; }
+gum_spin() { $GUM spin --spinner dot "${@}"; }
+gum_confirm() { $GUM confirm --no-show-help "$@"; }
+gum_confirm_continue() { echo && $GUM choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
 
 # Gum colors
 gum_foreground() { gum_style --foreground "$COLOR_FOREGROUND" "${@}"; }
@@ -1771,7 +1769,10 @@ kitty() {
 gum_init() { # https://github.com/charmbracelet/gum/releases
     if ! command -v "$GUM" &>/dev/null; then
         print_purple "$(print_timestamp) | Arch OS | Download & Initialize Gum binary ${GUM_VERSION}..."
-        # notify_send "Gum Binary" "Download & Initialize ${GUM_VERSION}. Please wait..."
+        # Show notification on updates (kitty only)
+        if [ "$*" = "--kitty" ] || [ "$*" = "-k" ]; then
+            notify_send "Gum ${GUM_VERSION}" "Download & Initialize binary. Please wait..."
+        fi
         local tmp_name tmp_file tmp_dir download_url
         tmp_name="gum_${GUM_VERSION}_$(uname -s)_$(uname -m)" # gum_0.15.2_Linux_x86_64
         tmp_file="${ARCH_OS_TMP}/${tmp_name}.tar.gz"
@@ -1790,7 +1791,10 @@ gum_init() { # https://github.com/charmbracelet/gum/releases
 kitty_init() { # https://github.com/kovidgoyal/kitty/releases
     if ! command -v "$KITTY" &>/dev/null; then
         print_purple "$(print_timestamp) | Arch OS | Download & Initialize Kitty binary ${KITTY_VERSION}..."
-        # notify_send "Kitty Binary" "Download & Initialize ${KITTY_VERSION}. Please wait..."
+        # Show notification on updates (kitty only)
+        if [ "$*" = "--kitty" ] || [ "$*" = "-k" ]; then
+            notify_send "Kitty ${KITTY_VERSION}" "Download & Initialize binary. Please wait..."
+        fi
         local tmp_name tmp_file tmp_dir download_url
         tmp_name="kitty-${KITTY_VERSION}-$(uname -m)" # kitty-0.39.1-x86_64.txz
         tmp_file="${ARCH_OS_TMP}/${tmp_name}.txz"
