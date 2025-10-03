@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.8"
+SCRIPT_VERSION="1.8.9"
 GUM_VERSION="0.17.0"
 KITTY_VERSION="0.43.1"
 
@@ -132,7 +132,7 @@ main() {
         shift # Shift argument to next
         # Start kitty if not already present
         if [ "$TERM" != "xterm-kitty" ]; then
-            $KITTY "$SELF" "$@" # Open script in kitty instance
+            kitty "$SELF" "$@" # Open script in kitty instance
             exit 2
         fi
     fi
@@ -1547,8 +1547,8 @@ show_version() { # Print version page
     [ "$FLATPAK_SUPPORT" = "true" ] && print_white "$(flatpak --version)"
     print_white "$(/usr/bin/checkupdates --version)"
     command -v /usr/bin/notify-send &>/dev/null && print_white "$(/usr/bin/notify-send --version)"
-    print_white "$($KITTY --version)"
-    print_white "$($GUM --version)"
+    print_white "$(kitty --version)"
+    print_white "$(gum --version)"
     return 0
 }
 
@@ -1589,15 +1589,15 @@ notify_send() { command -v /usr/bin/notify-send &>/dev/null && /usr/bin/notify-s
 clear_screen() { clear && printf '\e[3J' && HEADER_PRINTED="false"; } # Clear and remove scrollback buffer
 
 # Gum wrapper
-gum_style() { $GUM style "${@}"; }
-gum_join() { $GUM join "${@}"; }
-gum_filter() { $GUM filter --width="120" --prompt "  " --indicator " " "${@}"; }
-gum_write() { $GUM write --width="120" --prompt="" --char-limit 0 "${@}"; }
-gum_choose() { $GUM choose --no-show-help --header="" --cursor "  " "${@}"; }
-gum_input() { $GUM input --no-show-help --prompt "  " "${@}"; }
-gum_spin() { $GUM spin --spinner dot "${@}"; }
-gum_confirm() { $GUM confirm --no-show-help "$@"; }
-gum_confirm_continue() { echo && $GUM choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
+gum_style() { gum style "${@}"; }
+gum_join() { gum join "${@}"; }
+gum_filter() { gum filter --width="120" --prompt "  " --indicator " " "${@}"; }
+gum_write() { gum write --width="120" --prompt="" --char-limit 0 "${@}"; }
+gum_choose() { gum choose --no-show-help --header="" --cursor "  " "${@}"; }
+gum_input() { gum input --no-show-help --prompt "  " "${@}"; }
+gum_spin() { gum spin --spinner dot "${@}"; }
+gum_confirm() { gum confirm --no-show-help "$@"; }
+gum_confirm_continue() { echo && gum choose --no-show-help --header="" --cursor "" "Press <Enter> to continue..." | cat >/dev/null || return 0; }
 
 # Gum colors
 gum_foreground() { gum_style --foreground "$COLOR_FOREGROUND" "${@}"; }
