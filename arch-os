@@ -14,9 +14,9 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.6"
-GUM_VERSION="0.16.2"
-KITTY_VERSION="0.42.2"
+SCRIPT_VERSION="1.8.7"
+GUM_VERSION="0.17.0"
+KITTY_VERSION="0.43.1"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -1671,9 +1671,6 @@ color6                  #88C0D0
 color14                 #88C0D0
 color7                  #E5E9F0
 color15                 #E5E9F0
-
-# Workaround caused by mesa bug
-linux_display_server x11
 '
 
 # ///////////////////////////////////////////////////////////////////
