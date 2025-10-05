@@ -1697,7 +1697,8 @@ install_script_dependencies() {
     }
 
     # Install system packages
-    echo ":: Install Arch OS Manager Dependencies"
+    local gnome_txt && [ "$1" = "--install-gnome" ] && gnome_txt="(GNOME Support enabled)"
+    echo ":: Install Arch OS Manager Dependencies ${gnome_txt}"
     pacman_install git base-devel pacman-contrib reflector libnotify ttf-firacode-nerd fzf xdg-utils meld
 
     # Create backup
