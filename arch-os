@@ -189,10 +189,12 @@ main() {
         'cache') { print_header && show_clear_cache; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'reset') { print_header && show_reset_pacman; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'config') { print_header && show_config; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'notify') action_notify_updates || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
         'check') action_check_updates_available || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
+        'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        '--version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        '--help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         *) print_header && show_help && echo && print_red "Action '${selected_action}' is not available!" ;;
         esac
 
