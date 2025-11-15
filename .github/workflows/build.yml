@@ -22,11 +22,11 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
 
       - name: Rename binary
-        run: mv ./arch-os ./arch-os-${SNAPSHOT_VERSION}.sh
+        run: mv ./arch-os ./arch-os-${{ env.SNAPSHOT_VERSION }}.sh
 
       - name: Upload Arch OS Manager to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./arch-os-${SNAPSHOT_VERSION}.sh
+          files: ./arch-os-${{ env.SNAPSHOT_VERSION }}.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
