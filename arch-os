@@ -14,7 +14,7 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.8.9"
+SCRIPT_VERSION="1.9.0"
 GUM_VERSION="0.17.0"
 KITTY_VERSION="0.43.1"
 
@@ -189,10 +189,12 @@ main() {
         'cache') { print_header && show_clear_cache; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'reset') { print_header && show_reset_pacman; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'config') { print_header && show_config; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
-        'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         'notify') action_notify_updates || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
         'check') action_check_updates_available || { ret=$? && { [ "$ret" = 2 ] || [ "$ret" = 3 ]; } && skip_confirm="true"; } ;;
+        'version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        'help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        '--version') { print_header && show_version; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
+        '--help') { print_header && show_help; } || { ret=$? && { [ "$ret" = 2 ]; } && skip_confirm="true"; } ;;
         *) print_header && show_help && echo && print_red "Action '${selected_action}' is not available!" ;;
         esac
 
@@ -414,30 +416,30 @@ persist_properties() {
     fi
 
     { # Write properties
-        echo "COLOR_FOREGROUND=${COLOR_FOREGROUND}"
-        echo "COLOR_BACKGROUND=${COLOR_BACKGROUND}"
-        echo "CONTENT_MAX_WIDTH=${CONTENT_MAX_WIDTH}"
-        echo "CONTENT_MAX_HEIGHT=${CONTENT_MAX_HEIGHT}"
-        echo "REFLECTOR_COUNTRY=${REFLECTOR_COUNTRY}"
-        echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}"
-        echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}"
-        echo "AUR_SUPPORT=${AUR_SUPPORT}"
-        echo "AUR_MANGER_REPO=${AUR_MANGER_REPO}"
-        echo "AUR_REVIEW=${AUR_REVIEW}"
-        echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}"
-        echo "FLATPAK_UPGRADE_ENABLED=${FLATPAK_UPGRADE_ENABLED}"
-        echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}"
-        echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}"
-        echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}"
-        echo "ORPHANS_CONFIRM=${ORPHANS_CONFIRM}"
-        echo "NEWS_QUANTITY=${NEWS_QUANTITY}"
-        echo "UPGRADE_SHOW_HEALTH=${UPGRADE_SHOW_HEALTH}"
-        echo "HEALTH_ENABLE_UNKNOWN_PKG_LIST=${HEALTH_ENABLE_UNKNOWN_PKG_LIST}"
-        echo "HEALTH_SHOW_LOG=${HEALTH_SHOW_LOG}"
-        echo "DASHBOARD_SHOW_LOG=${DASHBOARD_SHOW_LOG}"
-        echo "DASHBOARD_SHOW_SERVICES=${DASHBOARD_SHOW_SERVICES}"
-        echo "DASHBOARD_SHOW_USER_SERVICES=${DASHBOARD_SHOW_USER_SERVICES}"
-        echo "DASHBOARD_SHOW_TIMESTAMP=${DASHBOARD_SHOW_TIMESTAMP}"
+        echo "COLOR_FOREGROUND=${COLOR_FOREGROUND}                  # Color foreground (see color chart)"
+        echo "COLOR_BACKGROUND=${COLOR_BACKGROUND}                  # Color background (see color chart)"
+        echo "CONTENT_MAX_WIDTH=${CONTENT_MAX_WIDTH}                 # Cut text after width in packages & logs (min: 80)"
+        echo "CONTENT_MAX_HEIGHT=${CONTENT_MAX_HEIGHT}                 # Max lines in packages & downgrade (max: 100)"
+        echo "REFLECTOR_COUNTRY=${REFLECTOR_COUNTRY}                # Set prefered reflector country (example: Germany,France)"
+        echo "ARCH_UPGRADE_CONFIRM=${ARCH_UPGRADE_CONFIRM}             # Enable confirm upgrade system packages (experimental) (disable: false)"
+        echo "ARCH_DOWNLOAD_TIMEOUT=${ARCH_DOWNLOAD_TIMEOUT}           # Disable pacman/paru download timeout (enable: true)"
+        echo "AUR_SUPPORT=${AUR_SUPPORT}                      # Enable AUR support (disable: false)"
+        echo "AUR_MANGER_REPO=${AUR_MANGER_REPO}                  # Set AUR manager package for --install (paru, paru-bin, paru-git)"
+        echo "AUR_REVIEW=${AUR_REVIEW}                     # Disable AUR review (enable: true)"
+        echo "FLATPAK_SUPPORT=${FLATPAK_SUPPORT}                 # Enable flatpak support (disable: false)"
+        echo "FLATPAK_UPGRADE_ENABLED=${FLATPAK_UPGRADE_ENABLED}        # Disable flatpak upgrade to use GNOME Software instead (enable: true)"
+        echo "FLATPAK_UPGRADE_CONFIRM=${FLATPAK_UPGRADE_CONFIRM}        # Disable confirm flatpak upgrade (experimental) (enable: true)"
+        echo "AUTOSTART_NOTIFY=${AUTOSTART_NOTIFY}                # Enable update notify on system boot (disable: false)"
+        echo "AUTOSTART_DELAY=${AUTOSTART_DELAY}                   # Delay update check after boot in seconds (min: 10)"
+        echo "ORPHANS_CONFIRM=${ORPHANS_CONFIRM}                # Disable confirm remove orphans (enable: true)"
+        echo "NEWS_QUANTITY=${NEWS_QUANTITY}                      # Number of news to shown (disable: 0)"
+        echo "UPGRADE_SHOW_HEALTH=${UPGRADE_SHOW_HEALTH}             # Show health view in upgrade (enable: true)"
+        echo "HEALTH_ENABLE_UNKNOWN_PKG_LIST=${HEALTH_ENABLE_UNKNOWN_PKG_LIST} # Show unknown package counter instead of name list (enable: true)"
+        echo "HEALTH_SHOW_LOG=${HEALTH_SHOW_LOG}                 # Show system log in healt (disable: false)"
+        echo "DASHBOARD_SHOW_LOG=${DASHBOARD_SHOW_LOG}             # Show system log in dashboard & health (enable: true)"
+        echo "DASHBOARD_SHOW_SERVICES=${DASHBOARD_SHOW_SERVICES}        # Show running services in dashboard (enable: true)"
+        echo "DASHBOARD_SHOW_USER_SERVICES=${DASHBOARD_SHOW_USER_SERVICES}   # Show user services in dashboard & health (enable: true)"
+        echo "DASHBOARD_SHOW_TIMESTAMP=${DASHBOARD_SHOW_TIMESTAMP}        # Show local databse timestamp (disable: false)"
     } >"$ARCH_OS_CONF"
 
     # Source again
@@ -998,14 +1000,14 @@ show_package_manager() { # Search & manage packages
 # ///////////////////////////////////////////////////////////////////
 
 show_service_manager() {
-    local op_user="false"
+    local op_is_user="false"
     local ret && gum_confirm --affirmative="  System Services" --negative="  User Services" "// Service Manager"
     ret=$?
     [ "$ret" = 130 ] && return 2
     if [ "$ret" = 1 ]; then
-        op_user="true"
+        op_is_user="true"
     fi
-    if [ "$op_user" = "true" ]; then
+    if [ "$op_is_user" = "true" ]; then
         print_title "User Services"
         # --state=running
         mapfile -t services < <({ systemctl --user list-unit-files --type=service --no-legend --state=enabled,disabled,static,alias,transient 2>/dev/null; } | awk '{print $1}' | sort -u)
@@ -1020,6 +1022,48 @@ show_service_manager() {
         [ -z "$selected_service" ] && return 2
         systemctl status "$selected_service" --no-pager -l --full
     fi
+
+    # Show service action menu
+    echo && print_title "Service Action"
+    local service_opts service_opt_choice
+
+    service_opts=()
+    if systemctl is-active --quiet "$selected_service"; then
+        service_opts+=("  Restart" "  Stop")
+    else
+        service_opts+=("  Start")
+    fi
+    if systemctl is-enabled --quiet "$selected_service"; then
+        service_opts+=("  Disable")
+    else
+        service_opts+=("󱣲  Enable")
+    fi
+
+    service_opts+=("  Done")
+
+    service_opt_choice=$(gum_choose --height=$((${#service_opts[@]} + 3)) "${service_opts[@]}") || {
+        print_yellow "Canceled"
+        return 2
+    }
+
+    local _sudo_=''
+    [ "$op_is_user" = "false" ] && _sudo_="sudo "
+    [[ "$service_opt_choice" = *"Done" ]] && print_white "Done" && return 2
+
+    print_white "${selected_service}: ${service_opt_choice}"
+    ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
+
+    # shellcheck disable=SC2086
+    case "$service_opt_choice" in
+    *'Start') ${_sudo_}systemctl start "$selected_service" ;;
+    *'Stop') ${_sudo_}systemctl stop "$selected_service" ;;
+    *'Restart') ${_sudo_}systemctl restart "$selected_service" ;;
+    *'Enable') ${_sudo_}systemctl enable "$selected_service" ;;
+    *'Disable') ${_sudo_}systemctl disable "$selected_service" ;;
+    *) print_red "No valid service choice: '${service_opt_choice}'" && return 3 ;;
+    esac
+
+    print_white "Finished"
 }
 
 # ///////////////////////////////////////////////////////////////////
@@ -1697,7 +1741,8 @@ install_script_dependencies() {
     }
 
     # Install system packages
-    echo ":: Install Arch OS Manager Dependencies"
+    local gnome_txt && [ "$1" = "--install-gnome" ] && gnome_txt="(GNOME Support enabled)"
+    echo ":: Install Arch OS Manager Dependencies ${gnome_txt}"
     pacman_install git base-devel pacman-contrib reflector libnotify ttf-firacode-nerd fzf xdg-utils meld
 
     # Create backup
@@ -1768,7 +1813,7 @@ kitty() {
 # Gum init
 gum_init() { # https://github.com/charmbracelet/gum/releases
     if ! command -v "$GUM" &>/dev/null; then
-        print_purple "$(print_timestamp) | Arch OS | Download & Initialize Gum binary ${GUM_VERSION}..."
+        [ "$*" != "check" ] && print_purple "$(print_timestamp) | Arch OS | Download & Initialize Gum binary ${GUM_VERSION}..."
         # Show notification on updates (kitty only)
         if [ "$*" = "--kitty" ] || [ "$*" = "-k" ]; then
             notify_send "Gum ${GUM_VERSION}" "Download & Initialize binary. Please wait..."
@@ -1790,7 +1835,7 @@ gum_init() { # https://github.com/charmbracelet/gum/releases
 # Kitty init
 kitty_init() { # https://github.com/kovidgoyal/kitty/releases
     if ! command -v "$KITTY" &>/dev/null; then
-        print_purple "$(print_timestamp) | Arch OS | Download & Initialize Kitty binary ${KITTY_VERSION}..."
+        [ "$*" != "check" ] && print_purple "$(print_timestamp) | Arch OS | Download & Initialize Kitty binary ${KITTY_VERSION}..."
         # Show notification on updates (kitty only)
         if [ "$*" = "--kitty" ] || [ "$*" = "-k" ]; then
             notify_send "Kitty ${KITTY_VERSION}" "Download & Initialize binary. Please wait..."
