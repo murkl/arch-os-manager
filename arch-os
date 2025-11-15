@@ -1000,14 +1000,14 @@ show_package_manager() { # Search & manage packages
 # ///////////////////////////////////////////////////////////////////
 
 show_service_manager() {
-    local op_user="false"
+    local op_is_user="false"
     local ret && gum_confirm --affirmative="  System Services" --negative="  User Services" "// Service Manager"
     ret=$?
     [ "$ret" = 130 ] && return 2
     if [ "$ret" = 1 ]; then
-        op_user="true"
+        op_is_user="true"
     fi
-    if [ "$op_user" = "true" ]; then
+    if [ "$op_is_user" = "true" ]; then
         print_title "User Services"
         # --state=running
         mapfile -t services < <({ systemctl --user list-unit-files --type=service --no-legend --state=enabled,disabled,static,alias,transient 2>/dev/null; } | awk '{print $1}' | sort -u)
@@ -1022,6 +1022,47 @@ show_service_manager() {
         [ -z "$selected_service" ] && return 2
         systemctl status "$selected_service" --no-pager -l --full
     fi
+
+    # Show service action menu
+    echo && print_title "Service Action"
+    local service_opts service_opt_choice
+
+    service_opts=()
+    if systemctl is-active --quiet "$selected_service"; then
+        service_opts+=("  Restart" "  Stop")
+    else
+        service_opts+=("  Start")
+    fi
+    if systemctl is-enabled --quiet "$selected_service"; then
+        service_opts+=("  Disable")
+    else
+        service_opts+=("󱣲  Enable")
+    fi
+
+    service_opts+=("  Done")
+
+    service_opt_choice=$(gum_choose --height=$((${#service_opts[@]} + 3)) "${service_opts[@]}") || {
+        print_yellow "Canceled"
+        return 2
+    }
+
+    local _sudo_=''
+    [ "$op_is_user" = "false" ] && _sudo_="sudo "
+    print_white "${selected_service}: ${service_opt_choice}"
+    ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
+
+    # shellcheck disable=SC2086
+    case "$service_opt_choice" in
+    *'Start') ${_sudo_}systemctl start "$selected_service" ;;
+    *'Stop') ${_sudo_}systemctl stop "$selected_service" ;;
+    *'Restart') ${_sudo_}systemctl restart "$selected_service" ;;
+    *'Enable') ${_sudo_}systemctl enable "$selected_service" ;;
+    *'Disable') ${_sudo_}systemctl disable "$selected_service" ;;
+    *'Done') print_white "Done" && return 2 ;;
+    *) print_red "No valid service choice: '${service_opt_choice}'" && return 3 ;;
+    esac
+
+	print_white "Finished" 
 }
 
 # ///////////////////////////////////////////////////////////////////
