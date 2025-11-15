@@ -1049,6 +1049,9 @@ show_service_manager() {
     local _sudo_=''
     [ "$op_is_user" = "false" ] && _sudo_="sudo "
     print_white "${selected_service}: ${service_opt_choice}"
+
+    [[ "$service_opt_choice" = *"Done" ]] && print_white "Done" && return 2
+
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
 
     # shellcheck disable=SC2086
@@ -1058,11 +1061,10 @@ show_service_manager() {
     *'Restart') ${_sudo_}systemctl restart "$selected_service" ;;
     *'Enable') ${_sudo_}systemctl enable "$selected_service" ;;
     *'Disable') ${_sudo_}systemctl disable "$selected_service" ;;
-    *'Done') print_white "Done" && return 2 ;;
     *) print_red "No valid service choice: '${service_opt_choice}'" && return 3 ;;
     esac
 
-	print_white "Finished" 
+    print_white "Finished"
 }
 
 # ///////////////////////////////////////////////////////////////////
