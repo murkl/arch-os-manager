@@ -1029,7 +1029,7 @@ show_service_manager() {
 
     service_opts=()
     if systemctl is-active --quiet "$selected_service"; then
-        service_opts+=("  Restart" "  Stop")
+        service_opts+=("  Restart" "  Stop")
     else
         service_opts+=("  Start")
     fi
@@ -1048,10 +1048,9 @@ show_service_manager() {
 
     local _sudo_=''
     [ "$op_is_user" = "false" ] && _sudo_="sudo "
-    print_white "${selected_service}: ${service_opt_choice}"
-
     [[ "$service_opt_choice" = *"Done" ]] && print_white "Done" && return 2
 
+    print_white "${selected_service}: ${service_opt_choice}"
     ! gum_confirm " Continue?" && print_yellow "Canceled" && return 2
 
     # shellcheck disable=SC2086
