@@ -14,9 +14,9 @@ set -Eeo pipefail
 # LICENCE:  GPL 2.0
 
 # VERSIONS
-SCRIPT_VERSION="1.9.0"
+SCRIPT_VERSION="1.9.1"
 GUM_VERSION="0.17.0"
-KITTY_VERSION="0.43.1"
+KITTY_VERSION="0.45.0"
 
 # HOME
 ARCH_OS_HOME="${HOME}/.arch-os"
@@ -516,11 +516,15 @@ sync_news_db() {
 sync_package_db() {
     local tmp_db_default="${ARCH_OS_TMP}/packages-pac.db"
     local tmp_db_aur="${ARCH_OS_TMP}/packages-aur.db"
-    ! /usr/bin/pacman -Slq >"$tmp_db_default" && return 3
+
+    #! /usr/bin/pacman -Slq >"$tmp_db_default" && return 3
+    ! /usr/bin/pacman -Qqn >"$tmp_db_default" && return 3
 
     # Add AUR packages
     if [ "$AUR_SUPPORT" = "true" ]; then
-        /usr/bin/paru -Slqa >"$tmp_db_aur" || rm -f "$tmp_db_aur"
+        # Workaround
+        #/usr/bin/paru -Slqa >"$tmp_db_aur" || rm -f "$tmp_db_aur"
+        /usr/bin/pacman -Qmq | /usr/bin/paru -Ta - >"$tmp_db_aur" || true
         [ -f "$tmp_db_aur" ] && cat "$tmp_db_aur" >>"$tmp_db_default"
     fi
 
