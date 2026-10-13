@@ -499,7 +499,8 @@ sync_news_db() {
         # Fetch news from internet
         mkdir -p "${ARCH_OS_TMP}"
         local tmp_db="${ARCH_OS_TMP}/news.db.tmp"
-        curl -sf https://archlinux.org/feeds/news/ >"$tmp_db"
+        # Offline the news already kept stay as they are
+        curl -sf --proto '=https' --connect-timeout 10 --max-time 30 https://archlinux.org/feeds/news/ >"$tmp_db" || return 0
 
         # Add latest 10 (max) news in db
         local news_list=()
