@@ -27,7 +27,8 @@
 - Next steps after every run
 - Notification of new updates, or their count in the GNOME top bar
 - Terminal or a window of its own
-- English and German, Nord themes, your own themes
+- English and German
+- Themes such as Nord, Catppuccin, Tokyo Night and Gruvbox, or your own
 
 Optional packages add features; **Settings › Optional packages** installs and removes them.
 

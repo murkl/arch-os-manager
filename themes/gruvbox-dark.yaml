@@ -1,0 +1,10 @@
+name: Gruvbox Dark
+colors:
+  background: "#282828"
+  surface: "#3C3836"
+  muted: "#928374"
+  text: "#EBDBB2"
+  accent: "#FABD2F"
+  success: "#B8BB26"
+  warning: "#FE8019"
+  error: "#FB4934"

@@ -1,0 +1,11 @@
+# Muted is dark5: the comment colour does not read on the background.
+name: Tokyo Night
+colors:
+  background: "#1A1B26"
+  surface: "#292E42"
+  muted: "#737AA2"
+  text: "#C0CAF5"
+  accent: "#7AA2F7"
+  success: "#9ECE6A"
+  warning: "#E0AF68"
+  error: "#F7768E"

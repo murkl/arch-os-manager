@@ -60,7 +60,7 @@ fn parse(id: &str, src: &str) -> Result<Theme, String> {
     })
 }
 
-/// Built-in themes, then the user's; a user file with a built-in's id replaces it.
+/// Built-in themes and the user's, by name; a user file with a built-in's id replaces it.
 /// The second list says which user files were skipped and why.
 pub fn all() -> (Vec<Theme>, Vec<String>) {
     let mut themes: Vec<Theme> = crate::embedded::THEMES
@@ -96,6 +96,7 @@ pub fn all() -> (Vec<Theme>, Vec<String>) {
             Err(e) => skipped.push(format!("{}: {e}", path.display())),
         }
     }
+    themes.sort_by_key(|t| t.name.to_lowercase());
     (themes, skipped)
 }
 
@@ -107,6 +108,53 @@ mod tests {
     fn built_ins_parse_and_nord_is_one() {
         let (themes, _) = all();
         assert!(themes.iter().any(|t| t.id == DEFAULT));
+    }
+
+    /// WCAG's contrast ratio, from 1 to 21.
+    fn contrast(a: Rgb, b: Rgb) -> f64 {
+        let luminance = |c: Rgb| {
+            let linear = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * linear(c.0) + 0.7152 * linear(c.1) + 0.0722 * linear(c.2)
+        };
+        let (x, y) = (luminance(a), luminance(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    /// WCAG AA: 4.5 for text, 3 for what is told by its colour; muted only has to stand apart.
+    #[test]
+    fn every_built_in_reads_on_its_background() {
+        for (file, bytes) in crate::embedded::THEMES {
+            let theme = parse(file, std::str::from_utf8(bytes).unwrap()).unwrap();
+            let c = theme.colors;
+            let tones = [
+                ("text", c.text, 4.5),
+                ("muted", c.muted, 2.0),
+                ("accent", c.accent, 3.0),
+                ("success", c.success, 3.0),
+                ("warning", c.warning, 3.0),
+                ("error", c.error, 3.0),
+            ];
+            for (slot, colour, least) in tones {
+                let ratio = contrast(colour, c.background);
+                assert!(
+                    ratio >= least,
+                    "{file}: {slot} has {ratio:.2}, needs {least}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn built_ins_are_listed_by_name() {
+        let names: Vec<String> = all().0.into_iter().map(|t| t.name.to_lowercase()).collect();
+        assert!(names.is_sorted(), "{names:?}");
     }
 
     #[test]

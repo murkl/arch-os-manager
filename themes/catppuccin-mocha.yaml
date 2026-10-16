@@ -1,0 +1,10 @@
+name: Catppuccin Mocha
+colors:
+  background: "#1E1E2E"
+  surface: "#313244"
+  muted: "#7F849C"
+  text: "#CDD6F4"
+  accent: "#CBA6F7"
+  success: "#A6E3A1"
+  warning: "#F9E2AF"
+  error: "#F38BA8"

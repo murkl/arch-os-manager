@@ -1,0 +1,10 @@
+name: Dracula
+colors:
+  background: "#282A36"
+  surface: "#44475A"
+  muted: "#6272A4"
+  text: "#F8F8F2"
+  accent: "#BD93F9"
+  success: "#50FA7B"
+  warning: "#F1FA8C"
+  error: "#FF5555"

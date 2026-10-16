@@ -1,0 +1,10 @@
+name: Kanagawa
+colors:
+  background: "#1F1F28"
+  surface: "#2A2A37"
+  muted: "#727169"
+  text: "#DCD7BA"
+  accent: "#7E9CD8"
+  success: "#98BB6C"
+  warning: "#FF9E3B"
+  error: "#E46876"

@@ -1,0 +1,11 @@
+# Muted is One Dark Pro's comment colour: the original does not read on the background.
+name: One Dark
+colors:
+  background: "#282C34"
+  surface: "#2C313A"
+  muted: "#7F848E"
+  text: "#ABB2BF"
+  accent: "#61AFEF"
+  success: "#98C379"
+  warning: "#E5C07B"
+  error: "#E06C75"
