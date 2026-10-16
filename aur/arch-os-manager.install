@@ -1,0 +1,7 @@
+# The Arch OS Manager before 2.0 was the script `arch-os`; its menu entry went with it.
+post_upgrade() {
+    if [ "$(vercmp "$2" 2.0.0)" -lt 0 ]; then
+        echo ":: The Arch OS Manager is now the System Manager."
+        echo "   Start it once as your user to take over the old settings: system-manager"
+    fi
+}

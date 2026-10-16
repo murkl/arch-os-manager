@@ -1,0 +1,11 @@
+# Nord's Snow Storm as background; the accents darkened until they read on it.
+name: Nord Light
+colors:
+  background: "#ECEFF4"
+  surface: "#E5E9F0"
+  muted: "#7B88A1"
+  text: "#2E3440"
+  accent: "#5E81AC"
+  success: "#4C7A3D"
+  warning: "#9A6B00"
+  error: "#A3434D"

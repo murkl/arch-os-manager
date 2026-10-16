@@ -1,0 +1,30 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel-20260927.0.600689
+    permissions:
+      contents: write
+    steps:
+      # The runner's seccomp profile refuses the syscall filter pacman puts on its downloader.
+      - name: Tools
+        run: pacman --disable-sandbox -Syu --noconfirm --needed rust shellcheck yamllint gettext pacman-contrib nodejs git jq
+      - uses: actions/checkout@v4.2.2
+      # The binary the checks ran on is the one that ships, stamped with the tag.
+      - run: make check
+      # The tarball GitHub serves for the tag, which the AUR package builds from.
+      - name: Source
+        run: |
+          mkdir -p dist
+          curl --proto '=https' --proto-redir '=https' -fsSL -o dist/source.tar.gz \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+      - run: make release VERSION="${GITHUB_REF_NAME#v}"
+      - name: Publish
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tools/publish.sh "$GITHUB_REF_NAME"

@@ -1,0 +1,1081 @@
+# German translation of the System Manager.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: system-manager\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid ""
+"A dependency would break\n"
+"Another package still needs what was to be removed or replaced. The details name both.\n"
+msgstr ""
+"Eine Abhängigkeit würde brechen\n"
+"Ein anderes Paket braucht noch, was entfernt oder ersetzt werden sollte. Die Details nennen beide.\n"
+
+msgid ""
+"A download failed\n"
+"Check the internet connection, or rank the mirrors again.\n"
+msgstr ""
+"Ein Download ist fehlgeschlagen\n"
+"Prüf die Internetverbindung oder bewerte die Spiegelserver neu.\n"
+
+msgid ""
+"A file is in the way\n"
+"A package brings a file that already exists on disk and belongs to no package. The details name it; remove or move it, then update again.\n"
+msgstr ""
+"Eine Datei steht im Weg\n"
+"Ein Paket bringt eine Datei mit, die schon auf der Platte liegt und zu keinem Paket gehört. Die Details nennen sie; entferne oder verschiebe sie und aktualisiere dann erneut.\n"
+
+msgid ""
+"A path to remove lies outside the caches\n"
+"Nothing outside the package cache and the AUR build directories is removed.\n"
+msgstr ""
+"Ein zu löschender Pfad liegt außerhalb der Caches\n"
+"Gelöscht wird nur im Paket-Cache und in den AUR-Build-Ordnern.\n"
+
+msgid ""
+"A signature could not be verified\n"
+"The keyring is probably out of date. Repair renews it and updates afterwards.\n"
+msgstr ""
+"Eine Signatur ließ sich nicht prüfen\n"
+"Der Schlüsselbund ist vermutlich veraltet. Reparieren erneuert ihn und aktualisiert danach.\n"
+
+msgid "A stale lock is removed, the keyring is created anew from the packaged keys, and the system is updated."
+msgstr "Eine liegengebliebene Sperre wird entfernt, der Schlüsselbund aus den mitgelieferten Schlüsseln neu angelegt und das System aktualisiert."
+
+msgid "AUR helper"
+msgstr "AUR-Helper"
+
+msgid "AUR packages"
+msgstr "AUR-Pakete"
+
+msgid "About"
+msgstr "Info"
+
+msgid "An unread news item. Read it first: it may announce a step an update needs by hand."
+msgstr "Eine ungelesene Neuigkeit. Lies sie zuerst: sie kann einen Schritt ankündigen, den ein Update von Hand braucht."
+
+msgid "App menu entry"
+msgstr "Eintrag im App-Menü"
+
+msgid "Applying the configuration update"
+msgstr "Konfigurationsupdate wird übernommen"
+
+msgid "Asking the AUR"
+msgstr "AUR wird abgefragt"
+
+msgid "Automatic"
+msgstr "Automatisch"
+
+msgid "Back"
+msgstr "Zurück"
+
+msgid "Booted"
+msgstr "Gestartet"
+
+msgid "Building"
+msgstr "Wird gebaut"
+
+msgid "Built"
+msgstr "Gebaut"
+
+msgid "Built from the AUR as its binary package; git and base-devel come along."
+msgstr "Wird als Binärpaket aus dem AUR gebaut; git und base-devel kommen dazu."
+
+msgid "Changed"
+msgstr "Geändert"
+
+msgid "Changing the service"
+msgstr "Dienst wird geändert"
+
+msgid "Check again"
+msgstr "Erneut prüfen"
+
+msgid "Checking"
+msgstr "Wird geprüft"
+
+msgid "Checking for updates"
+msgstr "Updates werden gesucht"
+
+msgid "Checking the firmware"
+msgstr "Firmware wird geprüft"
+
+msgid "Checking the optional packages"
+msgstr "Optionale Pakete werden geprüft"
+
+msgid "Checking the packages"
+msgstr "Pakete werden geprüft"
+
+msgid "Checking the password"
+msgstr "Passwort wird geprüft"
+
+msgid "Clean up"
+msgstr "Aufräumen"
+
+msgid "Clean up now"
+msgstr "Jetzt aufräumen"
+
+msgid ""
+"Clean up now?\n"
+"What is listed is removed for good. Three versions of every installed package stay in the cache."
+msgstr ""
+"Jetzt aufräumen?\n"
+"Was aufgelistet ist, wird endgültig gelöscht. Von jedem installierten Paket bleiben drei Versionen im Cache."
+
+msgid "Cleaning up"
+msgstr "Wird aufgeräumt"
+
+msgid "Command line"
+msgstr "Kommandozeile"
+
+msgid "Comparing the configuration"
+msgstr "Konfiguration wird verglichen"
+
+msgid "Configuration updates"
+msgstr "Konfigurationsupdates"
+
+msgid "Creating the keyring anew"
+msgstr "Schlüsselbund wird neu angelegt"
+
+msgid "Dependencies"
+msgstr "Abhängigkeiten"
+
+msgid "Description"
+msgstr "Beschreibung"
+
+msgid "Desktop"
+msgstr "Desktop"
+
+msgid "Do not start by itself"
+msgstr "Nicht mehr selbst starten"
+
+msgid "Done"
+msgstr "Fertig"
+
+msgid "Done."
+msgstr "Erledigt."
+
+msgid "Downloaded from extensions.gnome.org; GNOME loads it at the next login."
+msgstr "Von extensions.gnome.org geladen; GNOME lädt sie bei der nächsten Anmeldung."
+
+msgid "Downloading"
+msgstr "Wird heruntergeladen"
+
+msgid "Entry"
+msgstr "Eintrag"
+
+msgid "Every configuration is up to date."
+msgstr "Alle Konfigurationen sind aktuell."
+
+msgid "Failed"
+msgstr "Fehlgeschlagen"
+
+msgid "Filter"
+msgstr "Filtern"
+
+msgid "Finding configuration updates"
+msgstr "Konfigurationsupdates werden gesucht"
+
+msgid "Finding what to clean up"
+msgstr "Aufzuräumendes wird gesucht"
+
+msgid "Finishing"
+msgstr "Wird abgeschlossen"
+
+msgid "Firmware"
+msgstr "Firmware"
+
+msgid "Firmware updates"
+msgstr "Firmware-Updates"
+
+msgid "Flatpak apps"
+msgstr "Flatpak-Apps"
+
+msgid "Flatpak apps in the update and the clean-up"
+msgstr "Flatpak-Apps im Update und beim Aufräumen"
+
+msgid "For an update that keeps failing: on a database lock no package manager holds any more, or on signatures that cannot be verified."
+msgstr "Für ein Update, das immer wieder scheitert: an einer Datenbanksperre, die kein Paketmanager mehr hält, oder an Signaturen, die sich nicht prüfen lassen."
+
+msgid "Frees"
+msgstr "Gibt frei"
+
+msgid "From"
+msgstr "Von"
+
+msgid "Hidden messages"
+msgstr "Ausgeblendete Meldungen"
+
+msgid "Hide messages like this"
+msgstr "Solche Meldungen ausblenden"
+
+msgid "Import the PGP key {key} of {owner}?"
+msgstr "PGP-Schlüssel {key} von {owner} importieren?"
+
+msgid "Install"
+msgstr "Installieren"
+
+msgid "Install an older version"
+msgstr "Ältere Version installieren"
+
+msgid "Install from the AUR"
+msgstr "Aus dem AUR installieren"
+
+msgid ""
+"Install {name} {version}?\n"
+"The next update brings the current version back."
+msgstr ""
+"{name} {version} installieren?\n"
+"Das nächste Update bringt die aktuelle Version zurück."
+
+msgid "Install {n} from the AUR"
+msgstr "{n} aus dem AUR installieren"
+
+msgid "Install {n} from the repositories"
+msgstr "{n} aus den Repositories installieren"
+
+msgid "Installed"
+msgstr "Installiert"
+
+msgid "Installed by choice"
+msgstr "Selbst installiert"
+
+msgid "Installing"
+msgstr "Wird installiert"
+
+msgid "Installing the GNOME extension"
+msgstr "GNOME-Erweiterung wird installiert"
+
+msgid "Installing the firmware"
+msgstr "Firmware wird installiert"
+
+msgid "Installing the older version"
+msgstr "Ältere Version wird installiert"
+
+msgid "It goes straight to sudo and is kept in memory for this session only, so it is asked once."
+msgstr "Es geht direkt an sudo und bleibt nur für diese Sitzung im Arbeitsspeicher, damit es einmal gefragt wird."
+
+msgid "It is interrupted as with Ctrl+C."
+msgstr "Er wird wie mit Strg+C unterbrochen."
+
+msgid "Keep the current version"
+msgstr "Aktuelle Version behalten"
+
+msgid ""
+"Keep the current version?\n"
+"The new version is deleted; {target} stays as it is."
+msgstr ""
+"Aktuelle Version behalten?\n"
+"Die neue Version wird gelöscht; {target} bleibt, wie es ist."
+
+msgid "Kernel"
+msgstr "Kernel"
+
+msgid "Language"
+msgstr "Sprache"
+
+msgid "Listing the installed packages"
+msgstr "Installierte Pakete werden gelesen"
+
+msgid "Listing the package versions"
+msgstr "Paketversionen werden gelesen"
+
+msgid "Listing the services"
+msgstr "Dienste werden gelesen"
+
+msgid "Loading"
+msgstr "Wird geladen"
+
+msgid "Loading the Arch Linux news"
+msgstr "Arch-Linux-Neuigkeiten werden geladen"
+
+msgid "Loading the PKGBUILD"
+msgstr "PKGBUILD wird geladen"
+
+msgid "Loading the firmware catalogue"
+msgstr "Firmware-Katalog wird geladen"
+
+msgid "Log"
+msgstr "Protokoll"
+
+msgid "Log: {path}"
+msgstr "Protokoll: {path}"
+
+msgid "Looking at the system"
+msgstr "Das System wird angesehen"
+
+msgid "Looking for the Arch OS Manager"
+msgstr "Arch OS Manager wird gesucht"
+
+msgid "Looking for updates"
+msgstr "Updates werden gesucht"
+
+msgid "Maintainer"
+msgstr "Betreuer"
+
+msgid "Marked"
+msgstr "Markiert"
+
+msgid "Merge in Meld"
+msgstr "In Meld zusammenführen"
+
+msgid "Merging configuration updates side by side"
+msgstr "Konfigurationsupdates nebeneinander zusammenführen"
+
+msgid "Merging the configuration"
+msgstr "Konfiguration wird zusammengeführt"
+
+msgid "Mirrors"
+msgstr "Spiegelserver"
+
+msgid "Needed by"
+msgstr "Gebraucht von"
+
+msgid "News"
+msgstr "Neuigkeiten"
+
+msgid "No"
+msgstr "Nein"
+
+msgid "No errors since the start."
+msgstr "Keine Fehler seit dem Start."
+
+msgid "No log entries."
+msgstr "Keine Protokolleinträge."
+
+msgid "No matches"
+msgstr "Keine Treffer"
+
+msgid "No other version is at hand."
+msgstr "Keine andere Version verfügbar."
+
+msgid "None"
+msgstr "Keiner"
+
+msgid "Not offered here: it {why}."
+msgstr "Hier nicht angeboten: es {why}."
+
+msgid "Nothing is hidden. Hide a message on the system log with x."
+msgstr "Nichts ausgeblendet. Im Systemprotokoll blendet x eine Meldung aus."
+
+msgid "Nothing to clean up."
+msgstr "Nichts aufzuräumen."
+
+msgid ""
+"Nothing was merged\n"
+"The configuration was not changed in Meld, so the new version stays for later.\n"
+msgstr ""
+"Nichts zusammengeführt\n"
+"Die Konfiguration wurde in Meld nicht geändert; die neue Version bleibt für später.\n"
+
+msgid "Notifications about new updates"
+msgstr "Benachrichtigungen über neue Updates"
+
+msgid "Official packages"
+msgstr "Offizielle Pakete"
+
+msgid "Offline: the news as last loaded."
+msgstr "Offline: die Neuigkeiten vom letzten Laden."
+
+msgid "Old AUR builds"
+msgstr "Alte AUR-Builds"
+
+msgid "Older versions"
+msgstr "Ältere Versionen"
+
+msgid "Opening the manager"
+msgstr "Manager wird geöffnet"
+
+msgid "Optional packages"
+msgstr "Optionale Pakete"
+
+msgid "Out of date since"
+msgstr "Veraltet seit"
+
+msgid "Own themes"
+msgstr "Eigene Themes"
+
+msgid "Package cache"
+msgstr "Paket-Cache"
+
+msgid "Packages"
+msgstr "Pakete"
+
+msgid "Packages from the AUR"
+msgstr "Pakete aus dem AUR"
+
+msgid "Pending updates in the GNOME top bar"
+msgstr "Anstehende Updates in der oberen Leiste von GNOME"
+
+msgid "Project"
+msgstr "Projekt"
+
+msgid "Rank the mirrors now"
+msgstr "Spiegelserver jetzt bewerten"
+
+msgid "Ranked"
+msgstr "Bewertet"
+
+msgid "Ranking"
+msgstr "Bewertung"
+
+msgid "Ranking the mirrors"
+msgstr "Spiegelserver werden bewertet"
+
+msgid "Read the news"
+msgstr "Neuigkeiten lesen"
+
+msgid "Reading the mirror list"
+msgstr "Spiegelserverliste wird gelesen"
+
+msgid "Reading the package details"
+msgstr "Paketdetails werden gelesen"
+
+msgid "Reading the service log"
+msgstr "Dienstprotokoll wird gelesen"
+
+msgid "Reading the system log"
+msgstr "Systemprotokoll wird gelesen"
+
+msgid "Reading the system state"
+msgstr "Systemzustand wird gelesen"
+
+msgid "Reason"
+msgstr "Grund"
+
+msgid "Remove"
+msgstr "Entfernen"
+
+msgid ""
+"Remove {names}?\n"
+"What they alone needed goes with them, and their saved configuration too."
+msgstr ""
+"{names} entfernen?\n"
+"Was nur sie brauchten, geht mit, ebenso ihre gespeicherte Konfiguration."
+
+msgid ""
+"Remove {name}?\n"
+"What it adds to the manager is gone with it."
+msgstr ""
+"{name} entfernen?\n"
+"Was es dem Manager hinzufügt, geht mit."
+
+msgid ""
+"Remove {name}?\n"
+"What it alone needed goes with it, and its saved configuration too."
+msgstr ""
+"{name} entfernen?\n"
+"Was nur es brauchte, geht mit, ebenso seine gespeicherte Konfiguration."
+
+msgid "Remove {n}"
+msgstr "{n} entfernen"
+
+msgid "Removing"
+msgstr "Wird entfernt"
+
+msgid "Removing old AUR builds"
+msgstr "Alte AUR-Builds werden entfernt"
+
+msgid "Removing the GNOME extension"
+msgstr "GNOME-Erweiterung wird entfernt"
+
+msgid "Removing the stale lock"
+msgstr "Liegengebliebene Sperre wird entfernt"
+
+msgid "Removing unneeded packages"
+msgstr "Unnötige Pakete werden entfernt"
+
+msgid "Removing unused Flatpak runtimes"
+msgstr "Ungenutzte Flatpak-Laufzeiten werden entfernt"
+
+msgid "Removing what the Arch OS Manager left"
+msgstr "Reste des Arch OS Managers werden entfernt"
+
+msgid "Repair"
+msgstr "Reparieren"
+
+msgid ""
+"Repair the package management?\n"
+"A leftover lock is removed, the keyring is created anew, and the system is updated. Keys added by hand, such as those of third-party repositories, have to be added again.\n"
+msgstr ""
+"Paketverwaltung reparieren?\n"
+"Eine liegengebliebene Sperre wird entfernt, der Schlüsselbund neu angelegt und das System aktualisiert. Von Hand hinzugefügte Schlüssel, etwa von Fremd-Repositories, musst du erneut hinzufügen.\n"
+
+msgid "Repairing the package management"
+msgstr "Paketverwaltung wird repariert"
+
+msgid "Replace {old} with {new}?"
+msgstr "{old} durch {new} ersetzen?"
+
+msgid "Repositories"
+msgstr "Repositories"
+
+msgid "Restart"
+msgstr "Neustart"
+
+msgid ""
+"Restart now?\n"
+"Unsaved work in open applications is lost.\n"
+msgstr ""
+"Jetzt neu starten?\n"
+"Ungesicherte Arbeit in offenen Programmen geht verloren.\n"
+
+msgid "Restarting"
+msgstr "Wird neu gestartet"
+
+msgid "Search packages"
+msgstr "Pakete suchen"
+
+msgid "Searching"
+msgstr "Wird gesucht"
+
+msgid "Searching the repositories"
+msgstr "Repositories werden durchsucht"
+
+msgid "Services"
+msgstr "Dienste"
+
+msgid "Set up to rank by speed within the country of the time zone, weekly."
+msgstr "Eingerichtet, um wöchentlich nach Geschwindigkeit im Land der Zeitzone zu bewerten."
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "Show the PKGBUILD"
+msgstr "PKGBUILD anzeigen"
+
+msgid "Showing a notification"
+msgstr "Benachrichtigung wird angezeigt"
+
+msgid "Since"
+msgstr "Seit"
+
+msgid "Some firmware is written during the next restart."
+msgstr "Manche Firmware wird beim nächsten Neustart geschrieben."
+
+msgid "Source"
+msgstr "Quelle"
+
+msgid "Start"
+msgstr "Starten"
+
+msgid "Start by itself"
+msgstr "Selbst starten"
+
+msgid "State"
+msgstr "Zustand"
+
+msgid "Stop"
+msgstr "Stoppen"
+
+msgid "Stop the run?"
+msgstr "Lauf abbrechen?"
+
+msgid "Syncing the package databases"
+msgstr "Paketdatenbanken werden abgeglichen"
+
+msgid "System"
+msgstr "System"
+
+msgid "System log"
+msgstr "Systemprotokoll"
+
+msgid "System update"
+msgstr "Systemupdate"
+
+msgid ""
+"The AUR check failed\n"
+"The AUR helper could not ask the AUR for updates. Check the internet connection.\n"
+msgstr ""
+"Die AUR-Prüfung ist fehlgeschlagen\n"
+"Der AUR-Helper konnte das AUR nicht nach Updates fragen. Prüf die Internetverbindung.\n"
+
+msgid ""
+"The AUR could not be reached\n"
+"Check the internet connection.\n"
+msgstr ""
+"Das AUR ist nicht erreichbar\n"
+"Prüf die Internetverbindung.\n"
+
+msgid ""
+"The Flatpak check failed\n"
+"The Flatpak remotes could not be reached. Check the internet connection.\n"
+msgstr ""
+"Die Flatpak-Prüfung ist fehlgeschlagen\n"
+"Die Flatpak-Quellen sind nicht erreichbar. Prüf die Internetverbindung.\n"
+
+msgid ""
+"The GNOME dock still shows the Arch OS Manager\n"
+"GNOME did not keep the change; replace it in the dock by hand.\n"
+msgstr ""
+"Das GNOME-Dock zeigt noch den Arch OS Manager\n"
+"GNOME hat die Änderung nicht übernommen; ersetze ihn im Dock von Hand.\n"
+
+msgid ""
+"The archive could not be reached\n"
+"Only the versions in the package cache are shown. Check the internet connection.\n"
+msgstr ""
+"Das Archiv ist nicht erreichbar\n"
+"Gezeigt werden nur die Versionen im Paket-Cache. Prüf die Internetverbindung.\n"
+
+msgid ""
+"The disk is full\n"
+"Clean up frees space; then update again.\n"
+msgstr ""
+"Die Platte ist voll\n"
+"Aufräumen schafft Platz; danach erneut aktualisieren.\n"
+
+msgid ""
+"The extension comes from a package\n"
+"Remove that package on the Packages page.\n"
+msgstr ""
+"Die Erweiterung stammt aus einem Paket\n"
+"Entferne dieses Paket auf der Seite Pakete.\n"
+
+msgid ""
+"The extension could not be downloaded\n"
+"Check the internet connection; extensions.gnome.org may have no version for this GNOME yet.\n"
+msgstr ""
+"Die Erweiterung ließ sich nicht laden\n"
+"Prüf die Internetverbindung; vielleicht hat extensions.gnome.org noch keine Version für dieses GNOME.\n"
+
+msgid ""
+"The files cannot be compared\n"
+"One of them can only be read as root, or the original no longer exists. Take over or keep the new version without comparing, or merge it in Meld.\n"
+msgstr ""
+"Die Dateien lassen sich nicht vergleichen\n"
+"Eine ist nur für root lesbar, oder das Original gibt es nicht mehr. Übernimm oder behalte die neue Version ohne Vergleich, oder führe sie in Meld zusammen.\n"
+
+msgid ""
+"The firmware catalogue could not be loaded\n"
+"Check the internet connection.\n"
+msgstr ""
+"Der Firmware-Katalog ließ sich nicht laden\n"
+"Prüf die Internetverbindung.\n"
+
+msgid "The firmware is up to date."
+msgstr "Die Firmware ist aktuell."
+
+msgid ""
+"The keyring is not where it is expected\n"
+"pacman.conf names a GPGDir not ending in gnupg, so it is left alone.\n"
+msgstr ""
+"Der Schlüsselbund liegt nicht am erwarteten Ort\n"
+"pacman.conf nennt ein GPGDir, das nicht auf gnupg endet; es bleibt unangetastet.\n"
+
+msgid "The list of updates needs {package}."
+msgstr "Die Liste der Updates braucht {package}."
+
+msgid "The list of updates, the clean-up and the configuration updates"
+msgstr "Die Liste der Updates, das Aufräumen und die Konfigurationsupdates"
+
+msgid ""
+"The mirrors were not ranked\n"
+"reflector runs only while the machine is online. Check the internet connection.\n"
+msgstr ""
+"Die Spiegelserver wurden nicht bewertet\n"
+"reflector läuft nur, solange der Rechner online ist. Prüf die Internetverbindung.\n"
+
+msgid ""
+"The news could not be loaded\n"
+"archlinux.org could not be reached. The news shown are the last ones loaded.\n"
+msgstr ""
+"Die Neuigkeiten ließen sich nicht laden\n"
+"archlinux.org ist nicht erreichbar. Gezeigt werden die zuletzt geladenen.\n"
+
+msgid ""
+"The package database is locked\n"
+"Another package manager is running, or one stopped halfway. Once none is running, Repair removes the stale lock.\n"
+msgstr ""
+"Die Paketdatenbank ist gesperrt\n"
+"Ein anderer Paketmanager läuft oder ist mittendrin abgebrochen. Sobald keiner mehr läuft, entfernt Reparieren die Sperre.\n"
+
+msgid ""
+"The package was not found\n"
+"It may have been removed from its repository. Refresh the package list.\n"
+msgstr ""
+"Das Paket wurde nicht gefunden\n"
+"Vielleicht wurde es aus seinem Repository entfernt. Lade die Paketliste neu.\n"
+
+msgid "The password for sudo"
+msgstr "Das Passwort für sudo"
+
+msgid ""
+"The program's path cannot go into a menu entry\n"
+"It holds a quote, a backslash, a backtick, a dollar or a percent sign. Move the program to a plain path, such as ~/.local/bin.\n"
+msgstr ""
+"Der Pfad des Programms passt in keinen Menüeintrag\n"
+"Er enthält ein Anführungszeichen, einen Backslash, einen Backtick, ein Dollar- oder ein Prozentzeichen. Verschieb das Programm an einen einfachen Pfad wie ~/.local/bin.\n"
+
+msgid ""
+"The snapshots cannot be read\n"
+"The package cache is trimmed only once it is known which kernels the snapshots need for a recovery. Only members of the group wheel may read /.snapshots.\n"
+msgstr ""
+"Die Snapshots sind nicht lesbar\n"
+"Der Paket-Cache wird erst gekürzt, wenn feststeht, welche Kernel die Snapshots für eine Wiederherstellung brauchen. /.snapshots lesen nur Mitglieder der Gruppe wheel.\n"
+
+msgid "The system is up to date."
+msgstr "Das System ist aktuell."
+
+msgid "The system restarts."
+msgstr "Das System startet neu."
+
+msgid ""
+"The update check failed\n"
+"The package servers could not be reached. Check the internet connection.\n"
+msgstr ""
+"Die Update-Prüfung ist fehlgeschlagen\n"
+"Die Paketserver sind nicht erreichbar. Prüf die Internetverbindung.\n"
+
+msgid ""
+"The update indicator could not be set up\n"
+"GNOME did not keep the commands it was given.\n"
+msgstr ""
+"Die Update-Anzeige ließ sich nicht einrichten\n"
+"GNOME hat die Befehle nicht übernommen.\n"
+
+msgid "Theme"
+msgstr "Theme"
+
+msgid "Theme skipped: {error}"
+msgstr "Theme übersprungen: {error}"
+
+msgid ""
+"This is no configuration update\n"
+"Only .pacnew and .pacsave files are taken over, removed or merged.\n"
+msgstr ""
+"Das ist kein Konfigurationsupdate\n"
+"Übernommen, gelöscht oder zusammengeführt werden nur .pacnew- und .pacsave-Dateien.\n"
+
+msgid "This needs the password for sudo."
+msgstr "Dafür braucht es das Passwort für sudo."
+
+msgid "This needs {package}, see Settings, Optional packages."
+msgstr "Dafür braucht es {package}, siehe Einstellungen, Optionale Pakete."
+
+msgid "Time"
+msgstr "Zeit"
+
+msgid "Trimming the package cache"
+msgstr "Paket-Cache wird gekürzt"
+
+msgid "Try again"
+msgstr "Erneut versuchen"
+
+msgid "Unneeded packages"
+msgstr "Unnötige Pakete"
+
+msgid "Update"
+msgstr "Aktualisieren"
+
+msgid "Update notification"
+msgstr "Update-Benachrichtigung"
+
+msgid "Update now"
+msgstr "Jetzt aktualisieren"
+
+msgid "Update the firmware"
+msgstr "Firmware aktualisieren"
+
+msgid "Updating the app menu entry and the update notification"
+msgstr "Eintrag im App-Menü und Update-Benachrichtigung werden angepasst"
+
+msgid "Updating the firmware"
+msgstr "Firmware wird aktualisiert"
+
+msgid "Updating the system"
+msgstr "System wird aktualisiert"
+
+msgid "Use the new version"
+msgstr "Neue Version übernehmen"
+
+msgid ""
+"Use the new version?\n"
+"{target} is replaced; changes made to it by hand are gone."
+msgstr ""
+"Neue Version übernehmen?\n"
+"{target} wird ersetzt; Änderungen von Hand gehen verloren."
+
+msgid "User"
+msgstr "Benutzer"
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Votes"
+msgstr "Stimmen"
+
+msgid "Website"
+msgstr "Webseite"
+
+msgid "Which package should provide {what}?"
+msgstr "Welches Paket soll {what} bereitstellen?"
+
+msgid "Wrong password, try again."
+msgstr "Falsches Passwort, versuch es noch einmal."
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "answer"
+msgstr "antworten"
+
+msgid "as a dependency"
+msgstr "als Abhängigkeit"
+
+msgid "back"
+msgstr "zurück"
+
+msgid "by choice"
+msgstr "selbst"
+
+msgid "checking"
+msgstr "wird geprüft"
+
+msgid "choose"
+msgstr "wählen"
+
+msgid "close filter"
+msgstr "Filter schließen"
+
+msgid "confirm"
+msgstr "bestätigen"
+
+msgid "details"
+msgstr "Details"
+
+msgid "every week by itself"
+msgstr "jede Woche von selbst"
+
+msgid "failed"
+msgstr "fehlgeschlagen"
+
+msgid "filter"
+msgstr "filtern"
+
+msgid "hide"
+msgstr "ausblenden"
+
+msgid "in the archive"
+msgstr "im Archiv"
+
+msgid "in the cache"
+msgstr "im Cache"
+
+msgid "installed"
+msgstr "installiert"
+
+msgid "mark"
+msgstr "markieren"
+
+msgid "masked"
+msgstr "maskiert"
+
+msgid "more"
+msgstr "mehr"
+
+msgid "needs GNOME"
+msgstr "braucht GNOME"
+
+msgid "needs a desktop"
+msgstr "braucht einen Desktop"
+
+msgid "needs meld"
+msgstr "braucht meld"
+
+msgid "needs paru or yay"
+msgstr "braucht paru oder yay"
+
+msgid "needs reflector"
+msgstr "braucht reflector"
+
+msgid "needs {package}"
+msgstr "braucht {package}"
+
+msgid "new kernel"
+msgstr "neuer Kernel"
+
+msgid "no"
+msgstr "nein"
+
+msgid "no AUR"
+msgstr "kein AUR"
+
+msgid "none"
+msgstr "keiner"
+
+msgid "none, orphaned"
+msgstr "keiner, verwaist"
+
+msgid "not installed"
+msgstr "nicht installiert"
+
+msgid "not loaded"
+msgstr "nicht geladen"
+
+msgid "not working"
+msgstr "funktioniert nicht"
+
+msgid "off"
+msgstr "aus"
+
+msgid "offline"
+msgstr "offline"
+
+msgid "on"
+msgstr "an"
+
+msgid "only by hand"
+msgstr "nur von Hand"
+
+msgid "open"
+msgstr "öffnen"
+
+msgid "overview"
+msgstr "Übersicht"
+
+msgid ""
+"pacman is running\n"
+"Wait until it is done, then repair.\n"
+msgstr ""
+"pacman läuft\n"
+"Warte, bis es fertig ist, und repariere dann.\n"
+
+msgid "paru, else yay"
+msgstr "paru, sonst yay"
+
+msgid "quit"
+msgstr "beenden"
+
+msgid ""
+"reflector failed\n"
+"Its log tells why: journalctl -u reflector\n"
+msgstr ""
+"reflector ist fehlgeschlagen\n"
+"Sein Protokoll sagt warum: journalctl -u reflector\n"
+
+msgid "reload"
+msgstr "neu laden"
+
+msgid "required"
+msgstr "erforderlich"
+
+msgid "run"
+msgstr "ausführen"
+
+msgid "running"
+msgstr "läuft"
+
+msgid "scroll"
+msgstr "blättern"
+
+msgid "search"
+msgstr "suchen"
+
+msgid "settings.yaml is not used: {error}"
+msgstr "settings.yaml wird nicht verwendet: {error}"
+
+msgid "show again"
+msgstr "wieder zeigen"
+
+msgid "started by others"
+msgstr "von anderen gestartet"
+
+msgid "starting"
+msgstr "startet"
+
+msgid "starts by itself"
+msgstr "startet selbst"
+
+msgid "starts when asked"
+msgstr "startet auf Anforderung"
+
+msgid "stop"
+msgstr "abbrechen"
+
+msgid "stopped"
+msgstr "gestoppt"
+
+msgid "today"
+msgstr "heute"
+
+msgid "unknown"
+msgstr "unbekannt"
+
+msgid "unused runtimes, found while cleaning up"
+msgstr "ungenutzte Laufzeiten, gefunden beim Aufräumen"
+
+msgid "up to date"
+msgstr "aktuell"
+
+msgid "use"
+msgstr "übernehmen"
+
+msgid "yesterday"
+msgstr "gestern"
+
+msgid "{a} and {b} cannot be installed together. Remove {remove}?"
+msgstr "{a} und {b} lassen sich nicht gemeinsam installieren. {remove} entfernen?"
+
+msgid "{helper}, automatic"
+msgstr "{helper}, automatisch"
+
+msgid "{n} days ago"
+msgstr "vor {n} Tagen"
+
+msgid "{n} error"
+msgstr "{n} Fehler"
+
+msgid "{n} errors"
+msgstr "{n} Fehler"
+
+msgid "{n} failed"
+msgstr "{n} fehlgeschlagen"
+
+msgid "{n} file ({size})"
+msgstr "{n} Datei ({size})"
+
+msgid "{n} files ({size})"
+msgstr "{n} Dateien ({size})"
+
+msgid "{n} folder ({size})"
+msgstr "{n} Ordner ({size})"
+
+msgid "{n} folders ({size})"
+msgstr "{n} Ordner ({size})"
+
+msgid "{n} kernel package stays: the snapshots need it for a recovery."
+msgstr "{n} Kernel-Paket bleibt: die Snapshots brauchen es für eine Wiederherstellung."
+
+msgid "{n} kernel packages stay: the snapshots need them for a recovery."
+msgstr "{n} Kernel-Pakete bleiben: die Snapshots brauchen sie für eine Wiederherstellung."
+
+msgid "{n} marked"
+msgstr "{n} markiert"
+
+msgid "{n} open"
+msgstr "{n} offen"
+
+msgid "{n} unread"
+msgstr "{n} ungelesen"
+
+msgid "{n} unread news. Read them first: they may announce steps an update needs by hand."
+msgstr "{n} ungelesene Neuigkeiten. Lies sie zuerst: sie können Schritte ankündigen, die ein Update von Hand braucht."
+
+msgid "{n} update"
+msgstr "{n} Update"
+
+msgid "{n} update is ready."
+msgstr "{n} Update steht bereit."
+
+msgid "{n} updates"
+msgstr "{n} Updates"
+
+msgid "{n} updates are ready."
+msgstr "{n} Updates stehen bereit."
+
+msgid "{title} failed"
+msgstr "{title}: fehlgeschlagen"

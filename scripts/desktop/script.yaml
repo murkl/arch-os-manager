@@ -1,0 +1,25 @@
+ops:
+  apply:
+    title: Updating the app menu entry and the update notification
+  notify:
+    title: Showing a notification
+    needs: [libnotify]
+  open:
+    title: Opening the manager
+  extension-install:
+    title: Installing the GNOME extension
+  extension-remove:
+    title: Removing the GNOME extension
+errors:
+  10: |
+    The program's path cannot go into a menu entry
+    It holds a quote, a backslash, a backtick, a dollar or a percent sign. Move the program to a plain path, such as ~/.local/bin.
+  11: |
+    The extension could not be downloaded
+    Check the internet connection; extensions.gnome.org may have no version for this GNOME yet.
+  12: |
+    The extension comes from a package
+    Remove that package on the Packages page.
+  13: |
+    The update indicator could not be set up
+    GNOME did not keep the commands it was given.

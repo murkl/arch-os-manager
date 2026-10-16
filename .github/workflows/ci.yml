@@ -1,0 +1,27 @@
+name: ci
+
+# Docs alone build nothing.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    # Arch, as the machines it runs on; the date pins the base.
+    container: archlinux:base-devel-20260927.0.600689
+    steps:
+      # The runner's seccomp profile refuses the syscall filter pacman puts on its downloader.
+      - name: Tools
+        run: pacman --disable-sandbox -Syu --noconfirm --needed rust shellcheck yamllint gettext pacman-contrib nodejs git
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/cache@v4.2.0
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: cargo-${{ hashFiles('Cargo.lock') }}
+      - run: make check

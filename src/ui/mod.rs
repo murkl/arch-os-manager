@@ -1,0 +1,341 @@
+//! The interface: pages on a stack, drawn into a cell grid that a terminal or a window shows.
+
+mod app;
+mod detail;
+mod draw;
+mod fetch;
+mod highlight;
+pub(crate) mod icon;
+mod input;
+mod list;
+mod pages;
+mod style;
+mod target;
+
+pub use app::App;
+pub use style::Style;
+pub use target::Target;
+
+use std::any::Any;
+use std::sync::Arc;
+use std::sync::mpsc::Sender;
+
+use crate::data::cleanup::Plan;
+use crate::data::features::Features;
+use crate::data::firmware::Firmware;
+use crate::data::journal::Entry;
+use crate::data::mirrors::Mirrors;
+use crate::data::news::Item;
+use crate::data::packages::Installed;
+use crate::data::services::Service;
+use crate::data::system::System;
+use crate::data::updates::Update;
+use crate::script::{self, Failure};
+use crate::settings::Settings;
+use crate::state::State;
+use crate::theme::Theme;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Key {
+    Char(char),
+    Ctrl(char),
+    Enter,
+    Esc,
+    Backspace,
+    Delete,
+    Tab,
+    BackTab,
+    Up,
+    Down,
+    Left,
+    Right,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+}
+
+/// What a key means outside a text box. In front of one, only the keys that cannot be typed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Nav {
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Top,
+    Bottom,
+    Open,
+    Back,
+    Quit,
+    Filter,
+}
+
+impl Key {
+    pub fn nav(self, typing: bool) -> Option<Nav> {
+        let nav = match self {
+            Key::Up => Nav::Up,
+            Key::Down => Nav::Down,
+            Key::PageUp => Nav::PageUp,
+            Key::PageDown => Nav::PageDown,
+            Key::Enter => Nav::Open,
+            Key::Esc => Nav::Back,
+            Key::Ctrl('c') => Nav::Quit,
+            _ if typing => return None,
+            Key::Home | Key::Char('g') => Nav::Top,
+            Key::End | Key::Char('G') => Nav::Bottom,
+            Key::Char('k') => Nav::Up,
+            Key::Char('j') => Nav::Down,
+            Key::Char('l') | Key::Right => Nav::Open,
+            Key::Char('h') | Key::Left | Key::Backspace => Nav::Back,
+            Key::Char('q') => Nav::Quit,
+            Key::Char('f') | Key::Char('/') => Nav::Filter,
+            _ => return None,
+        };
+        Some(nav)
+    }
+
+    /// The bytes a terminal sends for the key, for the details view of a run.
+    pub fn bytes(self) -> Vec<u8> {
+        match self {
+            Key::Char(c) => c.to_string().into_bytes(),
+            Key::Ctrl(c) => vec![(c.to_ascii_lowercase() as u8) & 0x1f],
+            Key::Enter => b"\r".to_vec(),
+            Key::Esc => b"\x1b".to_vec(),
+            Key::Backspace => b"\x7f".to_vec(),
+            Key::Delete => b"\x1b[3~".to_vec(),
+            Key::Tab => b"\t".to_vec(),
+            Key::BackTab => b"\x1b[Z".to_vec(),
+            Key::Up => b"\x1b[A".to_vec(),
+            Key::Down => b"\x1b[B".to_vec(),
+            Key::Right => b"\x1b[C".to_vec(),
+            Key::Left => b"\x1b[D".to_vec(),
+            Key::PageUp => b"\x1b[5~".to_vec(),
+            Key::PageDown => b"\x1b[6~".to_vec(),
+            Key::Home => b"\x1b[H".to_vec(),
+            Key::End => b"\x1b[F".to_vec(),
+        }
+    }
+}
+
+pub type PageId = u64;
+
+pub enum Msg {
+    Key(Key),
+    Tick,
+    Resize,
+    /// The result of a job a page started.
+    Data(PageId, Box<dyn Any + Send>),
+    Run(PageId, script::Event),
+    Fresh(Fresh),
+}
+
+/// A shared value read anew.
+pub enum Fresh {
+    Features(Result<Features, Failure>),
+    System(Result<System, Failure>),
+    Updates(Result<Vec<Update>, Failure>),
+    News(Result<(Vec<Item>, bool), Failure>),
+    Installed(Result<Vec<Installed>, Failure>),
+    Services(Result<Vec<Service>, Failure>),
+    Journal(Result<Vec<Entry>, Failure>),
+    Pacnew(Result<Vec<String>, Failure>),
+    Cleanup(Result<Plan, Failure>),
+    Mirrors(Result<Mirrors, Failure>),
+    Firmware(Result<Vec<Firmware>, Failure>),
+}
+
+pub enum Flow {
+    Stay,
+    /// The key meant nothing here; the app applies back, quit and abort.
+    Ignored,
+    Push(Box<dyn Page>),
+    /// Several at once, as a search result that lives below the settings page.
+    PushAll(Vec<Box<dyn Page>>),
+    Replace(Box<dyn Page>),
+    Pop,
+    Quit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tone {
+    Normal,
+    Muted,
+    Accent,
+    Ok,
+    Warn,
+    Error,
+}
+
+pub trait Page {
+    /// The page's name in the header path.
+    fn title(&self) -> String;
+    fn draw(
+        &mut self,
+        area: ratatui::layout::Rect,
+        buf: &mut ratatui::buffer::Buffer,
+        ctx: &mut Ctx,
+    );
+    /// The keys the footer names, as key and what it does.
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)>;
+    fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow;
+    fn data(&mut self, _data: Box<dyn Any + Send>, _ctx: &mut Ctx) -> Flow {
+        Flow::Stay
+    }
+    fn run(&mut self, _event: script::Event, _ctx: &mut Ctx) -> Flow {
+        Flow::Stay
+    }
+    fn tick(&mut self, _ctx: &mut Ctx) -> Flow {
+        Flow::Stay
+    }
+    /// A text box has the keys, so letters are typed rather than read as commands.
+    fn typing(&self) -> bool {
+        false
+    }
+    fn animating(&self, _ctx: &Ctx) -> bool {
+        false
+    }
+    /// Drawn on the whole screen, without the header and the keys.
+    fn bare(&self) -> bool {
+        false
+    }
+    /// On top again after the page above it closed.
+    fn resumed(&mut self, _ctx: &mut Ctx) {}
+}
+
+/// A value read in the background: nothing yet, the value, or why not. A reload keeps the old value.
+#[derive(Clone, Debug, Default)]
+pub enum Loaded<T> {
+    #[default]
+    Loading,
+    Ready(T),
+    Failed(Failure),
+    /// The script needs this optional package, which is not installed.
+    Missing(String),
+}
+
+impl<T> Loaded<T> {
+    pub fn ready(&self) -> Option<&T> {
+        match self {
+            Loaded::Ready(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub fn from(result: Result<T, Failure>) -> Loaded<T> {
+        match result {
+            Ok(v) => Loaded::Ready(v),
+            Err(f) => Loaded::Failed(f),
+        }
+    }
+}
+
+/// What several pages show, read once at the start and after every run.
+#[derive(Default)]
+pub struct Shared {
+    pub features: Loaded<Features>,
+    pub system: Loaded<System>,
+    pub updates: Loaded<Vec<Update>>,
+    /// The news, and whether they came from the cache because the feed was out of reach.
+    pub news: Loaded<(Vec<Item>, bool)>,
+    pub installed: Loaded<Vec<Installed>>,
+    pub services: Loaded<Vec<Service>>,
+    pub journal: Loaded<Vec<Entry>>,
+    pub pacnew: Loaded<Vec<String>>,
+    pub cleanup: Loaded<Plan>,
+    pub mirrors: Loaded<Mirrors>,
+    pub firmware: Loaded<Vec<Firmware>>,
+}
+
+pub struct Ctx {
+    pub settings: Settings,
+    /// Why settings.yaml was not used, until it is written again.
+    pub settings_error: Option<String>,
+    pub state: State,
+    pub themes: Vec<Theme>,
+    /// User theme files that were skipped, and why.
+    pub theme_errors: Vec<String>,
+    pub style: Style,
+    /// The Linux console: sixteen colours and ASCII glyphs.
+    pub console: bool,
+    pub shared: Shared,
+    /// Counts the runs, so a page can tell its data may be stale.
+    pub generation: u64,
+    /// The password was proven, or is not needed, this session.
+    pub authorized: bool,
+    reload: bool,
+    /// Shared values asked for and not yet arrived.
+    pending: std::cell::Cell<usize>,
+    tx: Sender<Msg>,
+    wake: Arc<dyn Fn() + Send + Sync>,
+    page: PageId,
+}
+
+impl Ctx {
+    /// Runs a job off the drawing thread; its result arrives at the page that started it.
+    pub fn spawn<T: Send + 'static>(&self, job: impl FnOnce() -> T + Send + 'static) {
+        let (tx, wake, page) = (self.tx.clone(), self.wake.clone(), self.page);
+        std::thread::spawn(move || {
+            let result = job();
+            let _ = tx.send(Msg::Data(page, Box::new(result)));
+            wake();
+        });
+    }
+
+    /// Where the events of a run go: to the page that started it.
+    pub fn run_sink(&self) -> impl Fn(script::Event) + Send + Sync + 'static {
+        let (tx, wake, page) = (self.tx.clone(), self.wake.clone(), self.page);
+        move |e| {
+            let _ = tx.send(Msg::Run(page, e));
+            wake();
+        }
+    }
+
+    fn fresh(&self, job: impl FnOnce() -> Fresh + Send + 'static) {
+        self.pending.set(self.pending.get() + 1);
+        let (tx, wake) = (self.tx.clone(), self.wake.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(Msg::Fresh(job()));
+            wake();
+        });
+    }
+
+    /// Reads every shared value anew once nothing is loading any more; asked again meanwhile,
+    /// it still happens once.
+    pub fn reload(&mut self) {
+        self.reload = true;
+    }
+
+    /// Something loads in the background, which the header shows.
+    pub fn busy(&self) -> bool {
+        self.pending.get() > 0 || self.reload
+    }
+
+    pub fn save_settings(&mut self) {
+        match self.settings.save() {
+            Ok(()) => self.settings_error = None,
+            Err(e) => crate::error!("settings not saved: {e}"),
+        }
+    }
+
+    pub fn theme(&self) -> &Theme {
+        let id = self
+            .settings
+            .theme
+            .as_deref()
+            .unwrap_or(crate::theme::DEFAULT);
+        self.themes
+            .iter()
+            .find(|t| t.id == id)
+            .or_else(|| self.themes.iter().find(|t| t.id == crate::theme::DEFAULT))
+            .unwrap_or(&self.themes[0])
+    }
+
+    pub fn features(&self) -> Option<&Features> {
+        self.shared.features.ready()
+    }
+
+    /// Whether a script can run here; unknown while the packages are still being checked.
+    pub fn available(&self, op: script::Op) -> bool {
+        self.features().is_some_and(|f| script::available(op, f))
+    }
+}

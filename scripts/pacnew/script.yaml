@@ -1,0 +1,26 @@
+ops:
+  list:
+    title: Finding configuration updates
+    needs: [pacman-contrib]
+  diff:
+    title: Comparing the configuration
+  take:
+    title: Applying the configuration update
+    root: true
+  keep:
+    title: Applying the configuration update
+    root: true
+  merge:
+    title: Merging the configuration
+    root: true
+    needs: [meld]
+errors:
+  10: |
+    The files cannot be compared
+    One of them can only be read as root, or the original no longer exists. Take over or keep the new version without comparing, or merge it in Meld.
+  11: |
+    This is no configuration update
+    Only .pacnew and .pacsave files are taken over, removed or merged.
+  12: |
+    Nothing was merged
+    The configuration was not changed in Meld, so the new version stays for later.

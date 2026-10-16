@@ -1,0 +1,51 @@
+# Maintainer: murkl <murkl@users.noreply.github.com>
+# Stamped by tools/aur.sh at a release; the placeholders are filled there.
+
+pkgname=arch-os-manager
+pkgver={{VERSION}}
+pkgrel=1
+pkgdesc='Arch Linux kept current, clean and healthy, from one quiet screen'
+arch=('x86_64')
+url='https://github.com/murkl/arch-os-manager'
+license=('GPL-3.0-or-later')
+depends=('gcc-libs' 'glibc')
+makedepends=('cargo')
+optdepends=(
+    'pacman-contrib: the list of updates, the clean-up and the configuration updates'
+    'paru: packages from the AUR'
+    'yay: packages from the AUR'
+    'flatpak: Flatpak apps in the update and the clean-up'
+    'reflector: ranking the mirrors'
+    'meld: merging configuration updates side by side'
+    'libnotify: notifications about new updates'
+    'fwupd: firmware updates'
+    'ttf-nerd-fonts-symbols: icons in a terminal without a Nerd Font'
+)
+provides=('system-manager')
+conflicts=('system-manager')
+install=arch-os-manager.install
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('{{SHA256}}')
+
+prepare() {
+    cd "${pkgname}-${pkgver}"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+# Built as the release is, then stamped with its version as the release does.
+build() {
+    cd "${pkgname}-${pkgver}"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release
+    tools/stamp.sh target/release/system-manager "$pkgver"
+}
+
+# The menu entry and the update notification are set up by the program for the user who
+# runs it, at its first start or with `system-manager init`.
+package() {
+    cd "${pkgname}-${pkgver}"
+    install -Dm755 target/release/system-manager "${pkgdir}/usr/bin/system-manager"
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

@@ -1,0 +1,10 @@
+name: Nord
+colors:
+  background: "#2E3440"
+  surface: "#3B4252"
+  muted: "#616E88"
+  text: "#D8DEE9"
+  accent: "#88C0D0"
+  success: "#A3BE8C"
+  warning: "#EBCB8B"
+  error: "#BF616A"

@@ -1,0 +1,18 @@
+ops:
+  run:
+    title: Repairing the package management
+    root: true
+    confirm: |
+      Repair the package management?
+      A leftover lock is removed, the keyring is created anew, and the system is updated. Keys added by hand, such as those of third-party repositories, have to be added again.
+    steps:
+      lock: Removing the stale lock
+      keyring: Creating the keyring anew
+      upgrade: Updating the system
+errors:
+  10: |
+    pacman is running
+    Wait until it is done, then repair.
+  11: |
+    The keyring is not where it is expected
+    pacman.conf names a GPGDir not ending in gnupg, so it is left alone.

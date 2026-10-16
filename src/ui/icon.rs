@@ -1,0 +1,78 @@
+//! Nerd Font icons from Material Design, by what they stand for. The window carries the font;
+//! a terminal needs a Nerd Font, as Arch OS sets one; the Linux console shows none.
+
+pub const ARCH: &str = "\u{f08c7}";
+pub const UPDATE: &str = "\u{f06b0}";
+pub const RESTART: &str = "\u{f0709}";
+pub const NEWS: &str = "\u{f1004}";
+pub const PACKAGE: &str = "\u{f03d7}";
+pub const SERVICES: &str = "\u{f0493}";
+pub const LOG: &str = "\u{f09ed}";
+pub const CLEANUP: &str = "\u{f00e2}";
+pub const PACNEW: &str = "\u{f08aa}";
+pub const MIRRORS: &str = "\u{f048d}";
+pub const FIRMWARE: &str = "\u{f061a}";
+pub const REPAIR: &str = "\u{f05b7}";
+pub const SETTINGS: &str = "\u{f1542}";
+pub const LANGUAGE: &str = "\u{f05ca}";
+pub const THEME: &str = "\u{f0e0c}";
+pub const NOTIFICATION: &str = "\u{f009c}";
+pub const APP_MENU: &str = "\u{f003b}";
+pub const HIDDEN: &str = "\u{f06d1}";
+pub const OPTIONAL: &str = "\u{f0a66}";
+pub const ABOUT: &str = "\u{f02fd}";
+pub const APP: &str = "\u{f0614}";
+pub const CHECK: &str = "\u{f012c}";
+pub const DONE: &str = "\u{f05e1}";
+pub const FAILED: &str = "\u{f015a}";
+pub const BACK: &str = "\u{f004d}";
+pub const START: &str = "\u{f040a}";
+pub const STOP: &str = "\u{f04db}";
+pub const ENABLE: &str = "\u{f0521}";
+pub const DISABLE: &str = "\u{f0a19}";
+pub const CODE: &str = "\u{f102b}";
+pub const OLDER: &str = "\u{f02da}";
+pub const REMOVE: &str = "\u{f09e7}";
+pub const INSTALL: &str = "\u{f0b8f}";
+pub const TAKE: &str = "\u{f0b33}";
+pub const KEEP: &str = "\u{f0e29}";
+
+/// Every icon, for the test that the window's font has each.
+#[cfg(test)]
+pub const ALL: &[&str] = &[
+    ARCH,
+    UPDATE,
+    RESTART,
+    NEWS,
+    PACKAGE,
+    SERVICES,
+    LOG,
+    CLEANUP,
+    PACNEW,
+    MIRRORS,
+    FIRMWARE,
+    REPAIR,
+    SETTINGS,
+    LANGUAGE,
+    THEME,
+    NOTIFICATION,
+    APP_MENU,
+    HIDDEN,
+    OPTIONAL,
+    ABOUT,
+    APP,
+    CHECK,
+    DONE,
+    FAILED,
+    BACK,
+    START,
+    STOP,
+    ENABLE,
+    DISABLE,
+    CODE,
+    OLDER,
+    REMOVE,
+    INSTALL,
+    TAKE,
+    KEEP,
+];

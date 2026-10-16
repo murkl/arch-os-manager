@@ -1,0 +1,14 @@
+ops:
+  list:
+    title: Reading the mirror list
+  rank:
+    title: Ranking the mirrors
+    root: true
+    needs: [reflector]
+errors:
+  10: |
+    The mirrors were not ranked
+    reflector runs only while the machine is online. Check the internet connection.
+  11: |
+    reflector failed
+    Its log tells why: journalctl -u reflector

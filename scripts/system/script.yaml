@@ -1,0 +1,11 @@
+ops:
+  state:
+    title: Reading the system state
+  auth:
+    title: Checking the password
+    root: true
+  reboot:
+    title: Restarting
+    confirm: |
+      Restart now?
+      Unsaved work in open applications is lost.

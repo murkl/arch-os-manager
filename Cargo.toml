@@ -1,0 +1,31 @@
+[package]
+name = "system-manager"
+version = "2.0.0-dev"
+edition = "2024"
+rust-version = "1.99"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/murkl/arch-os-manager"
+publish = false
+
+[dependencies]
+fontdue = "0.9.4"
+jiff = "0.2"
+ratatui = "0.30.2"
+roxmltree = "0.21"
+rustix = { version = "1.1.5", features = ["fs", "process", "pty", "stdio", "termios"] }
+serde = { version = "1", features = ["derive"] }
+serde-saphyr = "2.0.0"
+serde_json = "1"
+softbuffer = "0.4.8"
+unicode-width = "0.2"
+vt100 = "0.16.2"
+winit = "0.30"
+
+[dev-dependencies]
+png = "0.18"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

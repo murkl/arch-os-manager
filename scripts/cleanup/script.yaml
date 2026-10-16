@@ -1,0 +1,20 @@
+ops:
+  plan:
+    title: Finding what to clean up
+    needs: [pacman-contrib]
+  run:
+    title: Cleaning up
+    root: true
+    needs: [pacman-contrib]
+    steps:
+      orphans: Removing unneeded packages
+      cache: Trimming the package cache
+      aur: Removing old AUR builds
+      flatpak: Removing unused Flatpak runtimes
+errors:
+  10: |
+    The snapshots cannot be read
+    The package cache is trimmed only once it is known which kernels the snapshots need for a recovery. Only members of the group wheel may read /.snapshots.
+  11: |
+    A path to remove lies outside the caches
+    Nothing outside the package cache and the AUR build directories is removed.
