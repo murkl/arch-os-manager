@@ -167,8 +167,7 @@ impl Page for FeaturePage {
         if state == Status::Missing && AUR_HELPERS.contains(&self.package.as_str()) {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Built from the AUR as its binary package; git and base-devel come along.")
-                    .into(),
+                t("Built from source from the AUR; git and base-devel come along.").into(),
                 Tone::Muted,
             ));
         }

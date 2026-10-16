@@ -103,8 +103,8 @@ msgstr "Wird gebaut"
 msgid "Built"
 msgstr "Gebaut"
 
-msgid "Built from the AUR as its binary package; git and base-devel come along."
-msgstr "Wird als Binärpaket aus dem AUR gebaut; git und base-devel kommen dazu."
+msgid "Built from source from the AUR; git and base-devel come along."
+msgstr "Wird aus den Quellen im AUR gebaut; git und base-devel kommen dazu."
 
 msgid "Changed"
 msgstr "Geändert"
