@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 
 use crate::data::journal::Entry;
 use crate::i18n::t;
-use crate::ui::detail::{Act, Block, Detail, loaded};
+use crate::ui::detail::{Act, Block, Detail, done, loaded, show};
 use crate::ui::draw::put;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
@@ -60,14 +60,7 @@ impl Page for LogPage {
             })
             .collect();
         if rows.is_empty() {
-            put(
-                buf,
-                area.x,
-                area.y,
-                t("No errors since the start."),
-                area.width,
-                ctx.style.tone(Tone::Ok),
-            );
+            show(vec![done(t("No errors since the start."))], area, buf, ctx);
         }
         self.list.set(rows);
         self.list.draw(area, buf, ctx);

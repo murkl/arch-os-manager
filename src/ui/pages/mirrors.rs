@@ -52,8 +52,7 @@ impl Page for MirrorsPage {
             body.push(Block::Row(
                 Lead::Icon(icon::MIRRORS, Tone::Muted),
                 server.clone(),
-                String::new(),
-                Tone::Muted,
+                Vec::new(),
             ));
         }
         let missing = (!ctx.available(op::MIRRORS_RANK)).then(|| t("needs reflector").to_string());

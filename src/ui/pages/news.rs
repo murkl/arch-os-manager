@@ -6,7 +6,8 @@ use ratatui::layout::Rect;
 use crate::data::news::{Block as Html, Item, blocks};
 use crate::i18n::t;
 use crate::ui::detail::{Block, Detail, loaded};
-use crate::ui::list::{List, Picked, Row};
+use crate::ui::icon;
+use crate::ui::list::{Lead, List, Picked, Row};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
 
 pub fn unread(ctx: &Ctx) -> usize {
@@ -113,23 +114,38 @@ impl ArticlePage {
     pub fn new(item: Item) -> ArticlePage {
         let mut body = vec![
             Block::Heading(item.title.clone()),
-            Block::Text(item.date.clone(), Tone::Muted),
-            Block::Blank,
+            Block::Note(
+                Lead::Icon(icon::DATE, Tone::Muted),
+                item.date.clone(),
+                Tone::Muted,
+            ),
         ];
+        // The items of a list stand together; everything else has a line around it.
+        let mut listing = false;
         for b in blocks(&item.html) {
+            let listed = matches!(b, Html::Item(_));
+            if !(listed && listing) {
+                body.push(Block::Blank);
+            }
+            listing = listed;
             match b {
                 Html::Para(text) => body.push(Block::Text(text, Tone::Normal)),
-                Html::Item(text) => body.push(Block::Text(format!("- {text}"), Tone::Normal)),
-                Html::Code(lines) => body.push(Block::Code(
-                    lines
-                        .into_iter()
-                        .map(|l| (format!("  {l}"), Tone::Accent))
-                        .collect(),
-                )),
+                Html::Item(text) => body.push(Block::Note(Lead::Bullet, text, Tone::Normal)),
+                Html::Code(lines) => body.extend(lines.into_iter().enumerate().map(|(n, l)| {
+                    let lead = match n {
+                        0 => Lead::Icon(icon::COMMAND, Tone::Muted),
+                        _ => Lead::None,
+                    };
+                    Block::Note(lead, l, Tone::Accent)
+                })),
             }
-            body.push(Block::Blank);
         }
-        body.push(Block::Text(item.link.clone(), Tone::Muted));
+        body.push(Block::Blank);
+        body.push(Block::Note(
+            Lead::Icon(icon::LINK, Tone::Muted),
+            item.link.clone(),
+            Tone::Muted,
+        ));
         let mut detail = Detail::default();
         detail.set(body, Vec::new());
         ArticlePage { item, detail }
@@ -151,5 +167,51 @@ impl Page for ArticlePage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         self.detail.key(key, ctx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_a_list_together_and_marks_the_date_a_command_and_the_link() {
+        let body = ArticlePage::new(Item {
+            title: "Title".into(),
+            link: "https://archlinux.org/news/x/".into(),
+            date: "2026-10-12".into(),
+            html:
+                "<p>Text.</p><ul><li>one</li><li>two</li></ul><pre><code>pacman -Syu</code></pre>"
+                    .into(),
+        })
+        .detail
+        .body;
+        let note = |lead: Lead, text: &str, tone: Tone| Block::Note(lead, text.into(), tone);
+        assert_eq!(
+            body[1],
+            note(
+                Lead::Icon(icon::DATE, Tone::Muted),
+                "2026-10-12",
+                Tone::Muted
+            )
+        );
+        let one = body
+            .iter()
+            .position(|b| *b == note(Lead::Bullet, "one", Tone::Normal))
+            .unwrap();
+        assert_eq!(body[one + 1], note(Lead::Bullet, "two", Tone::Normal));
+        assert!(body.contains(&note(
+            Lead::Icon(icon::COMMAND, Tone::Muted),
+            "pacman -Syu",
+            Tone::Accent
+        )));
+        assert_eq!(
+            body.last(),
+            Some(&note(
+                Lead::Icon(icon::LINK, Tone::Muted),
+                "https://archlinux.org/news/x/",
+                Tone::Muted
+            ))
+        );
     }
 }

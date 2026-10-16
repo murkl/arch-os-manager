@@ -179,9 +179,6 @@ msgstr "Nicht mehr selbst starten"
 msgid "Done"
 msgstr "Fertig"
 
-msgid "Done."
-msgstr "Erledigt."
-
 msgid "Downloaded from extensions.gnome.org; GNOME loads it at the next login."
 msgstr "Von extensions.gnome.org geladen; GNOME lädt sie bei der nächsten Anmeldung."
 
@@ -220,6 +217,12 @@ msgstr "Flatpak-Apps"
 
 msgid "Flatpak apps in the update and the clean-up"
 msgstr "Flatpak-Apps im Update und beim Aufräumen"
+
+msgid "Flatpak looks for unused runtimes while cleaning up."
+msgstr "Flatpak sucht unbenutzte Laufzeiten beim Aufräumen."
+
+msgid "Flatpak runtimes"
+msgstr "Flatpak-Laufzeiten"
 
 msgid "For an update that keeps failing: on a database lock no package manager holds any more, or on signatures that cannot be verified."
 msgstr "Für ein Update, das immer wieder scheitert: an einer Datenbanksperre, die kein Paketmanager mehr hält, oder an Signaturen, die sich nicht prüfen lassen."
@@ -1053,9 +1056,6 @@ msgstr "heute"
 msgid "unknown"
 msgstr "unbekannt"
 
-msgid "unused runtimes, found while cleaning up"
-msgstr "ungenutzte Laufzeiten, gefunden beim Aufräumen"
-
 msgid "up to date"
 msgstr "aktuell"
 
@@ -1082,18 +1082,6 @@ msgstr "{n} Fehler"
 
 msgid "{n} failed"
 msgstr "{n} fehlgeschlagen"
-
-msgid "{n} file ({size})"
-msgstr "{n} Datei ({size})"
-
-msgid "{n} files ({size})"
-msgstr "{n} Dateien ({size})"
-
-msgid "{n} folder ({size})"
-msgstr "{n} Ordner ({size})"
-
-msgid "{n} folders ({size})"
-msgstr "{n} Ordner ({size})"
 
 msgid "{n} kernel package stays: the snapshots need it for a recovery."
 msgstr "{n} Kernel-Paket bleibt: die Snapshots brauchen es für eine Wiederherstellung."

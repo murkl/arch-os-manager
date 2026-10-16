@@ -110,7 +110,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
         Target::Packages => count(&s.installed, |n| (n.to_string(), Tone::Muted), nothing),
         Target::Services => match &s.services {
             Loaded::Ready(all) => match all.iter().filter(|x| x.failed()).count() {
-                0 => (String::new(), Tone::Muted, false),
+                0 => (all.len().to_string(), Tone::Muted, false),
                 n => (tf("{n} failed", &[("n", &n)]), Tone::Error, false),
             },
             other => count(other, |_| nothing.clone(), nothing.clone()),
@@ -134,7 +134,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
         Target::Pacnew => count(
             &s.pacnew,
             |n| (tf("{n} open", &[("n", &n)]), Tone::Warn),
-            nothing,
+            (t("up to date").into(), Tone::Ok),
         ),
         Target::Mirrors => match s.mirrors.ready().and_then(|m| m.changed) {
             Some(changed) => (ago(changed), Tone::Muted, false),
@@ -221,6 +221,35 @@ impl Page for HomePage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn services_count_until_one_fails_and_no_configuration_update_is_up_to_date() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, _) = crate::ui::app::tests::app();
+        let service = |active: &str| crate::data::services::Service {
+            user: false,
+            unit: "x.service".into(),
+            description: String::new(),
+            active: active.into(),
+            sub: String::new(),
+            enabled: "enabled".into(),
+        };
+        app.ctx.shared.services = Loaded::Ready(vec![service("active"), service("active")]);
+        assert_eq!(
+            status(Target::Services, &app.ctx),
+            ("2".into(), Tone::Muted, false)
+        );
+        app.ctx.shared.services = Loaded::Ready(vec![service("failed"), service("active")]);
+        assert_eq!(
+            status(Target::Services, &app.ctx),
+            ("1 failed".into(), Tone::Error, false)
+        );
+        app.ctx.shared.pacnew = Loaded::Ready(Vec::new());
+        assert_eq!(
+            status(Target::Pacnew, &app.ctx),
+            ("up to date".into(), Tone::Ok, false)
+        );
+    }
 
     #[test]
     fn r_reloads_behind_the_splash() {

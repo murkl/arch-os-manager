@@ -8,7 +8,7 @@ use ratatui::style::{Color, Modifier};
 
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
-use crate::ui::detail::{Act, Block, Detail, failure};
+use crate::ui::detail::{Act, Block, Detail, done, failure, show};
 use crate::ui::draw::{card, center, put, waiting, wrap};
 use crate::ui::icon;
 use crate::ui::input::Input;
@@ -186,9 +186,7 @@ impl Page for PasswordPage {
             }
         }
         if let Some(f) = &self.failed {
-            let mut d = Detail::default();
-            d.set(failure(f), Vec::new());
-            d.draw(area, buf, ctx);
+            show(failure(f), area, buf, ctx);
             return;
         }
         let mut y = area.y;
@@ -587,19 +585,13 @@ impl RunPage {
                     vec![Block::Row(
                         Lead::Icon(icon::RESTART, Tone::Accent),
                         line,
-                        String::new(),
-                        Tone::Muted,
+                        Vec::new(),
                     )],
                     Vec::new(),
                 )
             }
             Ok(()) => {
-                let mut body = vec![Block::Row(
-                    Lead::Icon(icon::DONE, Tone::Ok),
-                    t("Done").into(),
-                    String::new(),
-                    Tone::Ok,
-                )];
+                let mut body = vec![done(t("Done"))];
                 if ctx.busy() {
                     body.push(Block::Blank);
                     body.push(Block::Text(
@@ -623,8 +615,7 @@ impl RunPage {
                 let mut body = vec![Block::Row(
                     Lead::Icon(icon::FAILED, Tone::Error),
                     headline,
-                    String::new(),
-                    Tone::Muted,
+                    Vec::new(),
                 )];
                 body.extend(failure(f).into_iter().skip(1));
                 let mut acts = Vec::new();

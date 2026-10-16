@@ -516,8 +516,7 @@ impl MarkedPage {
                     body.push(Block::Row(
                         Lead::Icon(icon::PACKAGE, Tone::Muted),
                         name,
-                        String::new(),
-                        Tone::Muted,
+                        Vec::new(),
                     ));
                 }
                 body.push(Block::Blank);

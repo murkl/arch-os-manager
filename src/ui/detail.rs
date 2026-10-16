@@ -4,6 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use super::draw::{cut, put, waiting, width, wrap};
+use super::icon;
 use super::list::{Lead, List, Picked, Row, draw_row};
 use super::{Ctx, Flow, Key, Loaded, Nav, Tone};
 use crate::i18n::t;
@@ -18,11 +19,23 @@ pub enum Block {
     Code(Vec<(String, Tone)>),
     /// Lines kept as they are, each in pieces of their own tone, bold or not.
     Styled(Vec<Vec<Span>>),
-    /// A row as lists draw it: the lead column, the label, the detail on the right.
-    Row(Lead, String, String, Tone),
-    /// A row whose detail is a change: what it was, muted, then what it becomes.
-    Change(Lead, String, (String, String)),
+    /// A row as lists draw it: the lead column, the label, the detail on the right in pieces.
+    Row(Lead, String, Vec<(String, Tone)>),
+    /// Text beside the lead column, wrapped under itself.
+    Note(Lead, String, Tone),
     Blank,
+}
+
+/// What is done or in order, the same on every page: a check, then the sentence.
+pub fn done(text: impl Into<String>) -> Block {
+    Block::Note(Lead::Icon(icon::DONE, Tone::Ok), text.into(), Tone::Normal)
+}
+
+/// Draws facts without actions, for a page that has nothing else to show.
+pub fn show(body: Vec<Block>, area: Rect, buf: &mut Buffer, ctx: &Ctx) {
+    let mut d = Detail::default();
+    d.set(body, Vec::new());
+    d.draw(area, buf, ctx);
 }
 
 pub struct Act {
@@ -165,7 +178,7 @@ impl Detail {
                         x = put(buf, x, y, text, area.right().saturating_sub(x), style);
                     }
                 }
-                Line::Row(lead, label, detail) => {
+                Line::Row(lead, (label, tone), detail) => {
                     let pieces: Vec<_> = detail
                         .iter()
                         .map(|(text, tone)| (text.as_str(), s.tone(*tone)))
@@ -175,7 +188,7 @@ impl Detail {
                         area,
                         y,
                         *lead,
-                        ("", label, s.tone(Tone::Normal)),
+                        ("", label, s.tone(*tone)),
                         &pieces,
                         ctx,
                     )
@@ -208,7 +221,7 @@ pub type Span = (String, Tone, bool);
 
 enum Line {
     Spans(Vec<Span>),
-    Row(Lead, String, Vec<(String, Tone)>),
+    Row(Lead, (String, Tone), Vec<(String, Tone)>),
 }
 
 /// The blocks as screen lines of the given width.
@@ -260,16 +273,18 @@ fn render(body: &[Block], w: usize, ctx: &Ctx) -> Vec<Line> {
             Block::Styled(lines) => {
                 out.extend(lines.iter().map(|spans| Line::Spans(spans.clone())))
             }
-            Block::Row(lead, label, detail, tone) => out.push(Line::Row(
+            Block::Row(lead, label, detail) => out.push(Line::Row(
                 *lead,
-                label.clone(),
-                vec![(detail.clone(), *tone)],
+                (label.clone(), Tone::Normal),
+                detail.clone(),
             )),
-            Block::Change(lead, label, (was, becomes)) => out.push(Line::Row(
-                *lead,
-                label.clone(),
-                vec![(was.clone(), Tone::Muted), (becomes.clone(), Tone::Accent)],
-            )),
+            // The text starts where a row's label does, as list rows have it.
+            Block::Note(lead, text, tone) => {
+                for (i, line) in wrap(text, w.saturating_sub(3)).into_iter().enumerate() {
+                    let lead = if i == 0 { *lead } else { Lead::None };
+                    out.push(Line::Row(lead, (line, *tone), Vec::new()));
+                }
+            }
             Block::Blank => out.push(Line::Spans(Vec::new())),
         }
     }
@@ -318,9 +333,7 @@ pub fn loaded<'a, T>(
             None
         }
         Loaded::Failed(f) => {
-            let mut d = Detail::default();
-            d.set(failure(f), Vec::new());
-            d.draw(area, buf, ctx);
+            show(failure(f), area, buf, ctx);
             None
         }
         Loaded::Missing(package) => {
@@ -338,5 +351,32 @@ pub fn loaded<'a, T>(
             );
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_note_wraps_under_its_own_text_not_under_the_lead() {
+        let (app, _) = crate::ui::app::tests::app();
+        let lines = render(
+            &[Block::Note(
+                Lead::Bullet,
+                "one two three".into(),
+                Tone::Normal,
+            )],
+            10,
+            &app.ctx,
+        );
+        let leads: Vec<(Lead, &str)> = lines
+            .iter()
+            .filter_map(|l| match l {
+                Line::Row(lead, (text, _), _) => Some((*lead, text.as_str())),
+                Line::Spans(_) => None,
+            })
+            .collect();
+        assert_eq!(leads, [(Lead::Bullet, "one two"), (Lead::None, "three")]);
     }
 }

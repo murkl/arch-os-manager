@@ -641,6 +641,7 @@ pub mod tests {
             g.cursor,
             g.dot,
             g.ring,
+            g.bullet,
             g.rule,
             g.path,
             g.arrow,

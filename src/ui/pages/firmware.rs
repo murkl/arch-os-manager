@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use super::run::{Job, start};
 use crate::i18n::t;
 use crate::script::op;
-use crate::ui::detail::{Act, Block, Detail, loaded};
+use crate::ui::detail::{Act, Block, Detail, done, loaded};
 use crate::ui::icon;
 use crate::ui::list::{Lead, changes};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
@@ -35,20 +35,15 @@ impl Page for FirmwarePage {
         let mut body = Vec::new();
         let mut acts = Vec::new();
         if list.is_empty() {
-            body.push(Block::Row(
-                Lead::Icon(icon::DONE, Tone::Ok),
-                t("The firmware is up to date.").into(),
-                String::new(),
-                Tone::Muted,
-            ));
+            body.push(done(t("The firmware is up to date.")));
         } else {
             let pairs: Vec<_> = list.iter().map(|f| (&*f.current, &*f.new)).collect();
             let change = changes(&pairs, ctx.style.glyphs.arrow);
-            for (f, change) in list.iter().zip(change) {
-                body.push(Block::Change(
+            for (f, (was, becomes)) in list.iter().zip(change) {
+                body.push(Block::Row(
                     Lead::Icon(icon::FIRMWARE, Tone::Muted),
                     f.device.clone(),
-                    change,
+                    vec![(was, Tone::Muted), (becomes, Tone::Accent)],
                 ));
                 if !f.summary.is_empty() {
                     body.push(Block::Text(f.summary.clone(), Tone::Muted));

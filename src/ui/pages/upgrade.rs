@@ -8,7 +8,7 @@ use super::run::{Job, start};
 use crate::data::updates::Source;
 use crate::i18n::{t, tf, tn};
 use crate::script::op;
-use crate::ui::detail::{Act, Block, Detail};
+use crate::ui::detail::{Act, Block, Detail, done};
 use crate::ui::draw::waiting;
 use crate::ui::icon;
 use crate::ui::list::{Lead, changes};
@@ -56,12 +56,7 @@ impl UpgradePage {
             }
             Loaded::Ready(list) if list.is_empty() => {
                 known_current = true;
-                body.push(Block::Row(
-                    Lead::Icon(icon::DONE, Tone::Ok),
-                    t("The system is up to date.").to_string(),
-                    String::new(),
-                    Tone::Muted,
-                ));
+                body.push(done(t("The system is up to date.")));
             }
             Loaded::Ready(list) => {
                 let pairs: Vec<_> = list.iter().map(|u| (&*u.old, &*u.new)).collect();
@@ -81,10 +76,11 @@ impl UpgradePage {
                     }
                     body.push(Block::Heading(format!("{heading} ({})", part.len())));
                     for (u, change) in part {
-                        body.push(Block::Change(
+                        let (was, becomes) = change.clone();
+                        body.push(Block::Row(
                             Lead::Icon(glyph, Tone::Muted),
                             u.name.clone(),
-                            change.clone(),
+                            vec![(was, Tone::Muted), (becomes, Tone::Accent)],
                         ));
                     }
                     body.push(Block::Blank);

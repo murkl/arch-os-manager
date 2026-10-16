@@ -20,6 +20,8 @@ pub enum Lead {
     Icon(&'static str, Tone),
     /// A state: a filled dot in its tone, a ring when muted.
     Dot(Tone),
+    /// An item of running text.
+    Bullet,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -103,6 +105,7 @@ pub fn draw_row(
         Lead::Icon(icon, tone) => (icon, tone),
         Lead::Dot(Tone::Muted) => (s.glyphs.ring, Tone::Muted),
         Lead::Dot(tone) => (s.glyphs.dot, tone),
+        Lead::Bullet => (s.glyphs.bullet, Tone::Accent),
     };
     put(buf, area.x, y, glyph, 1, s.tone(tone));
     // Room for an icon a font draws wider than its cell, as Nerd Fonts without Mono do.

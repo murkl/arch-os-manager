@@ -6,8 +6,7 @@ use ratatui::layout::Rect;
 use super::run::{Job, start};
 use crate::i18n::{t, tf};
 use crate::script::{op, query};
-use crate::ui::detail::{Act, Block, Detail, failure, loaded};
-use crate::ui::draw::put;
+use crate::ui::detail::{Act, Block, Detail, done, failure, loaded, show};
 use crate::ui::fetch::Fetch;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
@@ -34,13 +33,11 @@ impl Page for PacnewPage {
             return;
         };
         if files.is_empty() {
-            put(
+            show(
+                vec![done(t("Every configuration is up to date."))],
+                area,
                 buf,
-                area.x,
-                area.y,
-                t("Every configuration is up to date."),
-                area.width,
-                ctx.style.tone(Tone::Ok),
+                ctx,
             );
         }
         self.list.set(
@@ -108,14 +105,7 @@ impl Page for FilePage {
             .ready()
             .is_some_and(|files| !files.contains(&self.file))
         {
-            put(
-                buf,
-                area.x,
-                area.y,
-                t("Done."),
-                area.width,
-                ctx.style.tone(Tone::Ok),
-            );
+            show(vec![done(t("Done"))], area, buf, ctx);
             return;
         }
         let mut body = vec![Block::Text(self.file.clone(), Tone::Muted), Block::Blank];
