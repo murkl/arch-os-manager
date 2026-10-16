@@ -1,5 +1,9 @@
 //! Terminal output as plain lines: escapes dropped, a carriage return starting the line over.
 
+/// The end of an unfinished line that is kept: a question stands at its end, and the line is
+/// looked at after every chunk of output.
+const KEEP: usize = 4096;
+
 #[derive(Default)]
 pub struct Lines {
     current: Vec<u8>,
@@ -71,6 +75,9 @@ impl Lines {
                 _ => self.current.push(b),
             }
         }
+        if self.current.len() > 2 * KEEP {
+            self.current.drain(..self.current.len() - KEEP);
+        }
         done
     }
 
@@ -90,6 +97,17 @@ mod tests {
         let done = l.feed(b"\x1b[1;32m:: \x1b[0mSynchronizing\r\n( 1/2) 50%\r( 2/2) 100%\r\nnext");
         assert_eq!(done, [":: Synchronizing", "( 2/2) 100%"]);
         assert_eq!(l.current(), "next");
+    }
+
+    #[test]
+    fn keeps_the_end_of_an_endless_line() {
+        let mut l = Lines::default();
+        for _ in 0..1000 {
+            l.feed(&[b'.'; 1000]);
+        }
+        l.feed(b"Proceed? [Y/n] ");
+        assert!(l.current().len() <= 2 * KEEP);
+        assert!(l.current().ends_with("Proceed? [Y/n] "));
     }
 
     #[test]

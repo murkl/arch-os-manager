@@ -157,20 +157,64 @@ fn versions_come_from_the_cache_and_the_archive() {
 }
 
 #[test]
-fn repair_leaves_a_running_pacman_and_a_strange_keyring_alone() {
+fn repair_leaves_a_held_lock_and_a_strange_keyring_alone() {
     let s = Sandbox::new("repair");
-    s.stub("pgrep", "exit 0");
-    let o = s.run("repair", &["run"], &[]);
-    assert_eq!(o.code, 10);
-    assert!(!o.calls.contains("sudo"), "{}", o.calls);
-    s.stub("pgrep", "exit 1");
+    let db = s.dir.join("db");
+    std::fs::create_dir_all(&db).unwrap();
+    std::fs::write(db.join("db.lck"), "").unwrap();
     s.stub(
         "pacman-conf",
-        r#"case "$1" in DBPath) echo /nonexistent/ ;; GPGDir) echo / ;; esac"#,
+        &format!(
+            r#"case "$1" in DBPath) echo {}/ ;; GPGDir) echo / ;; esac"#,
+            db.display()
+        ),
     );
+    // A front end other than pacman, holding the lock open as libalpm does.
+    s.stub("find", "echo /proc/42/fd/7");
+    let o = s.run("repair", &["run"], &[]);
+    assert_eq!(o.code, 10);
+    assert!(db.join("db.lck").exists());
+    s.stub("find", "exit 1");
     let o = s.run("repair", &["run"], &[]);
     assert_eq!(o.code, 11);
-    assert!(!o.calls.contains("rm"), "{}", o.calls);
+    assert!(!db.join("db.lck").exists(), "a lock nobody holds stays");
+    assert!(!o.calls.contains("pacman-key"), "{}", o.calls);
+}
+
+#[test]
+fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
+    let s = Sandbox::new("keyring");
+    let gpg = s.dir.join("gnupg");
+    std::fs::create_dir_all(&gpg).unwrap();
+    std::fs::write(gpg.join("old"), "").unwrap();
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in DBPath) echo {0}/ ;; GPGDir) echo {1}/ ;; esac"#,
+            s.dir.display(),
+            gpg.display()
+        ),
+    );
+    s.stub("pacman", "exit 0");
+    s.stub(
+        "pacman-key",
+        r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; [ "$3" = --populate ] && exit 1; touch "$2/new""#,
+    );
+    assert_eq!(s.run("repair", &["run"], &[]).code, 1);
+    assert!(gpg.join("old").exists(), "a failed rebuild left no keyring");
+    s.stub(
+        "pacman-key",
+        r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; touch "$2/new""#,
+    );
+    assert_eq!(s.run("repair", &["run"], &[]).code, 0);
+    assert!(gpg.join("new").exists() && !gpg.join("old").exists());
+    let left: Vec<_> = std::fs::read_dir(&s.dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with("gnupg."))
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
 }
 
 #[test]
@@ -597,4 +641,48 @@ case "$1" in get) cat "$store" ;; set) echo "$4" >"$store" ;; esac"#,
         r#"[ "$1" = get ] && echo "['arch-os.desktop']"; exit 0"#,
     );
     assert_eq!(s.run("migrate", &["clean", h], &[]).code, 10);
+}
+
+/// A release's push to the AUR, against a repository standing in for it that holds a file the
+/// release no longer has.
+#[test]
+fn a_release_replaces_what_the_aur_has() {
+    let dir = std::env::temp_dir().join(format!("sm-aur-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("seed")).unwrap();
+    let remote = dir.join("aur/arch-os-manager.git");
+    let sh = |script: &str| {
+        let out = Command::new("bash")
+            .arg("-c")
+            .arg(script)
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .env("DIR", &dir)
+            .env("REMOTE", &remote)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_COUNT", "1")
+            .env(
+                "GIT_CONFIG_KEY_0",
+                format!("url.file://{}/aur/.insteadOf", dir.display()),
+            )
+            .env("GIT_CONFIG_VALUE_0", "ssh://aur@aur.archlinux.org/")
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned()
+            + &String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{script}\n{text}");
+        text
+    };
+    sh(r#"set -e
+        git init -q --bare --initial-branch=master "$REMOTE"
+        cd "$DIR/seed" && git init -q --initial-branch=master
+        touch PKGBUILD arch-os.desktop && git add -A
+        git -c user.name=old -c user.email=old@example.org commit -q -m 1.9.1
+        git push -q "$REMOTE" master"#);
+    sh(r#"tools/aur.sh 2.0.0 LICENSE "$DIR/stamped" && tools/aur-push.sh "$DIR/stamped""#);
+    let tree = sh(r#"git -C "$REMOTE" ls-tree --name-only master"#);
+    assert_eq!(tree, ".SRCINFO\nPKGBUILD\narch-os-manager.install\n");
+    let commit = sh(r#"git -C "$REMOTE" log -1 --format='%an <%ae> %s' master"#);
+    assert_eq!(commit, "murkl <murkl@users.noreply.github.com> 2.0.0\n");
+    assert!(sh(r#"tools/aur-push.sh "$DIR/stamped""#).contains("there already"));
+    std::fs::remove_dir_all(&dir).unwrap();
 }

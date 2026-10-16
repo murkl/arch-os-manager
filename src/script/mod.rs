@@ -312,12 +312,14 @@ impl Failure {
     /// From an exit code, the first `fail` line lib.sh wrote, and the output.
     pub fn classify(op: Op, code: Option<i32>, fail: Option<&str>, tail: Vec<String>) -> Failure {
         let own = meta(op.script);
+        // The last line that names a cause; the longest key it holds is the most specific.
         let hint = || {
             tail.iter().rev().find_map(|line| {
                 own.hints
                     .iter()
                     .chain(&meta("lib").hints)
-                    .find(|(key, _)| line.contains(key.as_str()))
+                    .filter(|(key, _)| line.contains(key.as_str()))
+                    .max_by_key(|(key, _)| key.len())
                     .map(|(_, h)| h)
             })
         };
@@ -559,6 +561,13 @@ mod tests {
         );
         assert!(hinted.known.unwrap().contains("locked"));
         assert_eq!(hinted.offer, Some("repair"));
+        let specific = Failure::classify(
+            op::UPDATE_RUN,
+            Some(1),
+            None,
+            vec!["error: failed to synchronize all databases (invalid or corrupted database (PGP signature))".into()],
+        );
+        assert_eq!(specific.offer, Some("mirrors"));
         let trapped = Failure::classify(
             op::PACKAGES_INSTALLED,
             Some(1),

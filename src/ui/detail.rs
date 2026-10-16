@@ -194,9 +194,9 @@ impl Detail {
             );
         }
         if !self.acts.is_empty() {
-            let top = area.y + area.height - self.acts.len() as u16;
+            let rows = (self.acts.len() as u16).min(area.height);
             self.list.draw(
-                Rect::new(area.x, top, area.width, self.acts.len() as u16),
+                Rect::new(area.x, area.y + area.height - rows, area.width, rows),
                 buf,
                 ctx,
             );

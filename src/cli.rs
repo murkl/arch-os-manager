@@ -66,6 +66,10 @@ pub fn main() -> ExitCode {
         eprint!("system-manager: --new goes with notify\n\n{}", help());
         return ExitCode::from(64);
     }
+    if rustix::process::geteuid().is_root() && refuses_root(command.as_deref()) {
+        eprintln!("system-manager: runs as the user it serves and asks for the password itself");
+        return ExitCode::FAILURE;
+    }
     if let Err(e) = crate::log::init(&crate::paths::log()) {
         eprintln!(
             "system-manager: no log at {}: {e}",
@@ -104,6 +108,12 @@ pub fn main() -> ExitCode {
     };
     script::cleanup();
     code
+}
+
+/// Whether a command refuses root: makepkg does, and the files it writes would be root's in the
+/// user's home. Only reading the updates is the same for root.
+fn refuses_root(command: Option<&str>) -> bool {
+    command != Some("check")
 }
 
 /// The settings in force and the optional packages there, as a start of the interface reads them.
@@ -244,6 +254,14 @@ fn notify(only_new: bool) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn root_may_only_check() {
+        assert!(!refuses_root(Some("check")));
+        for command in [None, Some("init"), Some("notify")] {
+            assert!(refuses_root(command), "{command:?}");
+        }
+    }
 
     #[test]
     fn notify_by_hand_shows_what_is_pending_and_the_timer_only_what_is_new() {

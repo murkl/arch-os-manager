@@ -11,8 +11,8 @@ ops:
       upgrade: Updating the system
 errors:
   10: |
-    pacman is running
-    Wait until it is done, then repair.
+    A package manager is running
+    It holds the package database. Wait until it is done, then repair.
   11: |
     The keyring is not where it is expected
     pacman.conf names a GPGDir not ending in gnupg, so it is left alone.
