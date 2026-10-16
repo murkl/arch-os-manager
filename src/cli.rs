@@ -18,8 +18,8 @@ pub const USAGE: [&str; 2] = [
     "system-manager init | check | notify [--new]",
 ];
 
-const OPTIONS: &str = "\
-  --window   open in a window of its own; the default without a terminal
+// Starts on the line of the quote: an escaped line break would swallow the indent after it.
+const OPTIONS: &str = "  --window   open in a window of its own; the default without a terminal
   init       put the app menu entry and the update notification in place
              as the settings say, for an installer; every start does it too
   check      print pending updates as checkupdates does; exit 2 if none
@@ -254,6 +254,20 @@ fn notify(only_new: bool) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_help_lines_up_every_description() {
+        let help = help();
+        let options: Vec<&str> = help.lines().skip(3).take_while(|l| !l.is_empty()).collect();
+        assert!(options.len() > 5, "{help}");
+        for line in options {
+            let (name, text) = line.split_at(13);
+            assert!(
+                name.starts_with("  ") && name.ends_with(' ') && !text.starts_with(' '),
+                "{line:?}"
+            );
+        }
+    }
 
     #[test]
     fn root_may_only_check() {

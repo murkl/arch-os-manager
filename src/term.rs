@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
@@ -13,9 +13,17 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
     let console = std::env::var("TERM").is_ok_and(|t| t == "linux");
     let keys = tx.clone();
     std::thread::spawn(move || {
+        let mut last = None;
         while let Ok(e) = event::read() {
             let msg = match e {
-                Event::Key(k) if k.kind != KeyEventKind::Release => key(k).map(Msg::Key),
+                Event::Key(k) if k.kind != KeyEventKind::Release => key(k).map(|key| {
+                    let again = held(&mut last, key, Instant::now());
+                    if again || k.kind == KeyEventKind::Repeat {
+                        Msg::Held(key)
+                    } else {
+                        Msg::Key(key)
+                    }
+                }),
                 Event::Resize(..) => Some(Msg::Resize),
                 _ => None,
             };
@@ -61,6 +69,17 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
     result
 }
 
+/// Faster than a hand presses a key twice, slower than a keyboard repeats it.
+const REPEAT: Duration = Duration::from_millis(150);
+
+/// Whether a key is held: a terminal sends its repeats as presses, so the same key again within
+/// `REPEAT` of its last one counts as held.
+fn held(last: &mut Option<(Key, Instant)>, key: Key, now: Instant) -> bool {
+    let held = last.is_some_and(|(k, at)| k == key && now.duration_since(at) < REPEAT);
+    *last = Some((key, now));
+    held
+}
+
 fn key(k: KeyEvent) -> Option<Key> {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     Some(match k.code {
@@ -82,4 +101,20 @@ fn key(k: KeyEvent) -> Option<Key> {
         KeyCode::End => Key::End,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_key_coming_again_at_the_rate_of_a_keyboard_is_held() {
+        let (mut last, start) = (None, Instant::now());
+        let at = |ms| start + Duration::from_millis(ms);
+        assert!(!held(&mut last, Key::Char('r'), at(0)));
+        assert!(held(&mut last, Key::Char('r'), at(30)));
+        assert!(held(&mut last, Key::Char('r'), at(60)));
+        assert!(!held(&mut last, Key::Char('j'), at(90)), "another key");
+        assert!(!held(&mut last, Key::Char('j'), at(400)), "pressed again");
+    }
 }

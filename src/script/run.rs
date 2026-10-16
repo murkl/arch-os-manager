@@ -146,8 +146,9 @@ impl Run {
     pub fn answer(&mut self, text: &str) {
         let line = self.lines.current();
         if self.prompt == Some(Prompt::Password) {
-            // A terminal that echoes would print the password into the output and the log.
-            if self.session.echoes() {
+            // An empty one counts as a failed attempt towards the lock of pam_faillock; a
+            // terminal that echoes would print it into the output and the log.
+            if text.is_empty() || self.session.echoes() {
                 return;
             }
             sudo::set(text.to_string());
@@ -237,6 +238,7 @@ mod tests {
 
     #[test]
     fn hands_the_password_over_only_while_echo_is_off() {
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         sudo::set("s3cret word".into());
         let (_, out) = drive(
             r#"stty -echo; printf '%s' "$SUDO_PROMPT"; read -r pw; stty echo; echo; [ "$pw" = "s3cret word" ] && echo accepted"#,
@@ -247,6 +249,30 @@ mod tests {
             !out.contains("s3cret"),
             "the password reached the output: {out}"
         );
+    }
+
+    #[test]
+    fn never_hands_an_empty_password_to_sudo() {
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        sudo::set(String::new());
+        assert_eq!(sudo::get(), None);
+        let (tx, rx) = mpsc::channel();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg("-c")
+            .arg(r#"stty -echo; printf '%s' "$SUDO_PROMPT"; read -r -t 2 pw || { echo; echo unanswered; }"#)
+            .env("SUDO_PROMPT", sudo::PROMPT);
+        let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
+        let mut run = Run::with(crate::script::op::SYSTEM_AUTH, session, (24, 80));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while run.result().is_none() && Instant::now() < deadline {
+            if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
+                run.on_event(e);
+            }
+            if run.prompt == Some(Prompt::Password) {
+                run.answer("");
+            }
+        }
+        assert!(run.recent.iter().any(|l| l == "unanswered"));
     }
 
     #[test]

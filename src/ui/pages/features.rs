@@ -4,9 +4,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use super::run::{Job, start};
-use crate::data::features::Status;
+use crate::data::features::{self, EXTENSION, Status};
 use crate::i18n::{t, tf};
-use crate::script::{meta, op};
+use crate::script::op;
 use crate::settings::AUR_HELPERS;
 use crate::ui::detail::{Act, Block, Detail, loaded};
 use crate::ui::icon;
@@ -50,14 +50,12 @@ impl Page for FeaturesPage {
             .iter()
             .map(|(package, s)| {
                 let (text, tone) = status(s);
+                let kind = features::package(package).map(|(kind, _)| format!("{kind}/"));
+                let row =
+                    Row::new(package.clone(), package.clone()).prefix(kind.unwrap_or_default());
                 match features.unmet(package).filter(|_| *s == Status::Missing) {
-                    Some(why) => Row::new(package.clone(), package.clone())
-                        .detail(t(why), Tone::Muted)
-                        .dot(Tone::Muted)
-                        .dim(true),
-                    None => Row::new(package.clone(), package.clone())
-                        .detail(text, tone)
-                        .dot(tone),
+                    Some(why) => row.detail(t(why), Tone::Muted).dot(Tone::Muted).dim(true),
+                    None => row.detail(text, tone).dot(tone),
                 }
             })
             .collect();
@@ -113,10 +111,12 @@ impl Page for FeaturePage {
             .map(|(_, s)| s.clone())
             .unwrap_or(Status::Missing);
         let (text, tone) = status(&state);
-        let probe = meta(op::FEATURES_PROBE.script).probe.get(&self.package);
-        let adds = probe.map(|p| t(&p.adds).to_string()).unwrap_or_default();
+        let known = features::package(&self.package);
+        let adds = known
+            .map(|(_, p)| t(&p.adds).to_string())
+            .unwrap_or_default();
         // An extension is no package: the desktop script sets it up for this user.
-        let extension = probe.is_some_and(|p| p.extension);
+        let extension = known.is_some_and(|(kind, _)| kind == EXTENSION);
         let (install, remove, args) = if extension {
             (
                 op::DESKTOP_EXTENSION_INSTALL,
@@ -196,5 +196,30 @@ impl Page for FeaturePage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         self.detail.key(key, ctx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::features::Features;
+    use crate::ui::app::tests::{app, screen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    #[test]
+    fn names_each_package_after_its_kind_and_cuts_the_kind_first() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::De);
+        let (mut app, _) = app();
+        app.ctx.shared.features = Loaded::Ready(Features::parse(
+            "paru\tok\t2.1.0-1\narch-update\tmissing\n@gnome\tok\n",
+        ));
+        let mut term = Terminal::new(TestBackend::new(40, 16)).unwrap();
+        crate::ui::app::tests::open(&mut app, Box::new(FeaturesPage::new(None)));
+        let shown = screen(&mut app, &mut term);
+        crate::i18n::set(crate::i18n::Lang::En);
+        assert!(shown.contains("aur-helper/paru"), "{shown}");
+        assert!(shown.contains("…on/arch-update"), "{shown}");
     }
 }

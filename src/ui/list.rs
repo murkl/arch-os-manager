@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style as Cell;
 
-use super::draw::{cut, put, width};
+use super::draw::{cut, cut_front, put, width};
 use super::input::Input;
 use super::{Ctx, Key, Nav, Tone};
 use crate::i18n::t;
@@ -25,6 +25,8 @@ pub enum Lead {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
     pub id: String,
+    /// Muted before the label, such as the kind of a package.
+    pub prefix: String,
     pub label: String,
     /// Right-aligned: a count, a state, a version.
     pub detail: String,
@@ -39,6 +41,7 @@ impl Row {
     pub fn new(id: impl Into<String>, label: impl Into<String>) -> Row {
         Row {
             id: id.into(),
+            prefix: String::new(),
             label: label.into(),
             detail: String::new(),
             tone: Tone::Muted,
@@ -53,6 +56,11 @@ impl Row {
             heading: true,
             ..Row::new("", label)
         }
+    }
+
+    pub fn prefix(mut self, prefix: impl Into<String>) -> Row {
+        self.prefix = prefix.into();
+        self
     }
 
     pub fn detail(mut self, detail: impl Into<String>, tone: Tone) -> Row {
@@ -77,13 +85,14 @@ impl Row {
     }
 }
 
-/// The columns of a row, as a list and a page of facts both draw it: lead, label, detail.
+/// The columns of a row, as a list and a page of facts both draw it: lead, label after its
+/// muted prefix, detail.
 pub fn draw_row(
     buf: &mut Buffer,
     area: Rect,
     y: u16,
     lead: Lead,
-    label: (&str, Cell),
+    (prefix, label, label_style): (&str, &str, Cell),
     detail: &[(&str, Cell)],
     ctx: &Ctx,
 ) {
@@ -117,13 +126,21 @@ pub fn draw_row(
     } else {
         detail_width + 2
     });
+    // A prefix says less than the label after it: it gives way first, from its front.
+    let name = cut(label, label_room, s.glyphs.ellipsis);
+    let prefix_room = label_room - width(&name);
+    let prefix = match prefix_room {
+        0 => String::new(),
+        room => cut_front(prefix, room, s.glyphs.ellipsis),
+    };
+    let after = put(buf, x, y, &prefix, prefix_room as u16, s.tone(Tone::Muted));
     put(
         buf,
-        x,
+        after,
         y,
-        &cut(label.0, label_room, s.glyphs.ellipsis),
-        label_room as u16,
-        label.1,
+        &name,
+        (label_room as u16).saturating_sub(after - x),
+        label_style,
     );
     let mut x = area.right() - detail_width as u16;
     for (piece, style) in &pieces {
@@ -223,7 +240,9 @@ impl List {
                 let r = &self.rows[i];
                 !r.heading
                     && (query.is_empty()
-                        || r.label.to_lowercase().contains(&query)
+                        || format!("{}{}", r.prefix, r.label)
+                            .to_lowercase()
+                            .contains(&query)
                         || r.detail.to_lowercase().contains(&query))
             })
             .collect()
@@ -393,7 +412,7 @@ impl List {
                 area,
                 ly,
                 lead,
-                (&row.label, style),
+                (&row.prefix, &row.label, style),
                 &[(&row.detail, s.tone(row.tone))],
                 ctx,
             );
@@ -476,6 +495,19 @@ mod tests {
             matches!(l.key(Key::Esc), Picked::Ignored),
             "without a filter esc is the page's"
         );
+    }
+
+    #[test]
+    fn the_filter_reads_the_prefix_with_the_label() {
+        let mut l = List::new(vec![
+            Row::new("paru", "paru").prefix("aur-helper/"),
+            Row::new("meld", "meld").prefix("merge-tool/"),
+        ]);
+        l.key(Key::Char('f'));
+        for c in "helper/p".chars() {
+            l.key(Key::Char(c));
+        }
+        assert_eq!(l.shown(), [0]);
     }
 
     #[test]

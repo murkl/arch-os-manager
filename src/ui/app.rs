@@ -100,6 +100,12 @@ impl App {
 
     pub fn handle(&mut self, msg: Msg) {
         let top = self.pages.last().map(|(id, _)| *id).unwrap_or(0);
+        let typing = self.pages.last().is_some_and(|(_, p)| p.typing());
+        let msg = match msg {
+            Msg::Held(key) if key.repeats(typing) => Msg::Key(key),
+            Msg::Held(_) => return,
+            msg => msg,
+        };
         match msg {
             Msg::Key(key) => {
                 self.ctx.page = top;
@@ -122,7 +128,7 @@ impl App {
                     self.apply(flow);
                 }
             }
-            Msg::Resize => {}
+            Msg::Resize | Msg::Held(_) => {}
             Msg::Data(id, data) => self.deliver(id, |page, ctx| page.data(data, ctx)),
             Msg::Run(id, event) => self.deliver(id, |page, ctx| page.run(event, ctx)),
             Msg::Fresh(fresh) => self.fresh(fresh),
@@ -388,6 +394,10 @@ pub mod tests {
             .join("\n")
     }
 
+    pub fn open(app: &mut App, page: Box<dyn Page>) {
+        app.push(page);
+    }
+
     pub fn press(app: &mut App, keys: &[Key]) {
         for k in keys {
             app.handle(Msg::Key(*k));
@@ -402,7 +412,7 @@ pub mod tests {
         use crate::data::{packages::Installed, services::Service, system::System, updates};
         let s = &mut app.ctx.shared;
         s.features = Loaded::Ready(Features::parse(
-            "pacman-contrib\tok\t1.13.1-1\nparu\tok\t2.1.0-1\nyay\tmissing\nflatpak\tok\t1:1.18.4-1\nreflector\tok\t2023-2\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nfwupd\tok\t2.0.16-1\n@desktop\tok\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\narch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\npacman-contrib\tok\t1.13.1-1\nreflector\tok\t2023-2\n@desktop\tok\n@gnome\tok\n",
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {
@@ -684,6 +694,24 @@ pub mod tests {
             app.push(Box::new(pages::splash::SplashPage::after(ms)));
             screen(&mut app, &mut term);
         }
+    }
+
+    #[test]
+    fn a_held_key_moves_and_types_but_does_nothing_else_again() {
+        let (mut app, mut term) = app();
+        example(&mut app);
+        app.handle(Msg::Held(Key::Char('r')));
+        assert!(
+            !app.ctx.busy() && app.pages.len() == 1,
+            "r held is no press"
+        );
+        let before = screen(&mut app, &mut term);
+        app.handle(Msg::Held(Key::Down));
+        assert_ne!(screen(&mut app, &mut term), before);
+        press(&mut app, &[Key::Char('f')]);
+        app.handle(Msg::Held(Key::Char('x')));
+        app.handle(Msg::Held(Key::Char('x')));
+        assert!(screen(&mut app, &mut term).contains("xx"));
     }
 
     #[test]

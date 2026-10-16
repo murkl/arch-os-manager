@@ -95,6 +95,16 @@ impl Key {
         Some(nav)
     }
 
+    /// Whether holding the key repeats it: moving and typing do, everything else happens once
+    /// per press.
+    pub fn repeats(self, typing: bool) -> bool {
+        typing
+            || matches!(
+                self.nav(false),
+                Some(Nav::Up | Nav::Down | Nav::PageUp | Nav::PageDown)
+            )
+    }
+
     /// The bytes a terminal sends for the key, for the details view of a run.
     pub fn bytes(self) -> Vec<u8> {
         match self {
@@ -151,6 +161,8 @@ pub type PageId = u64;
 
 pub enum Msg {
     Key(Key),
+    /// A key held down, sent again by the keyboard's repeat.
+    Held(Key),
     Tick,
     Resize,
     /// The result of a job a page started.

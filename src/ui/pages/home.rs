@@ -180,6 +180,10 @@ impl Page for HomePage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         if key == Key::Char('r') && !self.list.typing() {
+            // One reading at a time: the spinner in the header shows the last is under way.
+            if ctx.busy() {
+                return Flow::Stay;
+            }
             ctx.reload();
             return Flow::Push(Box::new(super::splash::SplashPage::new()));
         }
@@ -224,5 +228,10 @@ mod tests {
         let flow = HomePage::new().key(Key::Char('r'), &mut app.ctx);
         assert!(matches!(flow, Flow::Push(page) if page.bare()));
         assert!(app.ctx.busy());
+        let again = HomePage::new().key(Key::Char('r'), &mut app.ctx);
+        assert!(
+            matches!(again, Flow::Stay),
+            "a second reading waits for the first"
+        );
     }
 }

@@ -36,11 +36,15 @@ pub fn parse(out: &str) -> Vec<Update> {
         .collect()
 }
 
-/// As checkupdates prints them, for scripts and shell extensions reading `system-manager check`.
+/// As checkupdates prints them, for scripts and shell extensions reading `system-manager check`;
+/// an AUR package as `aur/name`, so a menu built from it tells where it comes from.
 pub fn checkupdates_format(updates: &[Update]) -> String {
     updates
         .iter()
-        .map(|u| format!("{} {} -> {}\n", u.name, u.old, u.new))
+        .map(|u| {
+            let source = if u.source == Source::Aur { "aur/" } else { "" };
+            format!("{source}{} {} -> {}\n", u.name, u.old, u.new)
+        })
         .collect()
 }
 
@@ -65,8 +69,8 @@ mod tests {
         );
         assert_eq!((u[2].source, u[2].new.as_str()), (Source::Flatpak, ""));
         assert_eq!(
-            checkupdates_format(&u[..1]),
-            "linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1\n"
+            checkupdates_format(&u[..2]),
+            "linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1\naur/paru 2.0.0-1 -> 2.1.0-1\n"
         );
     }
 }

@@ -133,6 +133,9 @@ msgstr "Pakete werden geprüft"
 msgid "Checking the password"
 msgstr "Passwort wird geprüft"
 
+msgid "Checking whether sudo needs the password"
+msgstr "Wird geprüft, ob sudo das Passwort braucht"
+
 msgid "Clean up"
 msgstr "Aufräumen"
 
@@ -728,6 +731,9 @@ msgstr ""
 "Das Paket wurde nicht gefunden\n"
 "Vielleicht wurde es aus seinem Repository entfernt. Lade die Paketliste neu.\n"
 
+msgid "The password cannot be empty."
+msgstr "Das Passwort darf nicht leer sein."
+
 msgid "The password for sudo"
 msgstr "Das Passwort für sudo"
 
@@ -1033,6 +1039,13 @@ msgstr "abbrechen"
 
 msgid "stopped"
 msgstr "gestoppt"
+
+msgid ""
+"sudo needs the password\n"
+"It is asked before the run.\n"
+msgstr ""
+"sudo braucht das Passwort\n"
+"Es wird vor dem Lauf abgefragt.\n"
 
 msgid "today"
 msgstr "heute"

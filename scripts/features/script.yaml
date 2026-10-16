@@ -15,37 +15,45 @@ errors:
 facts:
   desktop: needs a desktop
   gnome: needs GNOME
-# Each optional package, the call whose answer proves it works, and what it adds.
+# Each optional package under its kind, the call whose answer proves it works,
+# and what it adds. A gnome-extension is set up by the desktop script, from
+# extensions.gnome.org instead of a package.
 probe:
-  pacman-contrib:
-    command: [checkupdates, --version]
-    adds: The list of updates, the clean-up and the configuration updates
-  paru:
-    command: [paru, --version]
-    adds: Packages from the AUR
-  yay:
-    command: [yay, --version]
-    adds: Packages from the AUR
-  flatpak:
-    command: [flatpak, --version]
-    adds: Flatpak apps in the update and the clean-up
-    needs: desktop
-  reflector:
-    command: [reflector, --help]
-    adds: Ranking the mirrors
-  meld:
-    command: [meld, --version]
-    adds: Merging configuration updates side by side
-    needs: desktop
-  libnotify:
-    command: [notify-send, --version]
-    adds: Notifications about new updates
-    needs: desktop
-  fwupd:
-    command: [fwupdmgr, --version]
-    adds: Firmware updates
-  arch-update:
-    command: [arch_update_dir]
-    adds: Pending updates in the GNOME top bar
-    needs: gnome
-    extension: true
+  aur-helper:
+    paru:
+      command: [paru, --version]
+      adds: Packages from the AUR
+    yay:
+      command: [yay, --version]
+      adds: Packages from the AUR
+  firmware-updater:
+    fwupd:
+      command: [fwupdmgr, --version]
+      adds: Firmware updates
+  gnome-extension:
+    arch-update:
+      command: [arch_update_dir]
+      adds: Pending updates in the GNOME top bar
+      needs: gnome
+  merge-tool:
+    meld:
+      command: [meld, --version]
+      adds: Merging configuration updates side by side
+      needs: desktop
+  notifier:
+    libnotify:
+      command: [notify-send, --version]
+      adds: Notifications about new updates
+      needs: desktop
+  package-manager:
+    flatpak:
+      command: [flatpak, --version]
+      adds: Flatpak apps in the update and the clean-up
+      needs: desktop
+  pacman-tool:
+    pacman-contrib:
+      command: [checkupdates, --version]
+      adds: The list of updates, the clean-up and the configuration updates
+    reflector:
+      command: [reflector, --help]
+      adds: Ranking the mirrors

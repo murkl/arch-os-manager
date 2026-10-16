@@ -265,7 +265,10 @@ pub fn used() -> std::collections::BTreeSet<String> {
         }
         m.errors.values().for_each(|s| add(s));
         m.hints.values().for_each(|h| add(&h.text));
-        m.probe.values().for_each(|p| add(&p.adds));
+        m.probe
+            .values()
+            .flat_map(|kind| kind.values())
+            .for_each(|p| add(&p.adds));
         m.facts.values().for_each(|s| add(s));
     }
     ids

@@ -10,13 +10,20 @@ pub const REJECTED: &str = "Sorry, try again.";
 
 static PASSWORD: Mutex<Option<String>> = Mutex::new(None);
 
+/// Held by tests that depend on the password held, which is one for the process.
+#[cfg(test)]
+pub static LOCK: Mutex<()> = Mutex::new(());
+
 pub fn get() -> Option<String> {
     PASSWORD.lock().unwrap().clone()
 }
 
+/// Holds the password; an empty one never, since sudo would count it as a failed attempt.
 pub fn set(password: String) {
     forget();
-    *PASSWORD.lock().unwrap() = Some(password);
+    if !password.is_empty() {
+        *PASSWORD.lock().unwrap() = Some(password);
+    }
 }
 
 pub fn forget() {

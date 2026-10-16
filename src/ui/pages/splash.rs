@@ -1,6 +1,6 @@
 //! The first three seconds of the interface and of every reload, while the values load: the
-//! Arch logo drawn line by line in a sweep of the accent, the name typed after it. Any key ends
-//! it at once; nothing waits on it.
+//! Arch logo drawn line by line in a sweep of the accent, the name typed after it. Any key but
+//! **r**, which asks for the reading under way, ends it at once; nothing waits on it.
 
 use std::time::{Duration, Instant};
 
@@ -118,8 +118,12 @@ impl Page for SplashPage {
         Vec::new()
     }
 
-    fn key(&mut self, _: Key, _: &mut Ctx) -> Flow {
-        Flow::Pop
+    fn key(&mut self, key: Key, _: &mut Ctx) -> Flow {
+        if key == Key::Char('r') {
+            Flow::Stay
+        } else {
+            Flow::Pop
+        }
     }
 
     fn tick(&mut self, _: &mut Ctx) -> Flow {

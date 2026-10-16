@@ -37,7 +37,7 @@ A query may not call `sudo`; the runtime refuses to start one whose yaml says `r
 | `ops` | Each operation by name, with the keys below |
 | `errors` | Exit code from 10 on: headline, then explanation. A test holds them against the `exit` lines |
 | `hints` | Output line containing the key: `text` as headline, then explanation; `offer` the page that fixes it. `lib.yaml` holds pacman's |
-| `probe` | `features` only: each optional package, the `command` that proves it works, and what it `adds` |
+| `probe` | `features` only: each optional package under its kind, the `command` that proves it works, and what it `adds`; a `gnome-extension` comes from extensions.gnome.org |
 
 | Operation key | Meaning |
 |---|---|
@@ -125,7 +125,7 @@ After a run, the manager reads the system again and offers what may follow, none
 
 ### The Password
 
-Asked once per session, before the first run that elevates, and proven with `sudo --validate`. It is held in memory only and answers every later sudo prompt of every run, also those of an AUR helper; it is written only while the terminal does not echo, so it never reaches the output or the log. A wrong one is forgotten and asked again. With `NOPASSWD` it is never asked.
+Asked once per session, before the first run that elevates, and proven with `sudo --validate`. sudo starts only once a password is typed, and never gets an empty one: pam_faillock counts a prompt left unanswered and an empty password as failed attempts, and locks the account after three. `sudo --non-interactive --validate`, which no PAM module counts, tells beforehand whether it is needed at all. It is held in memory only and answers every later sudo prompt of every run, also those of an AUR helper; it is written only while the terminal does not echo, so it never reaches the output or the log. A wrong one is forgotten and asked again. With `NOPASSWD` it is never asked.
 
 ## Files
 
@@ -206,9 +206,11 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | **ctrl+c** | Quit; in a run, ask to stop | the same |
 | **tab** | Runs: overview or terminal; packages: mark | the same |
 
-On the start page, **f** searches every page and setting, and **r** reads every value anew.
+On the start page, **f** searches every page and setting, and **r** reads every value anew once the last reading is done.
 
-The start screen stands three seconds while the first values load, and again on **r**; any key skips it.
+Held down, a key repeats only to move or to type; everything else happens once per press. A terminal sends a held key as presses, so the same key again within 150 ms counts as held.
+
+The start screen stands three seconds while the first values load, and again on **r**; any other key skips it.
 
 ## Command Line
 
@@ -218,25 +220,25 @@ The start screen stands three seconds while the first values load, and again on 
 | `system-manager --window` | In a window |
 | `system-manager <page>` | Opens on `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `settings`, `features` |
 | `system-manager init` | Puts the app menu entry, the update notification and the update indicator in place |
-| `system-manager check` | Pending updates as checkupdates prints them; exit 2 without any |
+| `system-manager check` | Pending updates as checkupdates prints them, an AUR package as `aur/name`; exit 2 without any |
 | `system-manager notify` | Announces pending updates; with `--new` only those not announced before, as the timer runs it |
 
 It runs as the user and asks for the sudo password itself; as root it only answers `check`.
 
 ## Optional Packages
 
-| Package | Adds |
-|---|---|
-| `pacman-contrib` | The list of updates, the clean-up, the configuration updates |
-| `paru` or `yay` | AUR packages |
-| `flatpak` | Flatpak apps in the update and the clean-up |
-| `reflector` | Ranking the mirrors |
-| `meld` | Merging configuration updates side by side |
-| `libnotify` | Notifications about new updates |
-| `fwupd` | Firmware updates |
-| `arch-update` | Pending updates in the GNOME top bar |
+| Kind | Package | Adds |
+|---|---|---|
+| `aur-helper` | `paru` or `yay` | AUR packages |
+| `firmware-updater` | `fwupd` | Firmware updates |
+| `gnome-extension` | `arch-update` | Pending updates in the GNOME top bar |
+| `merge-tool` | `meld` | Merging configuration updates side by side |
+| `notifier` | `libnotify` | Notifications about new updates |
+| `package-manager` | `flatpak` | Flatpak apps in the update and the clean-up |
+| `pacman-tool` | `pacman-contrib` | The list of updates, the clean-up, the configuration updates |
+| `pacman-tool` | `reflector` | Ranking the mirrors |
 
-A package counts when its command answers, as `probe` in `scripts/features/script.yaml` names it. One that `needs` a fact is offered only where it holds:
+A package counts when its command answers, as `probe` in `scripts/features/script.yaml` names it under its kind. The page lists each as `kind/package`, sorted by kind, then by package. One that `needs` a fact is offered only where it holds:
 
 | Fact | Holds when | Needed by |
 |---|---|---|

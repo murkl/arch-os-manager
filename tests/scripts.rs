@@ -111,6 +111,19 @@ fn updates_tells_an_unreachable_server_from_a_failing_helper() {
 }
 
 #[test]
+fn nopasswd_asks_sudo_without_a_prompt_and_tells_a_needed_password_by_its_code() {
+    let s = Sandbox::new("nopasswd");
+    s.stub("sudo", "echo 'sudo: a password is required' >&2; exit 1");
+    let o = s.run("system", &["nopasswd"], &[]);
+    assert_eq!(
+        (o.code, o.calls.as_str()),
+        (10, "sudo --non-interactive --validate\n")
+    );
+    s.stub("sudo", "exit 0");
+    assert_eq!(s.run("system", &["nopasswd"], &[]).code, 0);
+}
+
+#[test]
 fn an_unexpected_failure_names_file_line_and_command() {
     let s = Sandbox::new("trap");
     s.stub("pacman", "exit 3");

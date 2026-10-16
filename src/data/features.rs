@@ -2,8 +2,27 @@
 
 use std::collections::BTreeSet;
 
-use crate::script::{Failure, meta, op, query};
+use crate::script::{Failure, Probe, meta, op, query};
 use crate::settings::AUR_HELPERS;
+
+/// The kind the desktop script sets up from extensions.gnome.org, with no package.
+pub const EXTENSION: &str = "gnome-extension";
+
+/// Every optional package as kind, name and probe, by kind and then by name.
+pub fn packages() -> impl Iterator<Item = (&'static str, &'static str, &'static Probe)> {
+    meta("features").probe.iter().flat_map(|(kind, packages)| {
+        packages
+            .iter()
+            .map(move |(name, probe)| (kind.as_str(), name.as_str(), probe))
+    })
+}
+
+/// The kind and the probe of an optional package.
+pub fn package(name: &str) -> Option<(&'static str, &'static Probe)> {
+    packages()
+        .find(|(_, n, _)| *n == name)
+        .map(|(kind, _, probe)| (kind, probe))
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Status {
@@ -23,12 +42,9 @@ pub struct Features {
 
 impl Features {
     pub fn load() -> Result<Features, Failure> {
-        let m = meta("features");
-        let args: Vec<String> = m
-            .probe
-            .iter()
-            .map(|(p, probe)| format!("{p}={}", probe.command.join(" ")))
-            .chain(m.facts.keys().map(|f| format!("@{f}")))
+        let args: Vec<String> = packages()
+            .map(|(_, p, probe)| format!("{p}={}", probe.command.join(" ")))
+            .chain(meta("features").facts.keys().map(|f| format!("@{f}")))
             .collect();
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         Ok(Features::parse(&query(op::FEATURES_PROBE, &args)?))
@@ -67,7 +83,7 @@ impl Features {
 
     /// Why a package is not offered, untranslated; none when it is.
     pub fn unmet(&self, package: &str) -> Option<&'static str> {
-        let need = meta("features").probe.get(package)?.needs.as_deref()?;
+        let need = self::package(package)?.1.needs.as_deref()?;
         self.lacks(need)
     }
 
@@ -109,14 +125,28 @@ mod tests {
             .filter(|p| *p != "ttf-nerd-fonts-symbols")
             .collect();
         offered.sort();
-        let probed: Vec<&str> = meta("features")
-            .probe
-            .iter()
-            .filter(|(_, p)| !p.extension)
-            .map(|(name, _)| name.as_str())
+        let mut probed: Vec<&str> = packages()
+            .filter(|(kind, _, _)| *kind != EXTENSION)
+            .map(|(_, name, _)| name)
             .collect();
+        probed.sort();
         assert_eq!(offered, probed);
         assert!(pkgbuild.contains(&format!("url='{}'", env!("CARGO_PKG_REPOSITORY"))));
+    }
+
+    #[test]
+    fn names_each_package_once_and_the_aur_helpers_as_their_kind() {
+        let mut names: Vec<&str> = packages().map(|(_, name, _)| name).collect();
+        names.sort();
+        let all = names.len();
+        names.dedup();
+        assert_eq!(names.len(), all, "a package under two kinds: {names:?}");
+        let helpers: Vec<&str> = packages()
+            .filter(|(kind, _, _)| *kind == "aur-helper")
+            .map(|(_, name, _)| name)
+            .collect();
+        assert_eq!(helpers, AUR_HELPERS);
+        assert!(packages().any(|(kind, _, _)| kind == EXTENSION));
     }
 
     #[test]

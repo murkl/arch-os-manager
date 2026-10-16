@@ -129,12 +129,19 @@ impl Page for ConfirmPage {
     }
 }
 
-/// The password, proven by sudo before the run that needs it, once per session.
+/// The password, proven by sudo before the run that needs it, once per session. sudo starts only
+/// with one to give: a prompt left unanswered counts towards the lock of pam_faillock.
 pub struct PasswordPage {
     job: Job,
     input: Input,
+    /// Asks sudo without a prompt whether it goes without the password.
+    probe: Option<Run>,
+    /// sudo needs the password, so it is asked.
+    needed: bool,
     auth: Option<Run>,
     failed: Option<Failure>,
+    /// ⏎ came with nothing typed.
+    empty: bool,
 }
 
 impl PasswordPage {
@@ -142,9 +149,26 @@ impl PasswordPage {
         PasswordPage {
             job,
             input: Input::masked(""),
+            probe: None,
+            needed: false,
             auth: None,
             failed: None,
+            empty: false,
         }
+    }
+
+    /// Whether the input is shown: before sudo runs, or while it asks again after a wrong one.
+    fn asking(&self) -> bool {
+        self.needed
+            && self
+                .auth
+                .as_ref()
+                .is_none_or(|r| r.prompt == Some(Prompt::Password))
+    }
+
+    fn authorized(&self, ctx: &mut Ctx) -> Flow {
+        ctx.authorized = true;
+        Flow::Replace(Box::new(RunPage::new(self.job.clone())))
     }
 }
 
@@ -155,9 +179,9 @@ impl Page for PasswordPage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         let s = ctx.style;
-        if self.auth.is_none() && self.failed.is_none() {
-            match Run::start(op::SYSTEM_AUTH, &[], (24, 80), ctx.run_sink()) {
-                Ok(run) => self.auth = Some(run),
+        if !self.needed && self.probe.is_none() && self.failed.is_none() {
+            match Run::start(op::SYSTEM_NOPASSWD, &[], (24, 80), ctx.run_sink()) {
+                Ok(run) => self.probe = Some(run),
                 Err(f) => self.failed = Some(f),
             }
         }
@@ -167,10 +191,6 @@ impl Page for PasswordPage {
             d.draw(area, buf, ctx);
             return;
         }
-        let asking = self
-            .auth
-            .as_ref()
-            .is_some_and(|r| r.prompt == Some(Prompt::Password));
         let mut y = area.y;
         put(
             buf,
@@ -191,17 +211,17 @@ impl Page for PasswordPage {
             y += 1;
         }
         y += 1;
-        if asking {
+        if self.asking() {
             self.input.draw(buf, area.x, y, area.width, ctx);
-            if self.auth.as_ref().is_some_and(|r| r.rejected) {
-                put(
-                    buf,
-                    area.x,
-                    y + 2,
-                    t("Wrong password, try again."),
-                    area.width,
-                    s.tone(Tone::Error),
-                );
+            let note = if self.empty {
+                Some(t("The password cannot be empty."))
+            } else if self.auth.as_ref().is_some_and(|r| r.rejected) {
+                Some(t("Wrong password, try again."))
+            } else {
+                None
+            };
+            if let Some(note) = note {
+                put(buf, area.x, y + 2, note, area.width, s.tone(Tone::Error));
             }
         } else {
             let x = put(buf, area.x, y, s.spinner(), 2, s.tone(Tone::Accent));
@@ -220,7 +240,7 @@ impl Page for PasswordPage {
         vec![("⏎", t("confirm").into()), ("esc", t("back").into())]
     }
 
-    fn key(&mut self, key: Key, _ctx: &mut Ctx) -> Flow {
+    fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         if self.failed.is_some() {
             return match key.nav(false) {
                 Some(Nav::Open) => {
@@ -231,45 +251,73 @@ impl Page for PasswordPage {
             };
         }
         match key {
+            Key::Enter if !self.asking() => Flow::Stay,
+            Key::Enter if self.input.text.is_empty() => {
+                self.empty = true;
+                Flow::Stay
+            }
             Key::Enter => {
-                if let Some(run) = self.auth.as_mut()
-                    && run.prompt == Some(Prompt::Password)
-                    && !self.input.text.is_empty()
-                {
-                    run.answer(&self.input.take());
+                let password = self.input.take();
+                match self.auth.as_mut() {
+                    Some(run) => run.answer(&password),
+                    None => {
+                        // Held for the prompt, which the run answers as it appears.
+                        script::sudo::set(password);
+                        match Run::start(op::SYSTEM_AUTH, &[], (24, 80), ctx.run_sink()) {
+                            Ok(run) => self.auth = Some(run),
+                            Err(f) => {
+                                script::sudo::forget();
+                                self.failed = Some(f);
+                            }
+                        }
+                    }
                 }
                 Flow::Stay
             }
             Key::Esc | Key::Ctrl('c') => {
-                if let Some(run) = &self.auth {
+                for run in self.probe.iter().chain(&self.auth) {
                     run.interrupt();
                 }
                 Flow::Pop
             }
             k => {
-                self.input.key(k);
+                if self.input.key(k) {
+                    self.empty = false;
+                }
                 Flow::Stay
             }
         }
     }
 
     fn run(&mut self, event: script::Event, _ctx: &mut Ctx) -> Flow {
-        if let Some(run) = self.auth.as_mut() {
+        if let Some(run) = self.auth.as_mut().or(self.probe.as_mut()) {
             run.on_event(event);
         }
         Flow::Stay
     }
 
     fn tick(&mut self, ctx: &mut Ctx) -> Flow {
+        if let Some(probe) = &self.probe {
+            match probe.result() {
+                Some(Ok(())) => return self.authorized(ctx),
+                Some(Err(f)) => {
+                    self.probe = None;
+                    if f.code == Some(10) {
+                        self.needed = true;
+                    } else {
+                        self.failed = Some(f);
+                    }
+                }
+                None => {}
+            }
+            return Flow::Stay;
+        }
         let Some(run) = self.auth.as_mut() else {
             return Flow::Stay;
         };
         run.check_prompt();
         match run.result() {
-            Some(Ok(())) => {
-                ctx.authorized = true;
-                Flow::Replace(Box::new(RunPage::new(self.job.clone())))
-            }
+            Some(Ok(())) => self.authorized(ctx),
             Some(Err(f)) => {
                 self.auth = None;
                 self.failed = Some(f);
@@ -295,6 +343,8 @@ pub struct RunPage {
     details: bool,
     choices: List,
     input: Input,
+    /// ⏎ came at the password prompt with nothing typed.
+    empty: bool,
     /// The question whether to stop the run, while it is asked.
     cancel: Option<List>,
     size: (u16, u16),
@@ -311,6 +361,7 @@ impl RunPage {
             details: false,
             choices: List::default(),
             input: Input::new(""),
+            empty: false,
             cancel: None,
             size: (0, 0),
             result: Detail::default(),
@@ -458,15 +509,17 @@ impl RunPage {
                 self.input.draw(buf, inner.x, y, inner.width, ctx);
             }
         }
-        if self.run.as_ref().is_some_and(|r| r.rejected) && prompt == Prompt::Password {
-            put(
-                buf,
-                inner.x,
-                y + 1,
-                t("Wrong password, try again."),
-                inner.width,
-                s.tone(Tone::Error),
-            );
+        let note = if prompt != Prompt::Password {
+            None
+        } else if self.empty {
+            Some(t("The password cannot be empty."))
+        } else if self.run.as_ref().is_some_and(|r| r.rejected) {
+            Some(t("Wrong password, try again."))
+        } else {
+            None
+        };
+        if let Some(note) = note {
+            put(buf, inner.x, y + 1, note, inner.width, s.tone(Tone::Error));
         }
     }
 
@@ -741,12 +794,16 @@ impl Page for RunPage {
             return Flow::Stay;
         }
         match self.prompt().cloned() {
-            Some(Prompt::Password | Prompt::Text { .. }) => {
-                if key == Key::Enter {
+            Some(prompt @ (Prompt::Password | Prompt::Text { .. })) => {
+                if key != Key::Enter {
+                    if self.input.key(key) {
+                        self.empty = false;
+                    }
+                } else if prompt == Prompt::Password && self.input.text.is_empty() {
+                    self.empty = true;
+                } else {
                     let text = self.input.text.clone();
                     self.answer(&text);
-                } else {
-                    self.input.key(key);
                 }
             }
             Some(_) => {
@@ -869,3 +926,44 @@ fn next_steps(done: Op, ctx: &Ctx) -> Vec<Act> {
 
 /// Below this the cache is not worth a step of its own.
 const CLEANUP_WORTH: u64 = 1024 * 1024 * 1024;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::script::sudo;
+    use crate::ui::app::tests::{app, open, press, screen};
+
+    #[test]
+    fn an_empty_password_starts_no_sudo_and_says_why() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
+        page.needed = true;
+        page.key(Key::Enter, &mut app.ctx);
+        assert!(page.auth.is_none() && page.failed.is_none() && page.empty);
+        page.key(Key::Char('x'), &mut app.ctx);
+        assert!(!page.empty, "typing clears the note");
+        page.key(Key::Backspace, &mut app.ctx);
+        open(&mut app, Box::new(page));
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("The password cannot be empty."), "{shown}");
+    }
+
+    #[test]
+    fn a_run_asking_for_the_password_takes_no_empty_one() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        sudo::forget();
+        let (mut app, mut term) = app();
+        let run = Run::fed(op::UPDATE_RUN, "repo", sudo::PROMPT);
+        assert_eq!(run.prompt, Some(Prompt::Password));
+        open(
+            &mut app,
+            Box::new(RunPage::running(Job::new(op::UPDATE_RUN, Vec::new()), run)),
+        );
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("The password cannot be empty."), "{shown}");
+    }
+}

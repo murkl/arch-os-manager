@@ -34,7 +34,13 @@ op_state() {
     fi
 }
 
-# Proves the password before a run needs it.
+# Whether sudo goes without the password. Without a prompt PAM is not asked, so
+# nothing counts towards the lock of pam_faillock, as a prompt left unanswered does.
+op_nopasswd() {
+    sudo --non-interactive --validate 2>/dev/null || exit 10
+}
+
+# Proves the password before a run needs it; started only with one to give.
 op_auth() {
     sudo --validate
 }

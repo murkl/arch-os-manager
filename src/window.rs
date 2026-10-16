@@ -392,7 +392,12 @@ impl ApplicationHandler<()> for Win {
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 for key in self.key(&event.logical_key, event.text.as_deref()) {
-                    self.handle(Msg::Key(key), event_loop);
+                    let msg = if event.repeat {
+                        Msg::Held(key)
+                    } else {
+                        Msg::Key(key)
+                    };
+                    self.handle(msg, event_loop);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {

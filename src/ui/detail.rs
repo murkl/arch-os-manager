@@ -175,7 +175,7 @@ impl Detail {
                         area,
                         y,
                         *lead,
-                        (label, s.tone(Tone::Normal)),
+                        ("", label, s.tone(Tone::Normal)),
                         &pieces,
                         ctx,
                     )

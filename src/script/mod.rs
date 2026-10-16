@@ -73,7 +73,8 @@ pub mod op {
         REPAIR_RUN = "repair" "run",
         SERVICES_LIST = "services" "list", SERVICES_LOG = "services" "log",
         SERVICES_SYSTEM = "services" "system", SERVICES_USER = "services" "user",
-        SYSTEM_STATE = "system" "state", SYSTEM_AUTH = "system" "auth", SYSTEM_REBOOT = "system" "reboot",
+        SYSTEM_STATE = "system" "state", SYSTEM_NOPASSWD = "system" "nopasswd",
+        SYSTEM_AUTH = "system" "auth", SYSTEM_REBOOT = "system" "reboot",
         UPDATE_LIST = "update" "list", UPDATE_RUN = "update" "run",
     }
 }
@@ -90,9 +91,9 @@ pub struct Meta {
     /// Output a failure is recognised by; lib.yaml's apply to every script.
     #[serde(default)]
     pub hints: BTreeMap<String, Hint>,
-    /// features only: the optional packages.
+    /// features only: the optional packages by kind, such as `aur-helper`, then by name.
     #[serde(default)]
-    pub probe: BTreeMap<String, Probe>,
+    pub probe: BTreeMap<String, BTreeMap<String, Probe>>,
     /// features only: what a package may need of the system, with why it is not offered
     /// without; `fact_<name>` in the script tells whether it is there.
     #[serde(default)]
@@ -136,9 +137,6 @@ pub struct Probe {
     /// The fact it is offered on.
     #[serde(default)]
     pub needs: Option<String>,
-    /// A GNOME extension from extensions.gnome.org, set up by the desktop script; no package.
-    #[serde(default)]
-    pub extension: bool,
 }
 
 fn file(path: &str) -> &'static [u8] {
@@ -507,11 +505,10 @@ mod tests {
 
     #[test]
     fn needs_name_only_probed_packages_and_offers_only_pages() {
-        let probed = &meta("features").probe;
         for o in op::ALL {
             for p in &o.meta().needs {
                 assert!(
-                    probed.contains_key(p),
+                    crate::data::features::package(p).is_some(),
                     "{o} needs {p}, which features does not probe"
                 );
             }
@@ -538,7 +535,7 @@ mod tests {
                 "features declares {name} but defines no fact_{name}"
             );
         }
-        for (p, probe) in &features.probe {
+        for (_, p, probe) in crate::data::features::packages() {
             if let Some(need) = &probe.needs {
                 assert!(
                     features.facts.contains_key(need),
