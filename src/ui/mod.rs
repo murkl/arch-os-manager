@@ -17,8 +17,9 @@ pub use style::Style;
 pub use target::Target;
 
 use std::any::Any;
-use std::sync::Arc;
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::data::cleanup::Plan;
 use crate::data::features::Features;
@@ -117,6 +118,35 @@ impl Key {
     }
 }
 
+/// The step of what moves: a running bar moves a cell, the spinner turns every third. The
+/// drivers wake on the beat rather than a while after the last event, so every frame stands
+/// exactly as long as the next.
+pub const BEAT: Duration = Duration::from_millis(40);
+/// A frame of what moves smoothly, and the shortest time between two draws.
+pub const FRAME: Duration = Duration::from_millis(16);
+/// The beat of a page where nothing moves.
+const IDLE: Duration = Duration::from_millis(500);
+
+/// The start every animation counts from.
+fn epoch() -> Instant {
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    *EPOCH.get_or_init(Instant::now)
+}
+
+/// Beats of `pace` passed by `now`.
+pub fn beats(now: Instant, pace: Duration) -> u64 {
+    (now.saturating_duration_since(epoch()).as_nanos() / pace.as_nanos()) as u64
+}
+
+/// The first beat of `pace` after `now`, or the start where `now` lies before it.
+fn next_beat(now: Instant, pace: Duration) -> Instant {
+    let start = epoch();
+    if now < start {
+        return start;
+    }
+    start + Duration::from_nanos((beats(now, pace) + 1) * pace.as_nanos() as u64)
+}
+
 pub type PageId = u64;
 
 pub enum Msg {
@@ -191,8 +221,13 @@ pub trait Page {
     fn typing(&self) -> bool {
         false
     }
+    /// Moves by itself, so the driver wakes on every beat.
     fn animating(&self, _ctx: &Ctx) -> bool {
         false
+    }
+    /// The beat it moves on while animating; the spinner's unless it moves smoothly.
+    fn pace(&self) -> Duration {
+        BEAT
     }
     /// Drawn on the whole screen, without the header and the keys.
     fn bare(&self) -> bool {
@@ -337,5 +372,22 @@ impl Ctx {
     /// Whether a script can run here; unknown while the packages are still being checked.
     pub fn available(&self, op: script::Op) -> bool {
         self.features().is_some_and(|f| script::available(op, f))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_beat_falls_on_the_grid_whenever_it_is_asked_for() {
+        let start = epoch();
+        for offset in [0, 1, 119, 120, 121, 500, 12_345] {
+            let now = start + Duration::from_millis(offset);
+            let next = next_beat(now, BEAT);
+            assert!(next > now);
+            assert!(next - now <= BEAT);
+            assert_eq!((next - start).as_nanos() % BEAT.as_nanos(), 0, "{offset}");
+        }
     }
 }

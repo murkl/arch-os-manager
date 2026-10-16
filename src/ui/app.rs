@@ -86,11 +86,16 @@ impl App {
         self.quit
     }
 
-    /// Whether something on screen moves, so the driver keeps ticking.
-    pub fn ticking(&self) -> bool {
-        self.pages
-            .last()
-            .is_some_and(|(_, p)| p.animating(&self.ctx))
+    /// When the driver wakes for a tick: on the next beat of what moves, the header's spinner
+    /// included, else on the next idle one. On a grid, so events in between do not delay it.
+    pub fn wake(&self, now: std::time::Instant) -> std::time::Instant {
+        let page = self.pages.last().map(|(_, p)| p);
+        let pace = match page {
+            Some(p) if p.animating(&self.ctx) => p.pace(),
+            _ if self.ctx.busy() => super::BEAT,
+            _ => super::IDLE,
+        };
+        super::next_beat(now, pace)
     }
 
     pub fn handle(&mut self, msg: Msg) {
@@ -625,6 +630,57 @@ pub mod tests {
         };
         assert_eq!(colour("7.2.8.zen1-1"), app.ctx.style.muted);
         assert_eq!(colour("7.2.9.zen1-1"), app.ctx.style.accent);
+    }
+
+    /// Every page, each as the stack its target opens.
+    fn every_page(app: &mut App) -> Vec<Vec<Box<dyn Page>>> {
+        use crate::script::{Failure, op};
+        let run = |outcome| -> Vec<Box<dyn Page>> {
+            let job = pages::run::Job::new(op::UPDATE_RUN, Vec::new());
+            vec![Box::new(pages::run::RunPage::finished(job, outcome))]
+        };
+        let locked = "error: failed to init transaction (unable to lock database)";
+        let mut all: Vec<Vec<Box<dyn Page>>> = crate::ui::target::ALL
+            .iter()
+            .map(|target| target.open(&mut app.ctx))
+            .collect();
+        all.push(vec![Box::new(pages::splash::SplashPage::after(2500))]);
+        all.push(run(Ok(())));
+        all.push(run(Err(Failure::classify(
+            op::UPDATE_RUN,
+            Some(1),
+            None,
+            vec![locked.into()],
+        ))));
+        all
+    }
+
+    /// A terminal can be made as small as one cell; no page may panic in it.
+    #[test]
+    fn every_page_draws_at_any_size() {
+        let (mut app, _) = app();
+        example(&mut app);
+        for (w, h) in [(1, 1), (2, 2), (8, 3), (20, 5), (39, 8), (120, 2), (3, 60)] {
+            let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+            for stack in every_page(&mut app) {
+                app.pages.truncate(1);
+                for page in stack {
+                    app.push(page);
+                }
+                screen(&mut app, &mut term);
+            }
+        }
+    }
+
+    #[test]
+    fn the_header_spinner_turns_on_the_beat_while_something_loads() {
+        let (mut app, _) = app();
+        example(&mut app);
+        let now = std::time::Instant::now();
+        let idle = app.wake(now) - super::super::epoch();
+        assert_eq!(idle.as_nanos() % super::super::IDLE.as_nanos(), 0);
+        app.ctx.reload = true;
+        assert!(app.wake(now) - now <= super::super::BEAT);
     }
 
     #[test]

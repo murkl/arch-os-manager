@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::time::Duration;
+use std::time::Instant;
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::ui::{App, Key, Msg, Target};
+use crate::ui::{App, FRAME, Key, Msg, Target};
 
 pub fn run(start: Option<Target>) -> std::io::Result<()> {
     let (tx, rx) = mpsc::channel();
@@ -31,20 +31,26 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
     let result = (|| {
         loop {
             terminal.draw(|f| app.draw(f))?;
-            let wait = if app.ticking() {
-                Duration::from_millis(80)
-            } else {
-                Duration::from_millis(500)
-            };
-            match rx.recv_timeout(wait) {
+            let drawn = Instant::now();
+            let wake = app.wake(drawn);
+            match rx.recv_timeout(wake.saturating_duration_since(drawn)) {
                 Ok(msg) => {
                     app.handle(msg);
-                    while let Ok(msg) = rx.try_recv() {
-                        app.handle(msg);
+                    // What follows within a frame is drawn with it; a flood still gets drawn.
+                    let (due, budget) = (drawn + FRAME, Instant::now() + FRAME);
+                    while !app.done() && Instant::now() < budget {
+                        match rx.recv_timeout(due.saturating_duration_since(Instant::now())) {
+                            Ok(msg) => app.handle(msg),
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+                        }
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => app.handle(Msg::Tick),
+                Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => return Ok(()),
+            }
+            if !app.done() && Instant::now() >= wake {
+                app.handle(Msg::Tick);
             }
             if app.done() {
                 return Ok(());

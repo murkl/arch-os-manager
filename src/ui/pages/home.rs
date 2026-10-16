@@ -181,7 +181,7 @@ impl Page for HomePage {
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         if key == Key::Char('r') && !self.list.typing() {
             ctx.reload();
-            return Flow::Stay;
+            return Flow::Push(Box::new(super::splash::SplashPage::new()));
         }
         let was_typing = self.list.typing();
         let picked = self.list.key(key);
@@ -211,5 +211,18 @@ impl Page for HomePage {
     fn animating(&self, ctx: &Ctx) -> bool {
         matches!(ctx.shared.updates, Loaded::Loading)
             || matches!(ctx.shared.features, Loaded::Loading)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn r_reloads_behind_the_splash() {
+        let (mut app, _) = crate::ui::app::tests::app();
+        let flow = HomePage::new().key(Key::Char('r'), &mut app.ctx);
+        assert!(matches!(flow, Flow::Push(page) if page.bare()));
+        assert!(app.ctx.busy());
     }
 }

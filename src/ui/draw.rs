@@ -272,12 +272,8 @@ pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, fraction: Option<f64>, ctx:
         Some(f) => (0, ((f.clamp(0.0, 1.0)) * w as f64).round() as u16),
         None => {
             let len = (w / 5).max(1);
-            let span = w + len;
-            let millis = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis();
-            let pos = (millis / 40 % span as u128) as u16;
+            let span = u64::from(w + len);
+            let pos = (super::beats(std::time::Instant::now(), super::BEAT) % span) as u16;
             (
                 pos.saturating_sub(len),
                 pos.min(w) - pos.saturating_sub(len),
@@ -301,6 +297,9 @@ pub fn card(area: Rect, buf: &mut Buffer, w: u16, h: u16, ctx: &Ctx) -> Rect {
     let h = h.min(area.height);
     let x = area.x + (area.width - w) / 2;
     let y = area.y + (area.height - h) / 2;
+    if w < 2 || h < 2 {
+        return Rect::new(x, y, 0, 0);
+    }
     let outer = Rect::new(x, y, w, h);
     buf.set_style(outer, s.base());
     for row in outer.rows() {
@@ -380,6 +379,23 @@ mod tests {
             "…e › firefox"
         );
         assert_eq!(cut("kurz", 8, "…"), "kurz");
+    }
+
+    #[test]
+    fn a_card_and_a_bar_fit_any_area() {
+        let (app, _) = crate::ui::app::tests::app();
+        for (w, h) in [(0, 0), (1, 1), (2, 2), (3, 1), (1, 3), (10, 4)] {
+            let area = Rect::new(0, 0, w, h);
+            let mut buf = Buffer::empty(area);
+            let inner = card(area, &mut buf, 60, 8, &app.ctx);
+            assert!(
+                area.union(inner) == area || inner.is_empty(),
+                "{w}x{h}: {inner:?}"
+            );
+            for fraction in [None, Some(0.5)] {
+                bar(&mut buf, 0, 0, w, fraction, &app.ctx);
+            }
+        }
     }
 
     #[test]

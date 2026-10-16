@@ -136,12 +136,8 @@ impl Style {
 
     pub fn spinner(&self) -> &'static str {
         let frames = self.glyphs.spinner;
-        let tick = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            / 120;
-        frames[tick as usize % frames.len()]
+        let turns = super::beats(std::time::Instant::now(), super::BEAT) / 3;
+        frames[turns as usize % frames.len()]
     }
 
     /// The Arch Linux mark, its blocks as `#` where the font has none.

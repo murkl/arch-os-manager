@@ -7,7 +7,7 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use fontdue::{Font, FontSettings, Metrics};
 use ratatui::Terminal;
@@ -22,7 +22,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as Named, ModifiersState, NamedKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowAttributes, WindowId};
 
-use crate::ui::{App, Key, Msg, Target};
+use crate::ui::{App, FRAME, Key, Msg, Target};
 
 const REGULAR: &[u8] = include_bytes!("../assets/fonts/FiraCode-6.2-Regular.ttf");
 const BOLD: &[u8] = include_bytes!("../assets/fonts/FiraCode-6.2-Bold.ttf");
@@ -55,6 +55,8 @@ pub fn run(start: Option<Target>) -> io::Result<()> {
 /// The cell grid ratatui draws into.
 struct Grid {
     buffer: Buffer,
+    /// A cell changed since the window last showed the grid.
+    changed: bool,
 }
 
 impl Backend for Grid {
@@ -67,6 +69,7 @@ impl Backend for Grid {
         for (x, y, cell) in content {
             if let Some(c) = self.buffer.cell_mut((x, y)) {
                 *c = cell.clone();
+                self.changed = true;
             }
         }
         Ok(())
@@ -85,6 +88,7 @@ impl Backend for Grid {
     }
     fn clear(&mut self) -> io::Result<()> {
         self.buffer.reset();
+        self.changed = true;
         Ok(())
     }
     fn clear_region(&mut self, _: ClearType) -> io::Result<()> {
@@ -168,6 +172,8 @@ struct Win {
     fonts: Fonts,
     modifiers: ModifiersState,
     pointer: PhysicalPosition<f64>,
+    /// When the next tick is due.
+    wake: Instant,
     error: Option<io::Error>,
 }
 
@@ -175,6 +181,7 @@ impl Win {
     fn new(app: App, rx: Receiver<Msg>) -> Win {
         let terminal = Terminal::new(Grid {
             buffer: Buffer::empty(Rect::new(0, 0, 80, 24)),
+            changed: true,
         })
         .expect("an in-memory grid");
         Win {
@@ -186,6 +193,7 @@ impl Win {
             fonts: Fonts::new(1.0),
             modifiers: ModifiersState::empty(),
             pointer: PhysicalPosition::new(0.0, 0.0),
+            wake: Instant::now(),
             error: None,
         }
     }
@@ -194,12 +202,30 @@ impl Win {
         self.app.handle(msg);
         if self.app.done() {
             event_loop.exit();
-        } else if let Some(w) = &self.window {
-            w.request_redraw();
         }
     }
 
+    /// Draws the app into the grid, sized to the window; whether a cell changed since it was
+    /// last shown. Cheap, so it runs after every batch of events and the window paints only then.
+    fn compose(&mut self) -> Result<bool, String> {
+        let Some(window) = &self.window else {
+            return Ok(false);
+        };
+        let size = window.inner_size();
+        let (_, _, area) = layout(size.width, size.height, &self.fonts, window.scale_factor());
+        if self.terminal.backend().buffer.area != area {
+            self.terminal.backend_mut().buffer = Buffer::empty(area);
+            self.terminal.backend_mut().changed = true;
+        }
+        let app = &mut self.app;
+        self.terminal
+            .draw(|f| app.draw(f))
+            .map_err(|e| e.to_string())?;
+        Ok(self.terminal.backend().changed)
+    }
+
     fn redraw(&mut self) -> Result<(), String> {
+        self.compose()?;
         let (Some(window), Some(surface)) = (&self.window, self.surface.as_mut()) else {
             return Ok(());
         };
@@ -208,14 +234,6 @@ impl Win {
             return Ok(());
         };
         surface.resize(w, h).map_err(|e| e.to_string())?;
-        let (_, _, area) = layout(size.width, size.height, &self.fonts, window.scale_factor());
-        if self.terminal.backend().buffer.area != area {
-            self.terminal.backend_mut().buffer = Buffer::empty(area);
-        }
-        let app = &mut self.app;
-        self.terminal
-            .draw(|f| app.draw(f))
-            .map_err(|e| e.to_string())?;
         let mut pixels = surface.buffer_mut().map_err(|e| e.to_string())?;
         paint(
             &self.terminal.backend().buffer,
@@ -226,6 +244,9 @@ impl Win {
             window.scale_factor(),
             &mut pixels,
         );
+        self.terminal.backend_mut().changed = false;
+        // Lets winit hold the next redraw for the compositor's frame on Wayland.
+        window.pre_present_notify();
         pixels.present().map_err(|e| e.to_string())
     }
 
@@ -328,14 +349,20 @@ impl ApplicationHandler<()> for Win {
         }
     }
 
-    fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
-        if let StartCause::ResumeTimeReached { .. } = cause {
+    // Due by the clock rather than by the cause: a stream of events, such as the pointer
+    // moving, wakes the loop before the deadline every time.
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, _: StartCause) {
+        if Instant::now() >= self.wake {
             self.handle(Msg::Tick, event_loop);
         }
     }
 
+    // Each message brings a wake-up of its own, so one left for the next is not lost.
     fn user_event(&mut self, event_loop: &ActiveEventLoop, (): ()) {
-        while let Ok(msg) = self.rx.try_recv() {
+        let budget = Instant::now() + FRAME;
+        while Instant::now() < budget
+            && let Ok(msg) = self.rx.try_recv()
+        {
             self.handle(msg, event_loop);
         }
     }
@@ -349,10 +376,18 @@ impl ApplicationHandler<()> for Win {
                     crate::error!("drawing the window: {e}");
                 }
             }
-            WindowEvent::Resized(_) => self.handle(Msg::Resize, event_loop),
+            WindowEvent::Resized(_) => {
+                self.handle(Msg::Resize, event_loop);
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.fonts = Fonts::new(scale_factor);
                 self.handle(Msg::Resize, event_loop);
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
@@ -406,12 +441,17 @@ impl ApplicationHandler<()> for Win {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        let tick = if self.app.ticking() {
-            Duration::from_millis(80)
-        } else {
-            Duration::from_millis(500)
-        };
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + tick));
+        match self.compose() {
+            Ok(true) => {
+                if let Some(w) = &self.window {
+                    w.request_redraw();
+                }
+            }
+            Ok(false) => {}
+            Err(e) => crate::error!("drawing the window: {e}"),
+        }
+        self.wake = self.app.wake(Instant::now());
+        event_loop.set_control_flow(ControlFlow::WaitUntil(self.wake));
     }
 }
 
@@ -637,6 +677,7 @@ pub mod tests {
         let (_, _, area) = layout(width, height, &fonts, scale);
         let mut term = Terminal::new(Grid {
             buffer: Buffer::empty(area),
+            changed: true,
         })
         .unwrap();
         term.draw(|f| app.draw(f)).unwrap();

@@ -1,6 +1,6 @@
-//! The first three seconds of the interface, while the first values load: the Arch logo drawn
-//! line by line in a sweep of the accent, the name typed after it. Any key ends it at once;
-//! nothing waits on it.
+//! The first three seconds of the interface and of every reload, while the values load: the
+//! Arch logo drawn line by line in a sweep of the accent, the name typed after it. Any key ends
+//! it at once; nothing waits on it.
 
 use std::time::{Duration, Instant};
 
@@ -132,6 +132,10 @@ impl Page for SplashPage {
 
     fn animating(&self, _: &Ctx) -> bool {
         true
+    }
+
+    fn pace(&self) -> Duration {
+        crate::ui::FRAME
     }
 
     fn typing(&self) -> bool {

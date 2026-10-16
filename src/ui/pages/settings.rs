@@ -17,8 +17,8 @@ use crate::ui::{Ctx, Flow, Key, Page, Style, Tone};
 pub struct SettingsPage {
     list: List,
     focus: Option<Target>,
-    /// A switch being put in place; its row waits and takes no second press.
-    applying: bool,
+    /// The switch being put in place; its row waits and no switch takes a press.
+    applying: Option<Target>,
     /// Why the last switch could not be put in place.
     failed: Option<String>,
 }
@@ -28,14 +28,14 @@ impl SettingsPage {
         SettingsPage {
             list: List::default(),
             focus,
-            applying: false,
+            applying: None,
             failed: None,
         }
     }
 
     fn value(&self, target: Target, ctx: &Ctx) -> (String, Tone, bool) {
         let on_off = |on: bool| {
-            if self.applying {
+            if self.applying == Some(target) {
                 (ctx.style.spinner().to_string(), Tone::Accent)
             } else if on {
                 (t("on").to_string(), Tone::Ok)
@@ -95,7 +95,7 @@ impl SettingsPage {
 
     /// Flips a switch in settings.yaml and puts the entry and the timer in place to match.
     fn toggle(&mut self, target: Target, ctx: &mut Ctx) {
-        if self.applying {
+        if self.applying.is_some() {
             return;
         }
         let setting = if target == Target::Desktop {
@@ -109,7 +109,7 @@ impl SettingsPage {
             return;
         };
         let settings = ctx.settings.clone();
-        self.applying = true;
+        self.applying = Some(target);
         self.failed = None;
         ctx.spawn(move || crate::integration::apply(&settings, &features));
     }
@@ -193,7 +193,7 @@ impl Page for SettingsPage {
 
     fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
         if let Ok(result) = data.downcast::<Result<crate::integration::Applied, Failure>>() {
-            self.applying = false;
+            self.applying = None;
             self.failed = result
                 .err()
                 .map(|f| format!("{}: {}", f.headline(), f.detail));
@@ -206,7 +206,7 @@ impl Page for SettingsPage {
     }
 
     fn animating(&self, _: &Ctx) -> bool {
-        self.applying
+        self.applying.is_some()
     }
 }
 
@@ -443,5 +443,24 @@ impl Page for AboutPage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         self.detail.key(key, ctx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_switch_being_put_in_place_waits() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (app, _) = crate::ui::app::tests::app();
+        let mut page = SettingsPage::new(None);
+        page.applying = Some(Target::Notifications);
+        let spinning = |target| {
+            let (text, ..) = page.value(target, &app.ctx);
+            app.ctx.style.glyphs.spinner.contains(&text.as_str())
+        };
+        assert!(spinning(Target::Notifications));
+        assert!(!spinning(Target::Desktop));
     }
 }
