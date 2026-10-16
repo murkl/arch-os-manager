@@ -52,7 +52,7 @@ jobs:
     steps:
       # The runner's seccomp profile refuses the syscall filter pacman puts on
       # its downloader.
-      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust shellcheck yamllint gettext pacman-contrib nodejs git
+      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust shellcheck yamllint actionlint zizmor gettext pacman-contrib nodejs git
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -112,3 +112,52 @@ jobs:
           (cd release && sha256sum system-manager >system-manager.sha256)
           gh release upload "$TAG" --clobber release/*
           gh release edit "$TAG" --draft=false --latest
+
+  # The release's AUR files, built once as a user builds them, then pushed. The
+  # key is a secret of the environment aur, which only main may use; on a
+  # failure the release stands, and a rerun of this job pushes again.
+  aur:
+    name: AUR
+    needs: [release, publish]
+    if: needs.release.outputs.version != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: archlinux:base-devel-20261011.0.609700
+    environment: aur
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust git openssh github-cli
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # makepkg refuses root, which the container is; cargo needs a home of the
+      # builder's own.
+      - run: |
+          gh release download "$TAG" --dir aur --pattern PKGBUILD --pattern arch-os-manager.install --pattern SRCINFO
+          mv aur/SRCINFO aur/.SRCINFO
+          useradd --create-home builder
+          chown -R builder aur
+          runuser -u builder -- env HOME=/home/builder bash -c 'cd aur && makepkg --noconfirm'
+
+      # The host key as https://aur.archlinux.org names its fingerprint.
+      - env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_KEY" ]; then
+            echo "::error::The environment aur has no secret AUR_SSH_KEY; tools/aur-key.sh sets it, then rerun this job."
+            exit 1
+          fi
+          ssh="${RUNNER_TEMP}/ssh"
+          install -d -m 700 "$ssh"
+          printf '%s\n' "$AUR_SSH_KEY" >"${ssh}/key"
+          chmod 600 "${ssh}/key"
+          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' >"${ssh}/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i ${ssh}/key -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh}/known_hosts -o StrictHostKeyChecking=yes"
+          tools/aur-push.sh aur

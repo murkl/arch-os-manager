@@ -3,12 +3,12 @@ SHELL       := bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 BIN := target/release/system-manager
-# The release a run builds, or the version a picture is to show; without it,
-# build.rs names a pre-release of the next patch.
+# The release a run builds; without it, build.rs names a pre-release of the
+# next patch.
 VERSION ?=
 export SM_VERSION := $(VERSION)
 
-.PHONY: all build check fmt fmt-check lint test aur-check screenshots run install clean
+.PHONY: all build check fmt fmt-check lint test aur-check run install clean
 
 all: build
 
@@ -29,8 +29,10 @@ fmt-check:
 
 lint:
 	cargo clippy --all-targets --locked -- -D warnings
-	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/banner.sh
+	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/*.sh
 	yamllint -s .
+	actionlint
+	zizmor --offline --quiet .github/workflows
 	msgfmt --check-format -o /dev/null locales/de.po
 
 test:
@@ -39,10 +41,6 @@ test:
 # The PKGBUILD as makepkg reads it, stamped with stand-ins.
 aur-check:
 	tools/aur.sh 0.0.0 LICENSE target/aur-check
-
-# The pictures in docs/, from example data through the window's painter.
-screenshots:
-	cargo test --locked --lib screenshots -- --ignored
 
 # Against a throwaway configuration, the menu entry and the timer included; what
 # it runs still runs on this machine.
