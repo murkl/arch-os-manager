@@ -43,6 +43,18 @@ impl Run {
         Ok(Run::with(op, session, size))
     }
 
+    /// A run that has printed `output` after announcing `step`, for pictures of its page; the
+    /// program behind it is `true`, and its end is never told.
+    #[cfg(test)]
+    pub fn fed(op: Op, step: &str, output: &str) -> Run {
+        let session = Session::spawn(std::process::Command::new("true"), (24, 80), |_| {})
+            .expect("true runs");
+        let mut run = Run::with(op, session, (24, 80));
+        run.on_event(Event::Script(format!("step\t{step}")));
+        run.on_event(Event::Output(output.as_bytes().to_vec()));
+        run
+    }
+
     fn with(op: Op, session: Session, size: (u16, u16)) -> Run {
         Run {
             op,

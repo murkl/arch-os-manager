@@ -501,43 +501,36 @@ pub mod tests {
         crate::i18n::set(crate::i18n::Lang::En);
     }
 
-    /// Not a check: the screenshots in docs/, from example data through the window's painter.
-    /// `make screenshots`
+    /// Not a check: the screenshots in docs/, from example data through the window's painter,
+    /// twice the size it is shown at. `docs/screenshots.sh`
     #[test]
     #[ignore]
     fn screenshots() {
+        use crate::script::{Run, op};
         let (mut app, _) = app();
         example(&mut app);
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/screenshots");
         std::fs::create_dir_all(&dir).unwrap();
         let shoot = |app: &mut App, name: &str| {
-            crate::window::tests::png(app, 1080, 640, 1.0, &dir.join(format!("{name}.png")))
+            crate::window::tests::png(app, 2160, 1280, 2.0, &dir.join(format!("{name}.png")))
         };
         shoot(&mut app, "home");
         press(&mut app, &[Key::Enter]);
         shoot(&mut app, "update");
-        press(
-            &mut app,
-            &[
-                Key::Esc,
-                Key::Char('f'),
-                Key::Char('t'),
-                Key::Char('h'),
-                Key::Char('e'),
-            ],
-        );
-        shoot(&mut app, "search");
-        press(&mut app, &[Key::Esc, Key::Char('G'), Key::Enter]);
-        shoot(&mut app, "settings");
+        let job = || pages::run::Job::new(op::UPDATE_RUN, Vec::new());
+        let output = ":: Starting full system upgrade...\r\n\
+            :: Retrieving packages...\r\n\
+            :: Processing package changes...\r\n\
+            (3/5) upgrading mesa                       [##########] 100%\r\n";
         app.pages.truncate(1);
-        app.push(Box::new(pages::run::RunPage::finished(
-            pages::run::Job::new(crate::script::op::UPDATE_RUN, Vec::new()),
-            Ok(()),
+        app.push(Box::new(pages::run::RunPage::running(
+            job(),
+            Run::fed(op::UPDATE_RUN, "repo", output),
         )));
-        shoot(&mut app, "done");
+        shoot(&mut app, "run");
         app.pages.truncate(1);
-        app.push(Box::new(pages::splash::SplashPage::after(1200)));
-        shoot(&mut app, "splash");
+        app.push(Box::new(pages::run::RunPage::finished(job(), Ok(()))));
+        shoot(&mut app, "done");
     }
 
     /// Not a check: renders pages with the real scripts, for a look at the layout.

@@ -13,6 +13,7 @@ themes/<id>.yaml            built-in themes
 locales/de.po               German; English is the source
 assets/fonts/               Fira Code and the Nerd Font symbols, for the window
 aur/                        the AUR package arch-os-manager, built from source, stamped at a release
+docs/screenshots.sh         the pictures, out of example data through the window's painter
 docs/banner.sh              the README's banner out of docs/wordmark.txt; banner.py is the one Arch OS has
 ```
 
@@ -96,6 +97,8 @@ A function more than one script needs goes into `lib.sh`; the rest stays in its 
 
 A run shows its title, its step and pacman's progress; **tab** switches to the terminal itself, where every key goes to the program. A question appears in both: in the overview as a choice, in the terminal as typed.
 
+<img src="screenshots/run.png" width="720" alt="An update under way: its step, the progress bar and the package being upgraded">
+
 | Question | Overview |
 |---|---|
 | `[Y/n]`, `[y/N]` | Yes or no, the default first |
@@ -151,8 +154,6 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `notify` | `true`, `false` | `true` |
 | `hidden-log` | messages hidden from the system log | none |
 
-<img src="screenshots/settings.png" width="720" alt="The settings page: each setting with its value">
-
 A file that does not parse is left alone and named under **Settings › About**; the defaults apply until a setting is changed.
 
 Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now; an installer calls `init` to have both before the first start. Both need a desktop, the notification also libnotify; until they are there, the settings wait. Where the update indicator is installed, they also point its commands at the binary.
@@ -183,6 +184,8 @@ colors:
 | `accent` | Cursor, title, progress, pending updates |
 | `success`, `warning`, `error` | States |
 
+The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background at WCAG AA: 4.5 for `text`, 3 for `accent` and the states; a test holds them to it.
+
 A file in `~/.arch-os/themes/` with the id of a built-in replaces it; one that does not parse is skipped and named under **Settings › About**. The Linux console gets its own sixteen colours and ASCII glyphs.
 
 ## Icons
@@ -203,13 +206,9 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | **ctrl+c** | Quit; in a run, ask to stop | the same |
 | **tab** | Runs: overview or terminal; packages: mark | the same |
 
-On the start page, **f** searches every page and setting:
+On the start page, **f** searches every page and setting, and **r** reads every value anew.
 
-<img src="screenshots/search.png" width="720" alt="The search on the start page: typing finds the theme setting">
-
-The start screen stands three seconds while the first values load; any key skips it:
-
-<img src="screenshots/splash.png" width="720" alt="The start screen: the Arch logo, the name and the version">
+The start screen stands three seconds while the first values load, and again on **r**; any key skips it.
 
 ## Command Line
 
@@ -221,6 +220,8 @@ The start screen stands three seconds while the first values load; any key skips
 | `system-manager init` | Puts the app menu entry, the update notification and the update indicator in place |
 | `system-manager check` | Pending updates as checkupdates prints them; exit 2 without any |
 | `system-manager notify` | Announces pending updates; with `--new` only those not announced before, as the timer runs it |
+
+It runs as the user and asks for the sudo password itself; as root it only answers `check`.
 
 ## Optional Packages
 
@@ -264,16 +265,16 @@ The cache keeps three versions of every installed package and none of what is go
 
 | Target | Does |
 |---|---|
-| `make check` | Format, clippy, shellcheck, yamllint, msgfmt, tests, release build; before every commit |
+| `make check` | Format, clippy, shellcheck, yamllint, actionlint, zizmor, msgfmt, tests, release build; before every commit |
 | `make run` | The interface against a throwaway `target/home` |
-| `make screenshots VERSION=x.y.z` | `docs/screenshots/` from example data, showing that version |
+| `docs/screenshots.sh [x.y.z]` | `docs/screenshots/` from example data through the window's painter, showing that version |
 | `docs/banner.sh` | `docs/banner.png` from two screenshots; needs chromium, imagemagick and Fira Code |
 | `make install` | `~/.local/bin/system-manager` |
 | `make aur-check` | `aur/PKGBUILD` stamped with stand-ins and read by makepkg |
 
 `VERSION` names the version a build is for; without it, build.rs names a pre-release of the patch after the last release in `.release-please-manifest.json`, such as `1.9.2-dev`.
 
-A pull request's title is a Conventional Commit: `feat:`, `fix:`, `feat!:` for a breaking change. Its squash commit on `main` is what release-please reads: it keeps a release pull request open with the next version and its section of `CHANGELOG.md`. Merging that pull request tags `vX.Y.Z` with a draft release; `make check VERSION=X.Y.Z` builds that version, and the binary, its checksum, `PKGBUILD`, `SRCINFO` and `arch-os-manager.install` for the tag's source tarball go on the release, which is published last. The last three go to the AUR repository of `arch-os-manager` by hand, `SRCINFO` as `.SRCINFO`; the AUR package builds the tarball with cargo for its version.
+A pull request's title is a Conventional Commit: `feat:`, `fix:`, `feat!:` for a breaking change. Its squash commit on `main` is what release-please reads: it keeps a release pull request open with the next version and its section of `CHANGELOG.md`. Merging that pull request tags `vX.Y.Z` with a draft release; `make check VERSION=X.Y.Z` builds that version, and the binary, its checksum, `PKGBUILD`, `SRCINFO` and `arch-os-manager.install` for the tag's source tarball go on the release, which is published last. The job `AUR` then builds the last three with makepkg, as a user would, and `tools/aur-push.sh` puts them in the AUR repository of `arch-os-manager`, `SRCINFO` as `.SRCINFO`; the AUR package builds the tarball with cargo for its version. Its key is the secret `AUR_SSH_KEY` of the environment `aur`, which only `main` may use; `tools/aur-key.sh` makes it and prints the public half for the AUR account.
 
 Tests run on Arch, as the CI does: the scripts against stand-ins for pacman, sudo and friends, the read-only ones against the real pacman. The kernel test of the clean-up needs root, as the CI container has.
 

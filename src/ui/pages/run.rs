@@ -317,6 +317,14 @@ impl RunPage {
         }
     }
 
+    /// Under way, for the screenshots.
+    #[cfg(test)]
+    pub fn running(job: Job, run: Run) -> RunPage {
+        let mut page = RunPage::new(job);
+        page.run = Some(run);
+        page
+    }
+
     /// Already ended, for the screenshots.
     #[cfg(test)]
     pub fn finished(job: Job, outcome: Result<(), Failure>) -> RunPage {
