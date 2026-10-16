@@ -33,13 +33,12 @@ prepare() {
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
-# Built as the release is, then stamped with its version as the release does.
+# Built as the release is, for its version.
 build() {
     cd "${pkgname}-${pkgver}"
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
-    cargo build --frozen --release
-    tools/stamp.sh target/release/system-manager "$pkgver"
+    SM_VERSION="$pkgver" cargo build --frozen --release
 }
 
 # The menu entry and the update notification are set up by the program for the user who

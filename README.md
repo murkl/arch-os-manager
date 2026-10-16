@@ -1,10 +1,14 @@
 <div align="center">
 
-# System Manager
+<img src="docs/banner.png" alt="System Manager: Arch Linux kept current, clean and healthy, from one quiet screen">
 
-**Arch Linux kept current, clean and healthy, from one quiet screen.**
+<p>
+  <img src="https://img.shields.io/github/v/release/murkl/arch-os-manager?style=for-the-badge&label=RELEASE&color=1793d1" alt="">
+  <img src="https://img.shields.io/aur/version/arch-os-manager?style=for-the-badge&label=AUR&color=1793d1" alt="">
+  <img src="https://img.shields.io/badge/License-GPL_3.0-blue?style=for-the-badge" alt="">
+</p>
 
-<img src="docs/screenshots/home.png" width="720" alt="The start page: every part of the system with what it currently says">
+<p><b>Arch Linux kept current, clean and healthy, from one quiet screen.</b></p>
 
 </div>
 

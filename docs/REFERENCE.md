@@ -13,6 +13,7 @@ themes/<id>.yaml            built-in themes
 locales/de.po               German; English is the source
 assets/fonts/               Fira Code and the Nerd Font symbols, for the window
 aur/                        the AUR package arch-os-manager, built from source, stamped at a release
+docs/banner.sh              the README's banner out of docs/wordmark.txt; banner.py is the one Arch OS has
 ```
 
 The scripts are written to `$XDG_RUNTIME_DIR/system-manager-<pid>/` once per process, readable by the user only, and removed on exit.
@@ -265,12 +266,14 @@ The cache keeps three versions of every installed package and none of what is go
 |---|---|
 | `make check` | Format, clippy, shellcheck, yamllint, msgfmt, tests, release build; before every commit |
 | `make run` | The interface against a throwaway `target/home` |
-| `make screenshots` | `docs/screenshots/` from example data |
+| `make screenshots VERSION=x.y.z` | `docs/screenshots/` from example data, showing that version |
+| `docs/banner.sh` | `docs/banner.png` from two screenshots; needs chromium, imagemagick and Fira Code |
 | `make install` | `~/.local/bin/system-manager` |
 | `make aur-check` | `aur/PKGBUILD` stamped with stand-ins and read by makepkg |
-| `make release VERSION=x.y.z` | `dist/`: the built binary stamped with the version, its checksum, its notes, and `aur/` with the PKGBUILD stamped for `dist/source.tar.gz`, its `.SRCINFO` and install file |
 
-Cargo.toml carries the next version with `-dev`. A tag `vX.Y.Z` runs `make check`, stamps that same binary with `X.Y.Z`, reads the version back, and publishes it with the section of `CHANGELOG.md` for it; a version without one stops the release. The release carries the binary, its checksum, `PKGBUILD`, `SRCINFO` and `arch-os-manager.install`; the last three go to the AUR repository of `arch-os-manager`, `SRCINFO` as `.SRCINFO`. The AUR package builds the tag's source tarball with cargo and stamps the version as the release does.
+`VERSION` names the version a build is for; without it, build.rs names a pre-release of the patch after the last release in `.release-please-manifest.json`, such as `1.9.2-dev`.
+
+A pull request's title is a Conventional Commit: `feat:`, `fix:`, `feat!:` for a breaking change. Its squash commit on `main` is what release-please reads: it keeps a release pull request open with the next version and its section of `CHANGELOG.md`. Merging that pull request tags `vX.Y.Z` with a draft release; `make check VERSION=X.Y.Z` builds that version, and the binary, its checksum, `PKGBUILD`, `SRCINFO` and `arch-os-manager.install` for the tag's source tarball go on the release, which is published last. The last three go to the AUR repository of `arch-os-manager` by hand, `SRCINFO` as `.SRCINFO`; the AUR package builds the tarball with cargo for its version.
 
 Tests run on Arch, as the CI does: the scripts against stand-ins for pacman, sudo and friends, the read-only ones against the real pacman. The kernel test of the clean-up needs root, as the CI container has.
 

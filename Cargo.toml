@@ -1,6 +1,5 @@
 [package]
 name = "system-manager"
-version = "2.0.0-dev"
 edition = "2024"
 rust-version = "1.99"
 license = "GPL-3.0-or-later"

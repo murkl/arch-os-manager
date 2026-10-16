@@ -2692,7 +2692,7 @@ dependencies = [
 
 [[package]]
 name = "system-manager"
-version = "2.0.0-dev"
+version = "0.0.0"
 dependencies = [
  "fontdue",
  "jiff",
