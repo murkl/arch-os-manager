@@ -4,7 +4,7 @@ SHELL       := bash
 
 BIN := target/release/system-manager
 
-.PHONY: all build check fmt fmt-check lint test aur-check run install clean
+.PHONY: all build check fmt fmt-check lint test aur-check run install github clean
 
 all: build
 
@@ -22,7 +22,7 @@ fmt-check:
 
 lint:
 	cargo clippy --all-targets --locked -- -D warnings
-	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/*.sh
+	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/*.sh .github/settings.sh
 	yamllint -s .
 	actionlint
 	zizmor --offline --quiet .github/workflows
@@ -43,6 +43,11 @@ run:
 
 install: build
 	install -Dm755 $(BIN) "$(HOME)/.local/bin/system-manager"
+
+# The repository's settings on GitHub, out of .github/settings/. Run by hand as
+# an admin: a workflow may not change the rules it is held to.
+github:
+	.github/settings.sh
 
 clean:
 	cargo clean

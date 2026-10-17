@@ -4,7 +4,7 @@
 
 <p><b>Update</b>, <b>maintain</b> and <b>repair</b> Arch Linux from one place.</p>
 
-**[➜ Reference](REFERENCE.md)**
+**[➜ Reference](REFERENCE.md)** · **[➜ Contributing](CONTRIBUTING.md)**
 
 <p>
   <a href="https://aur.archlinux.org/packages/arch-os-manager"><img src="https://img.shields.io/aur/version/arch-os-manager?style=flat-square&label=aur&color=5e81ac" alt="AUR version"></a>

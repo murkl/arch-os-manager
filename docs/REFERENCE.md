@@ -287,14 +287,4 @@ Tests run on Arch, as the CI does: the scripts against stand-ins for pacman, sud
 
 build.rs names a pre-release of the patch after the last release in `.release-please-manifest.json`, such as `1.9.2-dev`, unless `SM_VERSION` names the release, as the PKGBUILD does.
 
-```mermaid
-flowchart LR
-    P[Pull request] -->|squash: feat, fix, feat!| M[main]
-    M -->|release-please| R[Release pull request]
-    R -->|merge| T[Tag X.Y.Z, release, CHANGELOG.md]
-    T -->|job AUR: makepkg, push| A[AUR arch-os-manager]
-
-    style T fill:#1793d1,stroke:#1793d1,color:#fff
-```
-
-The job `AUR` stamps `aur/PKGBUILD` for the tag's source tarball, builds it with makepkg as a user would, which reads the version back from the binary, and `tools/aur-push.sh` pushes `PKGBUILD`, `.SRCINFO` and `arch-os-manager.install`. Its key is the secret `AUR_SSH_KEY` of the environment `aur`, which only `main` may use, made by `tools/aur-key.sh`, which prints the public half for the AUR account.
+How a change becomes a release and reaches the AUR: **[➜ Contributing](CONTRIBUTING.md#workflow)**.

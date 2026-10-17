@@ -13,8 +13,6 @@ use crate::ui::{Ctx, Flow, Key, Page, Tone};
 
 const NAME: &str = "System Manager";
 
-const GOLDEN: f64 = 1.618;
-
 /// How long each part takes, in milliseconds: a line of the logo begins every `LINE`, the name
 /// is typed a letter every `LETTER` once the last line has begun, and the whole lasts `END`.
 const LINE: u64 = 70;
@@ -77,10 +75,8 @@ impl Page for SplashPage {
         let at = self.at();
         let logo = s.logo();
         let rows = logo.len() as u16;
-        // The logo, the gap, the name and the version as one block. The rows left split in the
-        // golden ratio, the smaller part above, where the eye puts the middle.
-        let free = f64::from(area.height.saturating_sub(rows + GAP + 2));
-        let top = area.y + (free * (1.0 - 1.0 / GOLDEN)).round() as u16;
+        // The logo, the gap, the name and the version as one block in the middle.
+        let top = area.y + area.height.saturating_sub(rows + GAP + 2) / 2;
         let logo_width = logo[0].chars().count() as u16;
         let x = area.x + area.width.saturating_sub(logo_width) / 2;
         for (i, line) in logo.iter().enumerate() {
