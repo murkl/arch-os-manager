@@ -128,5 +128,5 @@ jobs:
           notes="$(gh release view "$TAG" --json body --jq .body)"
           notes="${notes%%$'\n'### Checksum*}"
           notes="${notes%"${notes##*[![:space:]]}"}"
-          printf '%s\n\n### Checksum\n\n```\n%s\n```\n' "$notes" "$(sha256sum "$bin")" >notes.md
+          printf '%s\n\n### Checksum\n\n    %s\n' "$notes" "$(sha256sum "$bin")" >notes.md
           gh release edit "$TAG" --notes-file notes.md
