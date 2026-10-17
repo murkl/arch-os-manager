@@ -4,6 +4,7 @@ mod app;
 mod detail;
 mod draw;
 mod fetch;
+mod gauge;
 mod highlight;
 pub(crate) mod icon;
 mod input;
@@ -31,6 +32,7 @@ use crate::data::packages::Installed;
 use crate::data::services::Service;
 use crate::data::system::System;
 use crate::data::updates::Update;
+use crate::data::usage::Usage;
 use crate::script::{self, Failure};
 use crate::settings::Settings;
 use crate::state::State;
@@ -54,6 +56,9 @@ pub enum Key {
     PageDown,
     Home,
     End,
+    /// A notch of the mouse wheel: a list moves as with the arrows, facts above actions scroll.
+    WheelUp,
+    WheelDown,
 }
 
 /// What a key means outside a text box. In front of one, only the keys that cannot be typed.
@@ -74,8 +79,8 @@ pub enum Nav {
 impl Key {
     pub fn nav(self, typing: bool) -> Option<Nav> {
         let nav = match self {
-            Key::Up => Nav::Up,
-            Key::Down => Nav::Down,
+            Key::Up | Key::WheelUp => Nav::Up,
+            Key::Down | Key::WheelDown => Nav::Down,
             Key::PageUp => Nav::PageUp,
             Key::PageDown => Nav::PageDown,
             Key::Enter => Nav::Open,
@@ -116,8 +121,8 @@ impl Key {
             Key::Delete => b"\x1b[3~".to_vec(),
             Key::Tab => b"\t".to_vec(),
             Key::BackTab => b"\x1b[Z".to_vec(),
-            Key::Up => b"\x1b[A".to_vec(),
-            Key::Down => b"\x1b[B".to_vec(),
+            Key::Up | Key::WheelUp => b"\x1b[A".to_vec(),
+            Key::Down | Key::WheelDown => b"\x1b[B".to_vec(),
             Key::Right => b"\x1b[C".to_vec(),
             Key::Left => b"\x1b[D".to_vec(),
             Key::PageUp => b"\x1b[5~".to_vec(),
@@ -136,6 +141,9 @@ pub const BEAT: Duration = Duration::from_millis(40);
 pub const FRAME: Duration = Duration::from_millis(16);
 /// The beat of a page where nothing moves.
 const IDLE: Duration = Duration::from_millis(500);
+
+/// A cell twice as high as wide, as most terminal fonts have it, where the terminal does not say.
+pub const ASPECT: f32 = 2.0;
 
 /// The start every animation counts from.
 fn epoch() -> Instant {
@@ -169,6 +177,7 @@ pub enum Msg {
     Data(PageId, Box<dyn Any + Send>),
     Run(PageId, script::Event),
     Fresh(Fresh),
+    Usage(Usage),
 }
 
 /// A shared value read anew.
@@ -304,7 +313,11 @@ pub struct Ctx {
     pub style: Style,
     /// The Linux console: sixteen colours and ASCII glyphs.
     pub console: bool,
+    /// How many times a cell is higher than wide, for what is drawn round.
+    pub aspect: f32,
     pub shared: Shared,
+    /// What the machine uses, read anew every few seconds; none before the first reading.
+    pub usage: Option<Usage>,
     /// Counts the runs, so a page can tell its data may be stale.
     pub generation: u64,
     /// The password was proven, or is not needed, this session.

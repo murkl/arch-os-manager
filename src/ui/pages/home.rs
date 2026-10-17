@@ -5,6 +5,7 @@ use ratatui::layout::Rect;
 
 use crate::data::{ago, format_size, journal};
 use crate::i18n::{t, tf, tn};
+use crate::ui::gauge::{self, Reading};
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{ALL, HOME, Target};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
@@ -60,6 +61,38 @@ impl HomePage {
             .is_some_and(|u| !u.is_empty())
             .then_some(Target::Upgrade)
     }
+}
+
+/// What the machine uses, over the menu and a row clear of it, each in the middle of its third:
+/// as rings where the font has braille and all of the menu fits under them, else as a line. They say less than the menu,
+/// so without room for either they stand nowhere. Returns the area left for the menu.
+fn instruments(area: Rect, menu: usize, buf: &mut Buffer, ctx: &Ctx) -> Rect {
+    let fits = |height: u16| usize::from(area.height) > menu + usize::from(height);
+    let ring = gauge::Ring::new(ctx.aspect).width;
+    let rings = ctx.style.glyphs.braille && area.width >= 3 * (ring + 2) && fits(gauge::HEIGHT);
+    let height = match (rings, fits(1)) {
+        (true, _) => gauge::HEIGHT,
+        (false, true) => 1,
+        (false, false) => return area,
+    };
+    let readings = match ctx.usage {
+        Some(u) => [u.cpu, u.memory, u.disk].map(Reading::of),
+        None => std::array::from_fn(|_| Reading::waiting(ctx)),
+    };
+    let third = area.width / 3;
+    for (i, (name, reading)) in (0..).zip(["CPU", "RAM", "Disk"].iter().zip(&readings)) {
+        let cell = Rect::new(area.x + i * third, area.y, third, height);
+        match rings {
+            true => gauge::ring(buf, cell, name, reading, ctx),
+            false => gauge::line(buf, cell, name, reading, ctx),
+        }
+    }
+    Rect::new(
+        area.x,
+        area.y + height + 1,
+        area.width,
+        area.height - height - 1,
+    )
 }
 
 fn visible(target: Target, ctx: &Ctx) -> bool {
@@ -156,6 +189,10 @@ impl Page for HomePage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         let rows = self.rows(ctx);
+        let area = match self.list.typing() {
+            true => area,
+            false => instruments(area, rows.len(), buf, ctx),
+        };
         self.list.set(rows);
         if !self.touched
             && let Some(target) = HomePage::suggested(ctx)
@@ -248,6 +285,90 @@ mod tests {
         assert_eq!(
             status(Target::Pacnew, &app.ctx),
             ("up to date".into(), Tone::Ok, false)
+        );
+    }
+
+    #[test]
+    fn the_usage_stands_over_the_menu_as_rings_or_a_line_where_all_of_it_fits() {
+        use crate::data::usage::Usage;
+        use crate::ui::app::tests::screen;
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = crate::ui::app::tests::app();
+        app.ctx.usage = Some(Usage {
+            cpu: Some(0.23),
+            memory: Some(0.387),
+            disk: Some(0.95),
+        });
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            ["23%", "39%", "95%", "Settings"]
+                .iter()
+                .all(|v| shown.contains(v)),
+            "{shown}"
+        );
+        let style = app.ctx.style;
+        type Term = ratatui::Terminal<ratatui::backend::TestBackend>;
+        let braille = |c: &ratatui::buffer::Cell| {
+            let ch = c.symbol().chars().next()? as u32;
+            (0x2801..=0x28ff)
+                .contains(&ch)
+                .then(|| (ch - 0x2800).count_ones())
+        };
+        // Braille points, and cells of anything else, in a colour.
+        let points = |term: &Term, fg| -> u32 {
+            let buf = term.backend().buffer();
+            buf.content()
+                .iter()
+                .filter(|c| c.fg == fg)
+                .filter_map(braille)
+                .sum()
+        };
+        let cells = |term: &Term, fg| {
+            let buf = term.backend().buffer();
+            buf.content()
+                .iter()
+                .filter(|c| c.fg == fg && braille(c).is_none())
+                .count()
+        };
+        assert_eq!(
+            (points(&term, style.success), points(&term, style.error)),
+            (2 + 4, 10)
+        );
+        assert_eq!(
+            points(&term, style.muted),
+            (10 - 2) + (10 - 4),
+            "the open dots stand apart from the background"
+        );
+
+        let mut small = ratatui::Terminal::new(ratatui::backend::TestBackend::new(47, 25)).unwrap();
+        let shown = screen(&mut app, &mut small);
+        assert!(
+            ["CPU 23%", "RAM 39%", "Disk 95%", "Settings"]
+                .iter()
+                .all(|v| shown.contains(v)),
+            "{shown}"
+        );
+        assert_eq!(points(&small, style.muted), 0, "{shown}");
+        assert_eq!(
+            (cells(&small, style.success), cells(&small, style.error)),
+            ("23%".len() + "39%".len(), "95%".len())
+        );
+
+        let colors = app.ctx.theme().colors;
+        app.ctx.style = crate::ui::Style::new(&colors, true);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("CPU 23%"),
+            "the console has no braille: {shown}"
+        );
+        app.ctx.style = style;
+
+        let mut smaller =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 22)).unwrap();
+        let shown = screen(&mut app, &mut smaller);
+        assert!(
+            !shown.contains("CPU") && shown.contains("Settings"),
+            "{shown}"
         );
     }
 

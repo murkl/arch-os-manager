@@ -13,7 +13,6 @@ use crate::data::{aur, date};
 use crate::i18n::{t, tf};
 use crate::script::{self, Failure, op, query};
 use crate::ui::detail::{Act, Block, Detail, loaded};
-use crate::ui::draw::put;
 use crate::ui::fetch::Fetch;
 use crate::ui::icon;
 use crate::ui::input::Input;
@@ -195,7 +194,13 @@ impl Page for PackagesPage {
                 self.list.marked.clear();
             }
             Key::Esc | Key::Ctrl('c') => return Flow::Ignored,
-            Key::Up | Key::Down | Key::PageUp | Key::PageDown | Key::Enter => {
+            Key::Up
+            | Key::Down
+            | Key::WheelUp
+            | Key::WheelDown
+            | Key::PageUp
+            | Key::PageDown
+            | Key::Enter => {
                 if let Picked::Open(id) = self.list.key(key) {
                     return self.open(&id);
                 }
@@ -625,13 +630,14 @@ impl Page for VersionsPage {
             .and_then(|all| all.iter().find(|p| p.name == self.name))
             .map(|p| p.version.clone());
         if versions.is_empty() {
-            put(
+            crate::ui::detail::show(
+                vec![Block::Text(
+                    t("No other version is at hand.").into(),
+                    Tone::Muted,
+                )],
+                area,
                 buf,
-                area.x,
-                area.y,
-                t("No other version is at hand."),
-                area.width,
-                ctx.style.tone(Tone::Muted),
+                ctx,
             );
             return;
         }

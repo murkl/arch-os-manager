@@ -28,10 +28,25 @@ op_list() {
         done <<<"$pending"
     fi
 
+    # A version is often missing or unchanged, a commit never; read collapses empty
+    # fields between tabs, so the version comes last.
     if command -v flatpak >/dev/null; then
-        apps="$(flatpak remote-ls --updates --columns=application,version)" || exit 12
-        while IFS=$'\t' read -r app version; do
-            if [ -n "$app" ]; then printf 'flatpak\t%s\t\t%s\n' "$app" "$version"; fi
+        local installed app arch branch commit version ref old new
+        local -A versions commits
+        installed="$(flatpak list --columns=application,arch,branch,active,version)" || exit 12
+        apps="$(flatpak remote-ls --updates --columns=application,arch,branch,commit,version)" || exit 12
+        while IFS=$'\t' read -r app arch branch commit version; do
+            versions["$app/$arch/$branch"]="$version"
+            commits["$app/$arch/$branch"]="$commit"
+        done <<<"$installed"
+        while IFS=$'\t' read -r app arch branch commit version; do
+            if [ -z "$app" ]; then continue; fi
+            ref="$app/$arch/$branch"
+            old="${versions[$ref]-}" new="$version"
+            if [ -z "$old" ] || [ -z "$new" ] || [ "$old" = "$new" ]; then
+                old="${commits[$ref]-}" new="$commit"
+            fi
+            printf 'flatpak\t%s\t%s\t%s\n' "$app" "$old" "$new"
         done <<<"$apps"
     fi
 }

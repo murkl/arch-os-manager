@@ -93,6 +93,18 @@ A function more than one script needs goes into `lib.sh`; the rest stays in its 
 
 `make check` fails until all four agree.
 
+## The Start Page
+
+Over the menu, three rings show in percent what the machine uses, read every two seconds off the drawing thread:
+
+| Ring | In use | Read from |
+|---|---|---|
+| CPU | Busy ticks of all, over the last two seconds | `/proc/stat` |
+| RAM | What `MemAvailable` leaves, as `free` counts it | `/proc/meminfo` |
+| Disk | Of `/`, as `df` counts it | `statvfs` |
+
+A ring has ten dots, a tenth each, in braille points, so it is round for the shape of the cells: the window's, or as the terminal reports it, else twice as high as wide. A lit dot is drawn in `success` below 75 %, `warning` below 90 % and `error` from there, an open one in `muted`; the window also draws a lit dot larger. `?` stands where a value could not be read. Where the whole menu would not fit under the rings, and on the Linux console, which has no braille, one line shows the values in the colour of their ring instead; without room for that, and during a search, neither shows.
+
 ## Runs
 
 A run shows its title, its step and pacman's progress; **tab** switches to the terminal itself, where every key goes to the program. A question appears in both: in the overview as a choice, in the terminal as typed.
@@ -178,8 +190,8 @@ colors:
 | Slot | Used for |
 |---|---|
 | `background` | Everything behind |
-| `surface` | The track of a progress bar |
-| `muted` | Hints, secondary values, disabled rows |
+| `surface` | The track of a progress bar and of a scrollbar |
+| `muted` | Hints, secondary values, disabled rows, the open dots of a ring |
 | `text` | Labels and text |
 | `accent` | Cursor, title, progress, pending updates |
 | `success`, `warning`, `error` | States |
@@ -197,6 +209,8 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | Key | Outside a text box | In a text box |
 |---|---|---|
 | **↑↓**, **j k** | Choose | ↑↓ choose |
+| **⇞⇟** | A page further | the same |
+| Wheel | As ↑↓ | the same |
 | **⏎**, **l**, **→** | Open | ⏎ open |
 | **esc** | Back | Close the box |
 | **backspace**, **h**, **←** | Back | Delete |
@@ -207,6 +221,8 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | **tab** | Runs: overview or terminal; packages: mark | the same |
 
 On the start page, **f** searches every page and setting, and **r** reads every value anew once the last reading is done.
+
+Actions stay under what they are about, so ↑↓ always reaches them; what does not fit above them scrolls with **⇞⇟** and the wheel. A bar in the right margin shows where a list or a text stands. In a terminal the wheel needs the mouse, so text is selected with shift held.
 
 Held down, a key repeats only to move or to type; everything else happens once per press. A terminal sends a held key as presses, so the same key again within 150 ms counts as held.
 
@@ -220,7 +236,7 @@ The start screen stands three seconds while the first values load, and again on 
 | `system-manager --window` | In a window |
 | `system-manager <page>` | Opens on `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `settings`, `features` |
 | `system-manager init` | Puts the app menu entry, the update notification and the update indicator in place |
-| `system-manager check` | Pending updates as checkupdates prints them, an AUR package as `aur/name`; exit 2 without any |
+| `system-manager check` | Pending updates as checkupdates prints them: an AUR package as `aur/name`, a Flatpak with its commits where the versions do not tell the change, an unknown version as `?`; exit 2 without any |
 | `system-manager notify` | Announces pending updates; with `--new` only those not announced before, as the timer runs it |
 
 It runs as the user and asks for the sudo password itself; as root it only answers `check`.

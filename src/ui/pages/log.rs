@@ -6,7 +6,6 @@ use ratatui::layout::Rect;
 use crate::data::journal::Entry;
 use crate::i18n::t;
 use crate::ui::detail::{Act, Block, Detail, done, loaded, show};
-use crate::ui::draw::put;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
 
@@ -167,20 +166,24 @@ impl Page for HiddenPage {
             .map(|h| Row::new(h.clone(), h.clone()).icon(crate::ui::icon::HIDDEN, Tone::Muted))
             .collect();
         if rows.is_empty() {
-            put(
+            show(
+                vec![Block::Text(
+                    t("Nothing is hidden. Hide a message on the system log with x.").into(),
+                    Tone::Muted,
+                )],
+                area,
                 buf,
-                area.x,
-                area.y,
-                t("Nothing is hidden. Hide a message on the system log with x."),
-                area.width,
-                ctx.style.tone(Tone::Muted),
+                ctx,
             );
         }
         self.list.set(rows);
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)> {
+        if ctx.settings.hidden_log.is_empty() {
+            return vec![("esc", t("back").into())];
+        }
         vec![
             ("↑↓", t("choose").into()),
             ("⏎", t("show again").into()),

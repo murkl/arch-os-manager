@@ -11,7 +11,7 @@ pub enum Source {
 pub struct Update {
     pub source: Source,
     pub name: String,
-    /// Empty where the source does not say, as for Flatpak.
+    /// Empty where the source does not say.
     pub old: String,
     pub new: String,
 }
@@ -37,13 +37,22 @@ pub fn parse(out: &str) -> Vec<Update> {
 }
 
 /// As checkupdates prints them, for scripts and shell extensions reading `system-manager check`;
-/// an AUR package as `aur/name`, so a menu built from it tells where it comes from.
+/// an AUR package as `aur/name`, so a menu built from it tells where it comes from. An unknown
+/// version is `?`: arch-update counts only lines with a word on each side of the arrow.
 pub fn checkupdates_format(updates: &[Update]) -> String {
+    fn known(v: &str) -> &str {
+        if v.is_empty() { "?" } else { v }
+    }
     updates
         .iter()
         .map(|u| {
             let source = if u.source == Source::Aur { "aur/" } else { "" };
-            format!("{source}{} {} -> {}\n", u.name, u.old, u.new)
+            format!(
+                "{source}{} {} -> {}\n",
+                u.name,
+                known(&u.old),
+                known(&u.new)
+            )
         })
         .collect()
 }
@@ -53,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_all_sources_including_a_flatpak_without_version() {
+    fn reads_all_sources_and_prints_an_unknown_version_as_a_question_mark() {
         let u = parse(
             "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\naur\tparu\t2.0.0-1\t2.1.0-1\nflatpak\tcom.x.App\t\t\n",
         );
@@ -69,8 +78,8 @@ mod tests {
         );
         assert_eq!((u[2].source, u[2].new.as_str()), (Source::Flatpak, ""));
         assert_eq!(
-            checkupdates_format(&u[..2]),
-            "linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1\naur/paru 2.0.0-1 -> 2.1.0-1\n"
+            checkupdates_format(&u),
+            "linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1\naur/paru 2.0.0-1 -> 2.1.0-1\ncom.x.App ? -> ?\n"
         );
     }
 }

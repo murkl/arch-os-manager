@@ -925,9 +925,6 @@ msgstr "markieren"
 msgid "masked"
 msgstr "maskiert"
 
-msgid "more"
-msgstr "mehr"
-
 msgid "needs GNOME"
 msgstr "braucht GNOME"
 

@@ -55,7 +55,11 @@ impl Page for NewsPage {
                 buf,
                 area.x,
                 area.y,
-                t("Offline: the news as last loaded."),
+                &crate::ui::draw::cut(
+                    t("Offline: the news as last loaded."),
+                    area.width.into(),
+                    ctx.style.glyphs.ellipsis,
+                ),
                 area.width,
                 ctx.style.tone(Tone::Muted),
             );

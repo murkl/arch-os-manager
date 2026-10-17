@@ -9,7 +9,7 @@ use ratatui::style::{Color, Modifier};
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
 use crate::ui::detail::{Act, Block, Detail, done, failure, show};
-use crate::ui::draw::{card, center, put, waiting, wrap};
+use crate::ui::draw::{card, center, cut, put, waiting, wrap};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::Lead;
@@ -190,15 +190,10 @@ impl Page for PasswordPage {
             return;
         }
         let mut y = area.y;
-        put(
-            buf,
-            area.x,
-            y,
-            t("This needs the password for sudo."),
-            area.width,
-            s.bold(Tone::Normal),
-        );
-        y += 1;
+        for line in wrap(t("This needs the password for sudo."), area.width as usize) {
+            put(buf, area.x, y, &line, area.width, s.bold(Tone::Normal));
+            y += 1;
+        }
         for line in wrap(
             t(
                 "It goes straight to sudo and is kept in memory for this session only, so it is asked once.",
@@ -219,7 +214,8 @@ impl Page for PasswordPage {
                 None
             };
             if let Some(note) = note {
-                put(buf, area.x, y + 2, note, area.width, s.tone(Tone::Error));
+                let note = cut(note, area.width as usize, s.glyphs.ellipsis);
+                put(buf, area.x, y + 2, &note, area.width, s.tone(Tone::Error));
             }
         } else {
             let x = put(buf, area.x, y, s.spinner(), 2, s.tone(Tone::Accent));
@@ -676,11 +672,12 @@ impl Page for RunPage {
         if let Some(list) = self.cancel.as_mut() {
             let s = ctx.style;
             let inner = card(area, buf, area.width.min(60), 8, ctx);
+            let line = |text| cut(text, inner.width as usize, s.glyphs.ellipsis);
             put(
                 buf,
                 inner.x,
                 inner.y + 1,
-                t("Stop the run?"),
+                &line(t("Stop the run?")),
                 inner.width,
                 s.bold(Tone::Normal),
             );
@@ -688,7 +685,7 @@ impl Page for RunPage {
                 buf,
                 inner.x,
                 inner.y + 2,
-                t("It is interrupted as with Ctrl+C."),
+                &line(t("It is interrupted as with Ctrl+C.")),
                 inner.width,
                 s.tone(Tone::Muted),
             );

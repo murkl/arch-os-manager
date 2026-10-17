@@ -141,6 +141,11 @@ impl Fonts {
         }
     }
 
+    /// How many times a cell is higher than wide.
+    fn aspect(&self) -> f32 {
+        self.cell.1 as f32 / self.cell.0 as f32
+    }
+
     fn glyph(&mut self, c: char, bold: bool) -> &(Metrics, Vec<u8>) {
         let (regular, heavy, symbols, px) = (&self.regular, &self.bold, &self.symbols, self.px);
         let cell_width = self.cell.0 as f32;
@@ -178,6 +183,12 @@ struct Win {
 }
 
 impl Win {
+    /// The fonts for this scale, and the cells' shape the interface draws round for.
+    fn rescale(&mut self, scale: f64) {
+        self.fonts = Fonts::new(scale);
+        self.app.ctx.aspect = self.fonts.aspect();
+    }
+
     fn new(app: App, rx: Receiver<Msg>) -> Win {
         let terminal = Terminal::new(Grid {
             buffer: Buffer::empty(Rect::new(0, 0, 80, 24)),
@@ -338,7 +349,7 @@ impl ApplicationHandler<()> for Win {
             });
         match created {
             Ok((w, surface)) => {
-                self.fonts = Fonts::new(w.scale_factor());
+                self.rescale(w.scale_factor());
                 self.window = Some(w);
                 self.surface = Some(surface);
             }
@@ -383,7 +394,7 @@ impl ApplicationHandler<()> for Win {
                 }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.fonts = Fonts::new(scale_factor);
+                self.rescale(scale_factor);
                 self.handle(Msg::Resize, event_loop);
                 if let Some(w) = &self.window {
                     w.request_redraw();
@@ -436,7 +447,11 @@ impl ApplicationHandler<()> for Win {
                         (p.y / self.fonts.cell.1 as f64).round() as i32
                     }
                 };
-                let key = if lines > 0 { Key::Up } else { Key::Down };
+                let key = if lines > 0 {
+                    Key::WheelUp
+                } else {
+                    Key::WheelDown
+                };
                 for _ in 0..lines.unsigned_abs() {
                     self.handle(Msg::Key(key), event_loop);
                 }
@@ -506,9 +521,10 @@ fn paint(
             let Some(c) = cell.symbol().chars().next().filter(|c| *c != ' ') else {
                 continue;
             };
-            if !canvas.drawn(c, (px, py, cw, ch), (fg, bg), scale) {
+            let bold = cell.modifier.contains(Modifier::BOLD);
+            if !canvas.drawn(c, (px, py, cw, ch), (fg, bg), bold, scale) {
                 let baseline = fonts.baseline;
-                let (m, coverage) = fonts.glyph(c, cell.modifier.contains(Modifier::BOLD));
+                let (m, coverage) = fonts.glyph(c, bold);
                 let gx = px as i32 + m.xmin;
                 let gy = py as i32 + baseline.round() as i32 - m.height as i32 - m.ymin;
                 canvas.blend((gx, gy), (m.width, m.height), coverage, (fg, bg));
@@ -575,6 +591,7 @@ impl Canvas<'_> {
         c: char,
         (x, y, w, h): (u32, u32, u32, u32),
         (fg, bg): (u32, u32),
+        bold: bool,
         scale: f64,
     ) -> bool {
         let thin = scale.round().max(1.0) as u32;
@@ -583,8 +600,38 @@ impl Canvas<'_> {
             '─' => self.fill(x, cy - thin / 2, w, thin, fg),
             '━' => self.fill(x, cy - thin, w, thin * 2, fg),
             '│' => self.fill(cx - thin / 2, y, thin, h, fg),
+            '┃' => self.fill(cx - thin, y, thin * 2, h, fg),
             '▏' => self.fill(x, y + h / 8, thin.max(w / 8), h - h / 4, fg),
             '█' => self.fill(x, y, w, h, fg),
+            '\u{2800}'..='\u{28ff}' => {
+                // Round points, two across and four down; bold ones a cell wide, so a ring's lit
+                // dots stand out from its open ones.
+                let bits = c as u32 - 0x2800;
+                let r = w as f32 * if bold { 0.5 } else { 0.3 };
+                let points = [
+                    (0, 0),
+                    (0, 1),
+                    (0, 2),
+                    (1, 0),
+                    (1, 1),
+                    (1, 2),
+                    (0, 3),
+                    (1, 3),
+                ];
+                for (bit, (col, row)) in points.into_iter().enumerate() {
+                    if bits & (1 << bit) == 0 {
+                        continue;
+                    }
+                    let cx = x as f32 + w as f32 * (0.25 + 0.5 * col as f32);
+                    let cy = y as f32 + h as f32 * (0.125 + 0.25 * row as f32);
+                    for yy in (cy - r - 1.0) as i32..=(cy + r + 1.0) as i32 {
+                        for xx in (cx - r - 1.0) as i32..=(cx + r + 1.0) as i32 {
+                            let d = (xx as f32 + 0.5 - cx).hypot(yy as f32 + 0.5 - cy);
+                            self.mix(xx, yy, r + 0.5 - d, fg, bg);
+                        }
+                    }
+                }
+            }
             '▀' => self.fill(x, y, w, h / 2, fg),
             '▄' => self.fill(x, y + h / 2, w, h - h / 2, fg),
             '╭' | '╮' | '╰' | '╯' => {
@@ -649,7 +696,9 @@ pub mod tests {
             g.separator,
             g.bar,
             g.track,
-            "↑↓⏎-",
+            g.scroll[0],
+            g.scroll[1],
+            "↑↓⏎⇞⇟-",
         ]
         .into_iter()
         .chain(logo.iter().map(String::as_str))
@@ -659,7 +708,18 @@ pub mod tests {
             for c in s.chars() {
                 let drawn = matches!(
                     c,
-                    '─' | '━' | '│' | '╭' | '╮' | '╰' | '╯' | '▏' | '█' | '▀' | '▄'
+                    '─' | '━'
+                        | '│'
+                        | '┃'
+                        | '╭'
+                        | '╮'
+                        | '╰'
+                        | '╯'
+                        | '▏'
+                        | '█'
+                        | '▀'
+                        | '▄'
+                        | '\u{2800}'..='\u{28ff}'
                 );
                 assert!(
                     font.lookup_glyph_index(c) != 0 || drawn,
@@ -680,6 +740,7 @@ pub mod tests {
     /// Writes what a page looks like in the window, as PNG, from the same painter.
     pub fn png(app: &mut App, width: u32, height: u32, scale: f64, path: &std::path::Path) {
         let mut fonts = Fonts::new(scale);
+        app.ctx.aspect = fonts.aspect();
         let (_, _, area) = layout(width, height, &fonts, scale);
         let mut term = Terminal::new(Grid {
             buffer: Buffer::empty(area),

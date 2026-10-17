@@ -1,4 +1,5 @@
-//! What the scripts print, read into values. Pure functions, tested against real output.
+//! What the scripts and the kernel print, read into values. Pure functions, tested against real
+//! output.
 
 pub mod aur;
 pub mod cleanup;
@@ -11,6 +12,7 @@ pub mod packages;
 pub mod services;
 pub mod system;
 pub mod updates;
+pub mod usage;
 pub mod vercmp;
 pub mod versions;
 

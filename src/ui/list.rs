@@ -111,8 +111,10 @@ pub fn draw_row(
     // Room for an icon a font draws wider than its cell, as Nerd Fonts without Mono do.
     let x = area.x + 3;
     let room = area.right().saturating_sub(x) as usize;
-    // The detail cut at its end, across the pieces it is drawn in.
-    let mut left = room / 2;
+    // The detail gets what the label leaves, at least half the row, cut at its end across the
+    // pieces it is drawn in.
+    let budget = (room / 2).max(room.saturating_sub(width(prefix) + width(label) + 2));
+    let mut left = budget;
     let mut pieces = Vec::new();
     for (text, style) in detail {
         let piece = cut(text, left, s.glyphs.ellipsis);
@@ -123,7 +125,7 @@ pub fn draw_row(
             break;
         }
     }
-    let detail_width = room / 2 - left;
+    let detail_width = budget - left;
     let label_room = room.saturating_sub(if detail_width == 0 {
         0
     } else {
@@ -370,6 +372,8 @@ impl List {
             self.offset = at + 1 - height;
         }
         self.offset = self.offset.min(lines.len().saturating_sub(height.max(1)));
+        let rows = Rect::new(area.x, y, area.width, height as u16);
+        super::draw::scrollbar(buf, rows, lines.len(), self.offset, ctx);
         for (n, line) in lines.iter().skip(self.offset).take(height).enumerate() {
             let Some(i) = *line else { continue };
             let row = &self.rows[i];
@@ -467,6 +471,51 @@ mod tests {
             Row::heading("B"),
             Row::new("3", "Dienste"),
         ])
+    }
+
+    #[test]
+    fn a_list_longer_than_its_room_has_a_thumb_where_the_cursor_is() {
+        let (app, _) = crate::ui::app::tests::app();
+        let mut l = List::new((0..30).map(|i| Row::new(i.to_string(), "row")).collect());
+        let thumb = |l: &mut List| {
+            let mut buf = Buffer::empty(Rect::new(0, 0, 14, 10));
+            l.draw(Rect::new(2, 0, 10, 10), &mut buf, &app.ctx);
+            (0..10)
+                .filter(|&y| buf[(13, y)].symbol() == app.ctx.style.glyphs.scroll[1])
+                .collect::<Vec<u16>>()
+        };
+        assert_eq!(thumb(&mut l), [0, 1, 2]);
+        l.key(Key::Char('G'));
+        assert_eq!(thumb(&mut l), [7, 8, 9]);
+        let mut short = List::new(vec![Row::new("1", "row")]);
+        assert_eq!(thumb(&mut short), Vec::<u16>::new());
+    }
+
+    #[test]
+    fn a_detail_takes_the_room_a_short_label_leaves_and_half_beside_a_long_one() {
+        let (app, _) = crate::ui::app::tests::app();
+        let row = |label: &str| {
+            let area = Rect::new(0, 0, 43, 1);
+            let mut buf = Buffer::empty(area);
+            let style = app.ctx.style.base();
+            let detail = [("1.0.10-1  →  1.0.11-1", style)];
+            draw_row(
+                &mut buf,
+                area,
+                0,
+                Lead::None,
+                ("", label, style),
+                &detail,
+                &app.ctx,
+            );
+            (0..43).map(|x| buf[(x, 0)].symbol()).collect::<String>()
+        };
+        assert!(row("package-10").ends_with("1.0.10-1  →  1.0.11-1"));
+        let long = row("a-package-with-a-really-long-name");
+        assert!(
+            long.contains("a-package-with-a-…  ") && long.ends_with("1.0.11…"),
+            "{long}"
+        );
     }
 
     #[test]

@@ -49,6 +49,29 @@ pub fn cut_front(s: &str, max: usize, mark: &str) -> String {
     mark.to_string() + &kept.into_iter().rev().collect::<String>()
 }
 
+/// As many whole `pieces` as fit in `max` columns, joined by `sep`; those left out as `mark`.
+pub fn fit(pieces: &[String], sep: &str, max: usize, mark: &str) -> String {
+    let all = pieces.join(sep);
+    if all.width() <= max {
+        return all;
+    }
+    let mut kept = String::new();
+    for piece in pieces {
+        let next = match kept.is_empty() {
+            true => piece.clone(),
+            false => format!("{kept}{sep}{piece}"),
+        };
+        if next.width() + sep.width() + mark.width() > max {
+            break;
+        }
+        kept = next;
+    }
+    match kept.is_empty() {
+        true => cut(&all, max, mark),
+        false => format!("{kept}{sep}{mark}"),
+    }
+}
+
 /// Writes up to `max` columns and returns where it ended.
 pub fn put(buf: &mut Buffer, x: u16, y: u16, s: &str, max: u16, style: Cell) -> u16 {
     if max == 0 || y >= buf.area.bottom() {
@@ -57,7 +80,8 @@ pub fn put(buf: &mut Buffer, x: u16, y: u16, s: &str, max: u16, style: Cell) -> 
     buf.set_stringn(x, y, s, max as usize, style).0
 }
 
-/// Word wrap; a word wider than the line is broken.
+/// Word wrap; a word wider than the line is broken after its last `/` that fits, else its last
+/// `-`, as paths and links read.
 pub fn wrap(s: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     let mut lines = Vec::new();
@@ -67,6 +91,10 @@ pub fn wrap(s: &str, width: usize) -> Vec<String> {
             let mut word = word.to_string();
             while word.width() > width {
                 let mut head: String = cut(&word, width, "");
+                let at = head.rfind('/').or_else(|| head.rfind('-'));
+                if let Some(at) = at.filter(|&at| at > 0) {
+                    head.truncate(at + 1);
+                }
                 if head.is_empty() {
                     head = word.chars().next().map(String::from).unwrap_or_default();
                 }
@@ -102,7 +130,7 @@ fn padding(width: u16) -> u16 {
 const MAX_WIDTH: u16 = 100;
 
 /// The column the page lives in: left edge, width, header row, footer row.
-fn geometry(area: Rect) -> Option<(u16, u16, u16, u16)> {
+pub(super) fn geometry(area: Rect) -> Option<(u16, u16, u16, u16)> {
     let pad = padding(area.width);
     let width = area.width.saturating_sub(2 * pad).min(MAX_WIDTH);
     let x = area.x + (area.width - width) / 2;
@@ -171,12 +199,20 @@ pub fn frame(area: Rect, buf: &mut Buffer, ctx: &Ctx, path: &[String]) -> Rect {
         let last = parts.len() - 1;
         parts[last].0 = cut(&parts[last].0, room - fixed, s.glyphs.ellipsis);
     } else if full > room {
-        // Narrower still, the front of the path goes, where it says least.
-        let text: String = parts.iter().map(|(t, _)| t.as_str()).collect();
-        parts = vec![(
-            cut_front(&text, room, s.glyphs.ellipsis),
-            s.bold(Tone::Normal),
-        )];
+        // Narrower still, whole parts go from the front, where the path says least.
+        let mark = (format!("{}{sep}", s.glyphs.ellipsis), s.tone(Tone::Muted));
+        let width_of = |p: &[(String, Cell)]| p.iter().map(|(t, _)| t.width()).sum::<usize>();
+        let last = parts.len() - 1;
+        let from = (2..last)
+            .step_by(2)
+            .find(|&i| mark.0.width() + width_of(&parts[i..]) <= room)
+            .unwrap_or(last);
+        let mut kept = vec![mark];
+        kept.extend(parts.split_off(from));
+        let fixed = width_of(&kept[..kept.len() - 1]);
+        let end = kept.len() - 1;
+        kept[end].0 = cut(&kept[end].0, room.saturating_sub(fixed), s.glyphs.ellipsis);
+        parts = kept;
     }
     let mut cx = x;
     for (text, style) in &parts {
@@ -237,13 +273,11 @@ pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, S
         .iter()
         .map(|(k, label)| format!("{k} {label}"))
         .collect();
-    let line = keys.join(&format!(" {} ", s.glyphs.separator));
+    let sep = format!(" {} ", s.glyphs.separator);
+    let line = keys.join(&sep);
     let room = (width as usize).saturating_sub(version.width() + 3);
-    let shown = if line.width() > room {
-        cut(&line, width as usize, s.glyphs.ellipsis)
-    } else {
-        line.clone()
-    };
+    // Short of room the version goes first, then whole keys from the end.
+    let shown = fit(&keys, &sep, width as usize, s.glyphs.ellipsis);
     put(buf, x, bottom, &shown, width, s.tone(Tone::Muted));
     if line.width() <= room {
         put(
@@ -288,6 +322,33 @@ pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, fraction: Option<f64>, ctx:
         len,
         s.tone(Tone::Accent),
     );
+}
+
+/// Where `area` stands in a column of `lines` from `offset`: a track in the right margin, as far
+/// out as the cursor stands in the left, and a thumb as long and as far down as what is shown.
+/// Nothing where everything shows.
+pub fn scrollbar(buf: &mut Buffer, area: Rect, lines: usize, offset: usize, ctx: &Ctx) {
+    let s = &ctx.style;
+    let shown = usize::from(area.height);
+    let Some(x) = [area.right() + 1, area.right()]
+        .into_iter()
+        .find(|&x| x < buf.area.right())
+    else {
+        return;
+    };
+    if lines <= shown || shown == 0 {
+        return;
+    }
+    let thumb = (shown * shown / lines).max(1);
+    let hidden = lines - shown;
+    let top = ((shown - thumb) * offset.min(hidden) + hidden / 2) / hidden;
+    for i in 0..shown {
+        let (glyph, style) = match i >= top && i < top + thumb {
+            true => (s.glyphs.scroll[1], s.tone(Tone::Muted)),
+            false => (s.glyphs.scroll[0], s.base().fg(s.surface)),
+        };
+        put(buf, x, area.y + i as u16, glyph, 1, style);
+    }
 }
 
 /// A bordered card in the middle of `area`, cleared; returns its inside.
@@ -382,6 +443,40 @@ mod tests {
     }
 
     #[test]
+    fn keeps_whole_pieces_and_marks_the_rest() {
+        let keys = ["↑↓ choose", "⏎ open", "f search", "q quit"].map(String::from);
+        assert_eq!(
+            fit(&keys, " · ", 40, "…"),
+            "↑↓ choose · ⏎ open · f search · q quit"
+        );
+        assert_eq!(fit(&keys, " · ", 30, "…"), "↑↓ choose · ⏎ open · …");
+        assert_eq!(fit(&keys, " · ", 6, "…"), "↑↓ ch…");
+    }
+
+    #[test]
+    fn a_narrow_header_and_footer_keep_whole_parts() {
+        use crate::ui::app::tests::{app, open, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, _) = app();
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(40, 20)).unwrap();
+        let home = screen(&mut app, &mut term);
+        assert!(
+            home.trim_end()
+                .ends_with("↑↓ choose · ⏎ open · f search · …"),
+            "{home}"
+        );
+        for page in crate::ui::Target::Language.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert_eq!(
+            shown.lines().nth(1),
+            Some("  … › Settings › Language"),
+            "{shown}"
+        );
+    }
+
+    #[test]
     fn a_card_and_a_bar_fit_any_area() {
         let (app, _) = crate::ui::app::tests::app();
         for (w, h) in [(0, 0), (1, 1), (2, 2), (3, 1), (1, 3), (10, 4)] {
@@ -402,6 +497,10 @@ mod tests {
     fn wraps_on_words_and_breaks_long_ones() {
         assert_eq!(wrap("eins zwei drei", 9), ["eins zwei", "drei"]);
         assert_eq!(wrap("abcdefghij", 4), ["abcd", "efgh", "ij"]);
+        assert_eq!(
+            wrap("https://github.com/murkl/arch-os-manager", 31),
+            ["https://github.com/murkl/", "arch-os-manager"]
+        );
         assert_eq!(wrap("a\n\nb", 4), ["a", "", "b"]);
     }
 }

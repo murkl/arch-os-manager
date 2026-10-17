@@ -32,12 +32,16 @@ pub struct Glyphs {
     pub separator: &'static str,
     pub bar: &'static str,
     pub track: &'static str,
+    /// A scrollbar's track, then its thumb.
+    pub scroll: [&'static str; 2],
     /// The mark of a chosen row.
     pub mark: &'static str,
     /// Whether the font has the icons in `icon`.
     pub icons: bool,
     /// Whether the font has the block elements the logo is drawn with.
     pub blocks: bool,
+    /// Whether the font has braille, which the rings are drawn in.
+    pub braille: bool,
     /// Corners top left, top right, bottom left, bottom right, then horizontal and vertical.
     pub border: [&'static str; 6],
     pub spinner: &'static [&'static str],
@@ -55,9 +59,11 @@ pub static UNICODE: Glyphs = Glyphs {
     separator: "·",
     bar: "━",
     track: "─",
+    scroll: ["│", "┃"],
     mark: super::icon::CHECK,
     icons: true,
     blocks: true,
+    braille: true,
     border: ["╭", "╮", "╰", "╯", "─", "│"],
     spinner: &["◐", "◓", "◑", "◒"],
 };
@@ -75,9 +81,11 @@ pub static ASCII: Glyphs = Glyphs {
     separator: "|",
     bar: "#",
     track: "-",
+    scroll: ["|", "#"],
     mark: "+",
     icons: false,
     blocks: false,
+    braille: false,
     border: ["+", "+", "+", "+", "-", "|"],
     spinner: &["|", "/", "-", "\\"],
 };
@@ -92,7 +100,8 @@ impl Style {
             // Sixteen colours, by their slots: the console's own palette decides the look.
             return Style {
                 background: Color::Reset,
-                surface: Color::Black,
+                // Black is the console's background, so a track in it would not show.
+                surface: Color::DarkGray,
                 muted: Color::DarkGray,
                 text: Color::Reset,
                 accent: Color::Cyan,
@@ -167,6 +176,14 @@ const LOGO: [&str; 5] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_colour_drawn_shows_on_the_consoles_black() {
+        let s = Style::new(&crate::theme::all().0[0].colors, true);
+        for fg in [s.surface, s.muted, s.accent, s.success, s.warning, s.error] {
+            assert_ne!(fg, Color::Black);
+        }
+    }
 
     #[test]
     fn the_logo_is_square_and_ascii_on_the_console() {

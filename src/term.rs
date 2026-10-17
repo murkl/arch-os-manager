@@ -4,7 +4,10 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers, MouseEventKind,
+};
 
 use crate::ui::{App, FRAME, Key, Msg, Target};
 
@@ -24,6 +27,11 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
                         Msg::Key(key)
                     }
                 }),
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::ScrollUp => Some(Msg::Key(Key::WheelUp)),
+                    MouseEventKind::ScrollDown => Some(Msg::Key(Key::WheelDown)),
+                    _ => None,
+                },
                 Event::Resize(..) => Some(Msg::Resize),
                 _ => None,
             };
@@ -35,7 +43,16 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
         }
     });
     let mut app = App::new(tx, Arc::new(|| {}), console, start);
+    if let Some(aspect) = aspect() {
+        app.ctx.aspect = aspect;
+    }
     let mut terminal = ratatui::init();
+    mouse(true);
+    let restore = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        mouse(false);
+        restore(info);
+    }));
     let result = (|| {
         loop {
             terminal.draw(|f| app.draw(f))?;
@@ -65,8 +82,31 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
             }
         }
     })();
+    mouse(false);
     ratatui::restore();
     result
+}
+
+/// The wheel as scrolling: without it, a terminal sends the arrow keys instead. A text is then
+/// selected with shift held.
+fn mouse(capture: bool) {
+    let mut out = std::io::stdout();
+    let done = match capture {
+        true => ratatui::crossterm::execute!(out, EnableMouseCapture),
+        false => ratatui::crossterm::execute!(out, DisableMouseCapture),
+    };
+    if let Err(e) = done {
+        crate::warn!("mouse capture {capture}: {e}");
+    }
+}
+
+/// How many times a cell is higher than wide, where the terminal says its size in pixels.
+fn aspect() -> Option<f32> {
+    let s = ratatui::crossterm::terminal::window_size().ok()?;
+    let cell = |pixels: u16, cells: u16| {
+        (pixels > 0 && cells > 0).then(|| f32::from(pixels) / f32::from(cells))
+    };
+    Some(cell(s.height, s.rows)? / cell(s.width, s.columns)?)
 }
 
 /// Faster than a hand presses a key twice, slower than a keyboard repeats it.

@@ -48,17 +48,20 @@ impl App {
             state: State::load(),
             style: Style::new(&themes[0].colors, console),
             console,
+            aspect: super::ASPECT,
             themes,
             theme_errors,
             shared: Shared::default(),
+            usage: None,
             generation: 0,
             authorized: false,
             reload: false,
             pending: Default::default(),
-            tx,
-            wake,
+            tx: tx.clone(),
+            wake: wake.clone(),
             page: 0,
         };
+        sample(tx, wake);
         ctx.style = Style::new(&ctx.theme().colors, console);
         let mut app = App {
             pages: Vec::new(),
@@ -132,6 +135,7 @@ impl App {
             Msg::Data(id, data) => self.deliver(id, |page, ctx| page.data(data, ctx)),
             Msg::Run(id, event) => self.deliver(id, |page, ctx| page.run(event, ctx)),
             Msg::Fresh(fresh) => self.fresh(fresh),
+            Msg::Usage(usage) => self.ctx.usage = Some(usage),
         }
         if self.ctx.reload && self.ctx.pending.get() == 0 {
             self.ctx.reload = false;
@@ -293,6 +297,38 @@ impl App {
     }
 }
 
+/// How often the usage is read; the processors' share is the one over this time.
+const USAGE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Reads the usage off the drawing thread, until the app is gone.
+fn sample(tx: Sender<Msg>, wake: Arc<dyn Fn() + Send + Sync>) {
+    use data::usage::{self, Ticks, Usage};
+    let ticks = || {
+        std::fs::read_to_string("/proc/stat")
+            .ok()
+            .and_then(|s| Ticks::parse(&s))
+    };
+    std::thread::spawn(move || {
+        let mut before = ticks();
+        loop {
+            std::thread::sleep(USAGE);
+            let now = ticks();
+            let cpu = before.zip(now).and_then(|(b, n)| n.since(b));
+            before = now.or(before);
+            let memory = std::fs::read_to_string("/proc/meminfo")
+                .ok()
+                .and_then(|s| usage::memory(&s));
+            let disk = rustix::fs::statvfs("/")
+                .ok()
+                .and_then(|v| usage::disk(v.f_blocks, v.f_bfree, v.f_bavail));
+            if tx.send(Msg::Usage(Usage { cpu, memory, disk })).is_err() {
+                return;
+            }
+            wake();
+        }
+    });
+}
+
 /// The feed, or the copy from the last time it was reached.
 fn load_news() -> Result<(Vec<data::news::Item>, bool), Failure> {
     let cache = crate::paths::news_cache();
@@ -358,9 +394,11 @@ pub mod tests {
                 false,
             ),
             console: false,
+            aspect: crate::ui::ASPECT,
             themes,
             theme_errors: Vec::new(),
             shared: Shared::default(),
+            usage: None,
             generation: 0,
             authorized: false,
             reload: false,
@@ -424,7 +462,7 @@ pub mod tests {
             ..System::default()
         });
         s.updates = Loaded::Ready(updates::parse(
-            "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\nrepo\tmesa\t1:26.2.3-1\t1:26.2.4-1\nrepo\tfirefox\t144.0-1\t144.0.1-1\nrepo\tsystemd\t258.1-1\t258.2-1\naur\tparu\t2.1.0-1\t2.1.1-1\nflatpak\tcom.github.tchx84.Flatseal\t\t2.4.1\n",
+            "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\nrepo\tmesa\t1:26.2.3-1\t1:26.2.4-1\nrepo\tfirefox\t144.0-1\t144.0.1-1\nrepo\tsystemd\t258.1-1\t258.2-1\naur\tparu\t2.1.0-1\t2.1.1-1\nflatpak\tcom.github.tchx84.Flatseal\t2.4.0\t2.4.1\n",
         ));
         let item = |title: &str, date: &str, link: &str| Item {
             title: title.into(),
@@ -444,6 +482,11 @@ pub mod tests {
             false,
         ));
         app.ctx.state.news_read = Some(vec!["b".into()]);
+        app.ctx.usage = Some(data::usage::Usage {
+            cpu: Some(0.18),
+            memory: Some(0.4),
+            disk: Some(0.82),
+        });
         let installed = |n: &str| Installed {
             name: n.into(),
             version: "1.0-1".into(),
@@ -522,7 +565,7 @@ pub mod tests {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/screenshots");
         std::fs::create_dir_all(&dir).unwrap();
         let shoot = |app: &mut App, name: &str| {
-            crate::window::tests::png(app, 2160, 1280, 2.0, &dir.join(format!("{name}.png")))
+            crate::window::tests::png(app, 2160, 1440, 2.0, &dir.join(format!("{name}.png")))
         };
         shoot(&mut app, "home");
         press(&mut app, &[Key::Enter]);
@@ -582,6 +625,60 @@ pub mod tests {
                 1.0,
                 &dir.join(format!("{}.png", i + 1)),
             );
+        }
+    }
+
+    #[test]
+    fn every_page_keeps_to_its_column_and_names_whole_keys_at_any_size() {
+        use crate::ui::target::{ALL, Target};
+        let _lang = i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let many: String = (0..300)
+            .map(|i| format!("repo\tpackage-{i}\t1.0.{i}-1\t1.0.{}-1\n", i + 1))
+            .collect();
+        // One level deeper only from lists: the pages under them read, they change nothing.
+        let lists = [
+            Target::News,
+            Target::Packages,
+            Target::Services,
+            Target::Log,
+            Target::Pacnew,
+            Target::Settings,
+        ];
+        for &target in ALL {
+            for deeper in [false, true] {
+                if deeper && !lists.contains(&target) {
+                    continue;
+                }
+                for (w, h) in [(40, 12), (47, 25), (80, 24), (120, 40)] {
+                    let (mut app, _) = app();
+                    example(&mut app);
+                    app.ctx.shared.updates = Loaded::Ready(data::updates::parse(&many));
+                    for page in target.open(&mut app.ctx) {
+                        app.push(page);
+                    }
+                    let mut term_at = Terminal::new(TestBackend::new(w, h)).unwrap();
+                    if deeper {
+                        screen(&mut app, &mut term_at);
+                        press(&mut app, &[Key::Enter]);
+                    }
+                    let shown = screen(&mut app, &mut term_at);
+                    let at = format!("{target:?} deeper {deeper} at {w}x{h}\n{shown}");
+                    let (x, width, ..) = draw::geometry(ratatui::layout::Rect::new(0, 0, w, h))
+                        .expect("room for a page");
+                    let buf = term_at.backend().buffer();
+                    for y in 0..h {
+                        for col in [x - 1, x + width] {
+                            assert_eq!(buf[(col, y)].symbol(), " ", "column {col}, row {y}: {at}");
+                        }
+                    }
+                    let footer = shown.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+                    let footer = footer.trim_end();
+                    assert!(
+                        !footer.ends_with('…') || footer.ends_with(" · …"),
+                        "a key cut: {at}"
+                    );
+                }
+            }
         }
     }
 

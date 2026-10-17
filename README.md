@@ -20,6 +20,7 @@
 - Older versions from the cache or the Arch Linux Archive
 - Services of the system and of the user
 - Errors of this boot, the harmless ones hidden
+- CPU, memory and disk in use, live
 - Clean-up that keeps what a recovery needs
 - `.pacnew` files merged, compared or taken over
 - Mirrors ranked, firmware updated, a broken keyring repaired

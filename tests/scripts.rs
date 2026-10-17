@@ -75,19 +75,48 @@ impl Sandbox {
 }
 
 #[test]
-fn updates_lists_the_repositories_the_aur_and_flatpak() {
+fn updates_lists_the_repositories_then_the_aur() {
     let s = Sandbox::new("updates");
     s.stub(
         "checkupdates",
         "echo 'linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1'",
     );
     s.stub("paru", "echo 'paru-bin 2.0.0-1 -> 2.1.0-1'; exit 1");
-    s.stub("flatpak", r#"printf 'com.x.App\t1.2\n'"#);
+    s.stub("flatpak", "");
     let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
-        "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\naur\tparu-bin\t2.0.0-1\t2.1.0-1\nflatpak\tcom.x.App\t\t1.2\n"
+        "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\naur\tparu-bin\t2.0.0-1\t2.1.0-1\n"
+    );
+}
+
+#[test]
+fn flatpak_updates_name_both_versions_else_both_commits() {
+    let s = Sandbox::new("flatpak");
+    s.stub("checkupdates", "exit 2");
+    s.stub(
+        "flatpak",
+        r#"case "$*" in
+"list --columns=application,arch,branch,active,version")
+    printf 'com.x.App\tx86_64\tstable\t00000000000a\t1.1\n'
+    printf 'org.gnome.Platform\tx86_64\t48\t00000000000b\t\n'
+    printf 'org.gnome.Platform\tx86_64\t49\t00000000000c\t\n'
+    printf 'org.x.Rebuilt\tx86_64\tstable\t00000000000d\t2.0\n' ;;
+"remote-ls --updates --columns=application,arch,branch,commit,version")
+    printf 'com.x.App\tx86_64\tstable\t00000000001a\t1.2\n'
+    printf 'org.gnome.Platform\tx86_64\t49\t00000000001c\t\n'
+    printf 'org.x.Rebuilt\tx86_64\tstable\t00000000001d\t2.0\n' ;;
+*) exit 1 ;;
+esac"#,
+    );
+    let o = s.run("update", &["list"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(
+        o.out,
+        "flatpak\tcom.x.App\t1.1\t1.2\n\
+         flatpak\torg.gnome.Platform\t00000000000c\t00000000001c\n\
+         flatpak\torg.x.Rebuilt\t00000000000d\t00000000001d\n"
     );
 }
 
