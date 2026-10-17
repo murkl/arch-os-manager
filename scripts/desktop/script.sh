@@ -3,7 +3,8 @@
 
 data="${XDG_DATA_HOME:-$HOME/.local/share}"
 entry="${data}/applications/system-manager.desktop"
-icon="${data}/icons/hicolor/scalable/apps/system-manager.svg"
+theme="${data}/icons/hicolor"
+icon="${theme}/scalable/apps/system-manager.svg"
 units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 service="${units}/system-manager-notify.service"
 timer="${units}/system-manager-notify.timer"
@@ -56,7 +57,7 @@ COMMANDS
 # announces updates or off, and on or off for the update indicator, which is
 # set up only where it is installed. All follow the program wherever it lies.
 op_apply() {
-    local program="$1" every
+    local program="$1" every changed=""
     case "$program" in
     *[\"\\\`\$%]*) exit 10 ;;
     esac
@@ -69,7 +70,7 @@ op_apply() {
     esac
 
     if [ "$2" = on ]; then
-        put "$icon" <"${BASH_SOURCE[0]%/*}/logo.svg" >/dev/null
+        changed="$(put "$icon" <"${BASH_SOURCE[0]%/*}/logo.svg")"
         put "$entry" >/dev/null <<ENTRY
 [Desktop Entry]
 Type=Application
@@ -81,8 +82,12 @@ Categories=System;
 StartupWMClass=system-manager
 ENTRY
     else
+        if [ -e "$icon" ]; then changed=1; fi
         rm -f "$entry" "$icon"
     fi
+    # GTK trusts a cache another program left in the theme, with no entry for
+    # this icon, until the theme is newer than the cache.
+    if [ -n "$changed" ]; then touch "$theme"; fi
 
     if [ -n "$every" ]; then
         changed=""

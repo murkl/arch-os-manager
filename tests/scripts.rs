@@ -881,3 +881,54 @@ fn a_release_replaces_what_the_aur_has() {
     assert!(sh(r#"tools/aur-push.sh "$DIR/stamped""#).contains("there already"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn the_icon_outdates_a_cache_another_program_left_in_the_theme() {
+    let s = Sandbox::new("icon-cache");
+    s.stub("systemctl", "exit 1");
+    let data = s.dir.join("data");
+    let env = [("XDG_DATA_HOME", data.to_str().unwrap())];
+    // GTK trusts the cache while the theme is not newer than it, and a file
+    // two levels down leaves the theme's time alone.
+    let theme = data.join("icons/hicolor");
+    std::fs::create_dir_all(theme.join("scalable/apps")).unwrap();
+    let cache = theme.join("icon-theme.cache");
+    std::fs::write(&cache, "").unwrap();
+    let cached = std::fs::metadata(&cache).unwrap().modified().unwrap();
+    let age = |older: bool| {
+        let when = if older {
+            cached - std::time::Duration::from_secs(60)
+        } else {
+            std::fs::metadata(&theme).unwrap().modified().unwrap()
+        };
+        std::fs::File::open(&theme)
+            .unwrap()
+            .set_modified(when)
+            .unwrap();
+        when
+    };
+    age(true);
+    assert_eq!(
+        s.run("desktop", &["apply", "/x", "on", "off", "off"], &env)
+            .code,
+        0
+    );
+    assert!(age(false) >= cached);
+
+    // A start that changes nothing leaves the theme alone.
+    let old = age(true);
+    assert_eq!(
+        s.run("desktop", &["apply", "/x", "on", "off", "off"], &env)
+            .code,
+        0
+    );
+    assert_eq!(age(false), old);
+
+    age(true);
+    assert_eq!(
+        s.run("desktop", &["apply", "/x", "off", "off", "off"], &env)
+            .code,
+        0
+    );
+    assert!(age(false) >= cached);
+}
