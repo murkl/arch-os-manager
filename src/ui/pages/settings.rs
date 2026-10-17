@@ -17,7 +17,7 @@ use crate::ui::{Ctx, Flow, Key, Page, Style, Tone};
 pub struct SettingsPage {
     list: List,
     focus: Option<Target>,
-    /// The app menu entry is being put in place; its row waits and takes no press.
+    /// The app menu entry is being put in place. Its row waits and takes no press.
     applying: bool,
     /// Why the last switch could not be put in place.
     failed: Option<String>,

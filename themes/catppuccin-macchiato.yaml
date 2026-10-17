@@ -1,0 +1,10 @@
+name: Catppuccin Macchiato
+colors:
+  background: "#24273A"
+  surface: "#363A4F"
+  muted: "#6E738D"
+  text: "#CAD3F5"
+  accent: "#8AADF4"
+  success: "#A6DA95"
+  warning: "#EED49F"
+  error: "#ED8796"

@@ -15,45 +15,41 @@ errors:
 facts:
   desktop: needs a desktop
   gnome: needs GNOME
-# Each optional package under its kind, the call whose answer proves it works,
-# and what it adds. A gnome-extension is set up by the desktop script, from
+# Each optional package under its group, the call whose answer proves it works,
+# and what it adds. An extension is set up by the desktop script, from
 # extensions.gnome.org instead of a package.
 probe:
-  aur-helper:
+  packages:
     paru:
       command: [paru, --version]
-      adds: Packages from the AUR
+      adds: Builds and updates packages from the AUR
     yay:
       command: [yay, --version]
-      adds: Packages from the AUR
-  firmware-updater:
-    fwupd:
-      command: [fwupdmgr, --version]
-      adds: Firmware updates
-  gnome-extension:
-    arch-update:
-      command: [arch_update_dir]
-      adds: Pending updates in the GNOME top bar
-      needs: gnome
-  merge-tool:
-    meld:
-      command: [meld, --version]
-      adds: Merging configuration updates side by side
-      needs: desktop
-  notifier:
-    libnotify:
-      command: [notify-send, --version]
-      adds: Notifications about new updates
-      needs: desktop
-  package-manager:
-    flatpak:
-      command: [flatpak, --version]
-      adds: Flatpak apps in the update and the clean-up
-      needs: desktop
-  pacman-tool:
+      adds: Builds and updates packages from the AUR
     pacman-contrib:
       command: [checkupdates, --version]
-      adds: The list of updates, the clean-up and the configuration updates
+      adds: Lists updates, trims the cache and finds configuration updates
     reflector:
       command: [reflector, --help]
-      adds: Ranking the mirrors
+      adds: Ranks the mirrors by speed
+    flatpak:
+      command: [flatpak, --version]
+      adds: Updates and cleans up Flatpak apps
+      needs: desktop
+    fwupd:
+      command: [fwupdmgr, --version]
+      adds: Updates the firmware of the device
+  desktop:
+    gnome-arch-update:
+      command: [arch_update_dir]
+      adds: A GNOME Shell extension that shows pending updates in the top bar
+      needs: gnome
+      extension: true
+    libnotify:
+      command: [notify-send, --version]
+      adds: Desktop notifications about new updates
+      needs: desktop
+    meld:
+      command: [meld, --version]
+      adds: Merges configuration updates side by side
+      needs: desktop

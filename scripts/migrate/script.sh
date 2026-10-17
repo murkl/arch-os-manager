@@ -13,7 +13,7 @@ ours() {
 }
 
 # What the old manager left in its home, the first argument, and in the
-# autostart, each as `left` and its path; then its settings that have a
+# autostart, each as `left` and its path, then its settings that have a
 # counterpart, as key and value.
 op_read() {
     local home="$1" path key value aur_support="" aur_repo=""
@@ -23,7 +23,7 @@ op_read() {
     done
     if ours; then printf 'left\t%s\n' "$autostart"; fi
     if [ ! -f "${home}/config/settings.conf" ]; then return 0; fi
-    # A shell file the old manager sourced; read here as text, the value up to a
+    # A shell file the old manager sourced, read here as text, the value up to a
     # blank or a comment.
     while IFS='=' read -r key value; do
         value="${value%%[[:space:]#]*}"

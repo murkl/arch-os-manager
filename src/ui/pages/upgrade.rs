@@ -79,7 +79,7 @@ impl UpgradePage {
                         let (was, becomes) = change.clone();
                         body.push(Block::Row(
                             Lead::Icon(glyph, Tone::Muted),
-                            u.name.clone(),
+                            vec![(u.name.clone(), Tone::Normal)],
                             vec![(was, Tone::Muted), (becomes, Tone::Accent)],
                         ));
                     }

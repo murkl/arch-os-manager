@@ -26,7 +26,7 @@ impl Legacy {
         l
     }
 
-    /// Its settings, where settings.yaml has none of its own; whether any was taken.
+    /// Its settings, where settings.yaml has none of its own. Returns whether any was taken.
     pub fn take_over(&self, settings: &mut Settings) -> bool {
         let mut taken = false;
         if settings.notify.is_none() && self.notify == Some(false) {
@@ -45,7 +45,7 @@ fn home() -> String {
     crate::paths::home().display().to_string()
 }
 
-/// What the old manager left, where it left something; what fails is logged, and the next
+/// What the old manager left, where it left something. What fails is logged, and the next
 /// start reads again.
 pub fn read() -> Option<Legacy> {
     let legacy = match query(op::MIGRATE_READ, &[&home()]) {
@@ -66,7 +66,7 @@ pub fn clean(legacy: &Legacy) {
     }
 }
 
-/// Takes the old manager over at once, for `init`; the interface does it behind the splash.
+/// Takes the old manager over at once, for `init`. The interface does it behind the splash.
 pub fn run() {
     let Some(legacy) = read() else {
         return;

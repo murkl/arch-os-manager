@@ -86,7 +86,7 @@ op_remove() {
     sudo pacman -Rns -- "$@"
 }
 
-# A package file from the cache or an address in the Arch Linux Archive; pacman
+# A package file from the cache or an address in the Arch Linux Archive, and pacman
 # verifies the signature of either.
 op_downgrade() {
     sudo pacman -U -- "$1"

@@ -49,7 +49,7 @@ pub fn cut_front(s: &str, max: usize, mark: &str) -> String {
     mark.to_string() + &kept.into_iter().rev().collect::<String>()
 }
 
-/// As many whole `pieces` as fit in `max` columns, joined by `sep`; those left out as `mark`.
+/// As many whole `pieces` as fit in `max` columns, joined by `sep`, those left out as `mark`.
 pub fn fit(pieces: &[String], sep: &str, max: usize, mark: &str) -> String {
     let all = pieces.join(sep);
     if all.width() <= max {
@@ -80,7 +80,7 @@ pub fn put(buf: &mut Buffer, x: u16, y: u16, s: &str, max: u16, style: Cell) -> 
     buf.set_stringn(x, y, s, max as usize, style).0
 }
 
-/// Word wrap; a word wider than the line is broken after its last `/` that fits, else its last
+/// Word wrap. A word wider than the line is broken after its last `/` that fits, else its last
 /// `-`, as paths and links read.
 pub fn wrap(s: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
@@ -149,7 +149,7 @@ pub fn frame(area: Rect, buf: &mut Buffer, ctx: &Ctx, path: &[String]) -> Rect {
         return area;
     };
 
-    // Header: where we are on the left; on the right whether something loads, and the machine.
+    // Header: where we are on the left, on the right whether something loads, and the machine.
     let busy = if ctx.busy() { s.spinner() } else { "" };
     let mut host = ctx
         .shared
@@ -269,7 +269,7 @@ pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, S
         return;
     };
     let version = crate::version::version();
-    // The pages name their keys in the glyphs of the window; the console gets them as words.
+    // The pages name their keys in the glyphs of the window. The console gets them as words.
     let keys: Vec<String> = hints
         .iter()
         .map(|(k, label)| {
@@ -300,7 +300,7 @@ pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, S
     }
 }
 
-/// A bar filled in `tone`; without a fraction a segment travels along it.
+/// A bar filled in `tone`. Without a fraction a segment travels along it.
 pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, fraction: Option<f64>, tone: Tone, ctx: &Ctx) {
     let s = &ctx.style;
     put(
@@ -360,7 +360,7 @@ pub fn scrollbar(buf: &mut Buffer, area: Rect, lines: usize, offset: usize, ctx:
     }
 }
 
-/// A bordered card in the middle of `area`, cleared; returns its inside.
+/// A bordered card in the middle of `area`, cleared. Returns its inside.
 pub fn card(area: Rect, buf: &mut Buffer, w: u16, h: u16, ctx: &Ctx) -> Rect {
     let s = &ctx.style;
     let w = w.min(area.width);

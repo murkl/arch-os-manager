@@ -43,7 +43,7 @@ struct File {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
-    /// The file name without `.yaml`; what settings.yaml stores.
+    /// The file name without `.yaml`, which settings.yaml stores.
     pub id: String,
     pub name: String,
     pub colors: Colors,
@@ -60,7 +60,7 @@ fn parse(id: &str, src: &str) -> Result<Theme, String> {
     })
 }
 
-/// Built-in themes and the user's, by name; a user file with a built-in's id replaces it.
+/// Built-in themes and the user's, by name. A user file with a built-in's id replaces it.
 /// The second list says which user files were skipped and why.
 pub fn all() -> (Vec<Theme>, Vec<String>) {
     let mut themes: Vec<Theme> = crate::embedded::THEMES
@@ -127,7 +127,7 @@ mod tests {
         (x.max(y) + 0.05) / (x.min(y) + 0.05)
     }
 
-    /// WCAG AA: 4.5 for text, 3 for what is told by its colour; muted only has to stand apart.
+    /// WCAG AA: 4.5 for text, 3 for what is told by its colour. Muted only has to stand apart.
     #[test]
     fn every_built_in_reads_on_its_background() {
         for (file, bytes) in crate::embedded::THEMES {

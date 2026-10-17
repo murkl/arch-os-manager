@@ -16,7 +16,7 @@ errors:
     It holds a quote, a backslash, a backtick, a dollar or a percent sign. Move the program to a plain path, such as ~/.local/bin.
   11: |
     The extension could not be downloaded
-    Check the internet connection; extensions.gnome.org may have no version for this GNOME yet.
+    Check the internet connection. extensions.gnome.org may have no version for this GNOME Shell yet.
   12: |
     The extension comes from a package
     Remove that package on the Packages page.

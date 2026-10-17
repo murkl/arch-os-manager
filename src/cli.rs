@@ -18,7 +18,7 @@ pub const PAGES: [&str; 12] = [
     "repair", "settings", "features",
 ];
 
-/// The command line in two groups, each row an argument and what it does; the help and the
+/// The command line in two groups, each row an argument and what it does. The help and the
 /// about page show them.
 pub fn commands() -> [(&'static str, Vec<(&'static str, String)>); 2] {
     let s = |text: &str| text.to_string();
@@ -206,7 +206,7 @@ fn check() -> ExitCode {
     }
 }
 
-/// How long a notification waits for a click; the timer comes back within the hour anyway.
+/// How long a notification waits for a click. The timer comes back within the hour anyway.
 const ANSWER: Duration = Duration::from_secs(3600);
 
 /// What `notify` prints instead of a notification, when it shows none.
@@ -234,9 +234,11 @@ fn notify(only_new: bool) -> ExitCode {
         .map(|u| format!("{} {}", u.name, u.new))
         .collect();
     let fresh = now.iter().any(|u| !state.notified.contains(u));
-    state.notified = now;
-    state.save();
     if let Some(status) = quiet(list.len(), fresh, only_new) {
+        if list.is_empty() {
+            state.notified = now;
+            state.save();
+        }
         crate::info!("notify: {status}");
         println!("{status}");
         return ExitCode::SUCCESS;
@@ -247,7 +249,7 @@ fn notify(only_new: bool) -> ExitCode {
         list.len(),
         &[],
     );
-    // The script stops waiting by itself; the limit catches one that does not.
+    // The script stops waiting by itself. The limit catches one that does not.
     let shown = script::query_within(
         op::DESKTOP_NOTIFY,
         &[
@@ -258,6 +260,11 @@ fn notify(only_new: bool) -> ExitCode {
         ],
         ANSWER + Duration::from_secs(60),
     );
+    // Remembered only once shown, so one the desktop missed comes again.
+    if shown.is_ok() {
+        state.notified = now;
+        state.save();
+    }
     match shown {
         Ok(action) if action.trim() == "open" => {
             let exe = std::env::current_exe()

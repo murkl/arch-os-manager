@@ -12,7 +12,7 @@ use super::{Failure, Op, attach_fd3, command, pipe};
 
 const LIMIT: Duration = Duration::from_secs(120);
 
-/// Runs a script and returns what it printed; a script that elevates is refused.
+/// Runs a script and returns what it printed. A script that elevates is refused.
 pub fn query(op: Op, args: &[&str]) -> Result<String, Failure> {
     query_within(op, args, LIMIT)
 }

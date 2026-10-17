@@ -128,6 +128,7 @@ fn updates_says_nothing_when_nothing_is_pending() {
     let s = Sandbox::new("current");
     s.stub("checkupdates", "exit 2");
     s.stub("paru", "exit 1");
+    s.stub("flatpak", "exit 0");
     let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
     assert_eq!((o.code, o.out.as_str()), (0, ""));
 }
@@ -270,6 +271,58 @@ fn a_configuration_update_is_only_ever_a_pacnew_or_pacsave() {
         assert_eq!(o.code, 11, "{op}");
         assert!(!o.calls.contains("sudo"), "{op}: {}", o.calls);
     }
+}
+
+#[test]
+fn a_configuration_update_takes_a_snapshot_where_snapper_keeps_the_root() {
+    let s = Sandbox::new("pacnew-snapshot");
+    s.stub("snapper", "exit 0");
+    s.stub("mv", "exit 0");
+    let o = s.run("pacnew", &["take", "/etc/x.conf.pacnew"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let snapshots = std::path::Path::new("/etc/snapper/configs/root").exists();
+    assert_eq!(
+        o.calls
+            .contains("snapper --no-dbus -c root create --cleanup-algorithm number"),
+        snapshots,
+        "{}",
+        o.calls
+    );
+    assert_eq!(o.events.contains("step\tsnapshot\n"), snapshots);
+    assert!(
+        o.calls
+            .ends_with("mv -f -- /etc/x.conf.pacnew /etc/x.conf\n"),
+        "{}",
+        o.calls
+    );
+}
+
+#[test]
+fn repair_reinstalls_the_native_packages_with_altered_files_only() {
+    let s = Sandbox::new("repair-files");
+    s.stub(
+        "pacman",
+        r#"case "$1" in
+-Qkk) printf 'backup file: pacman: /etc/pacman.conf (Size mismatch)\npacman: 426 total files, 0 altered files\nwarning: bar: /usr/bin/bar (Size mismatch)\nbar: 10 total files, 1 altered files\nwarning: baz-git: /usr/bin/baz (No such file or directory)\nbaz-git: 3 total files, 1 altered files\n'; exit 1 ;;
+-Qqn) printf 'bar\npacman\n' ;;
+esac"#,
+    );
+    let o = s.run("repair", &["files"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(o.calls.contains("pacman -S -- bar\n"), "{}", o.calls);
+    assert!(!o.calls.contains("baz-git") && !o.calls.contains("pacman -S -- pacman"));
+    assert!(
+        o.out.contains("foreign, not reinstalled: baz-git"),
+        "{}",
+        o.out
+    );
+    assert_eq!(o.events, "step\tcheck\nstep\treinstall\n");
+
+    let clean = Sandbox::new("repair-files-clean");
+    clean.stub("pacman", r#"case "$1" in -Qkk) printf 'pacman: 426 total files, 0 altered files\n' ;; -Qqn) echo pacman ;; esac"#);
+    let o = clean.run("repair", &["files"], &[]);
+    assert!(o.code == 0 && !o.calls.contains("pacman -S"), "{}", o.calls);
+    assert_eq!(o.events, "step\tcheck\n");
 }
 
 #[test]
@@ -656,6 +709,40 @@ fn cleanup_keeps_the_kernels_the_snapshots_need() {
             .contains(&format!("cache\t{}/{old_kernel}", cache.display())),
         "{}",
         o.out
+    );
+}
+
+#[test]
+fn cleanup_removes_a_cached_package_with_its_signature() {
+    let s = Sandbox::new("cleanup-sig");
+    let cache = s.dir.join("pkg");
+    std::fs::create_dir_all(&cache).unwrap();
+    let package = "foo-1.0-1-x86_64.pkg.tar.zst";
+    for f in [package.to_string(), format!("{package}.sig")] {
+        std::fs::write(cache.join(f), "12345").unwrap();
+    }
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
+            cache.display()
+        ),
+    );
+    s.stub(
+        "paccache",
+        &format!("echo '==> Candidate packages:'; echo '{package}'; echo"),
+    );
+    s.stub(
+        "pacman",
+        r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
+    );
+    s.stub("flatpak", "exit 0");
+    let o = s.run("cleanup", &["run"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(!cache.join(package).exists());
+    assert!(
+        !cache.join(format!("{package}.sig")).exists(),
+        "the signature goes with the package"
     );
 }
 

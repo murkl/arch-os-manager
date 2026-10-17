@@ -9,7 +9,7 @@ use super::{Failure, Op, Progress, Prompt, sudo};
 use crate::i18n::t;
 
 const KEEP: usize = 300;
-/// Output can trail the exit by a moment; the result waits for it.
+/// Output can trail the exit by a moment. The result waits for it.
 const SETTLE: Duration = Duration::from_millis(250);
 
 pub struct Run {
@@ -43,7 +43,7 @@ impl Run {
         Ok(Run::with(op, session, size))
     }
 
-    /// A run that has printed `output` after announcing `step`, for pictures of its page; the
+    /// A run that has printed `output` after announcing `step`, for pictures of its page. The
     /// program behind it is `true`, and its end is never told.
     #[cfg(test)]
     pub fn fed(op: Op, step: &str, output: &str) -> Run {
@@ -106,7 +106,7 @@ impl Run {
         }
     }
 
-    /// Looks at the unfinished line; on every tick too, since sudo silences echo just before asking.
+    /// Looks at the unfinished line, on every tick too, since sudo silences echo just before asking.
     pub fn check_prompt(&mut self) {
         if self.exit.is_some() {
             return;
@@ -146,7 +146,7 @@ impl Run {
     pub fn answer(&mut self, text: &str) {
         let line = self.lines.current();
         if self.prompt == Some(Prompt::Password) {
-            // An empty one counts as a failed attempt towards the lock of pam_faillock; a
+            // An empty one counts as a failed attempt towards the lock of pam_faillock. A
             // terminal that echoes would print it into the output and the log.
             if text.is_empty() || self.session.echoes() {
                 return;
@@ -210,7 +210,7 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
 
-    /// A run of `script` in bash, fed until it ends; returns what it printed.
+    /// A run of `script` in bash, fed until it ends. Returns what it printed.
     fn drive(script: &str) -> (Run, String) {
         let (tx, rx) = mpsc::channel();
         let mut cmd = std::process::Command::new("bash");

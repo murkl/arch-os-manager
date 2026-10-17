@@ -59,6 +59,7 @@ impl App {
             tx: tx.clone(),
             wake: wake.clone(),
             page: 0,
+            action: None,
         };
         sample(tx, wake);
         ctx.style = Style::new(&ctx.theme().colors, console);
@@ -155,7 +156,7 @@ impl App {
         }
     }
 
-    /// Hands a result to the page that asked; its next step counts only while it is on top.
+    /// Hands a result to the page that asked. Its next step counts only while it is on top.
     fn deliver(&mut self, id: PageId, f: impl FnOnce(&mut Box<dyn Page>, &mut Ctx) -> Flow) {
         let top = self.pages.last().map(|(i, _)| *i);
         let Some((_, page)) = self.pages.iter_mut().find(|(i, _)| *i == id) else {
@@ -225,7 +226,7 @@ impl App {
         std::thread::spawn(move || crate::migrate::clean(&legacy));
     }
 
-    /// Reads every shared value anew; what is shown stays until the new value arrives.
+    /// Reads every shared value anew. What is shown stays until the new value arrives.
     fn reload(&mut self) {
         self.ctx.generation += 1;
         let ctx = &self.ctx;
@@ -326,7 +327,7 @@ impl App {
     }
 }
 
-/// How often the usage is read; the processors' share is the one over this time.
+/// How often the usage is read. The processors' share is the one over this time.
 const USAGE: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Reads the usage off the drawing thread, until the app is gone.
@@ -434,6 +435,7 @@ pub mod tests {
             tx,
             wake: Arc::new(|| {}),
             page: 0,
+            action: None,
         };
         let mut app = App {
             pages: Vec::new(),
@@ -478,7 +480,7 @@ pub mod tests {
         use crate::data::{packages::Installed, services::Service, system::System, updates};
         let s = &mut app.ctx.shared;
         s.features = Loaded::Ready(Features::parse(
-            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\narch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\npacman-contrib\tok\t1.13.1-1\nreflector\tok\t2023-2\n@desktop\tok\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\npacman-contrib\tok\t1.13.1-1\nreflector\tok\t2023-2\n@desktop\tok\n@gnome\tok\n",
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {
@@ -598,7 +600,7 @@ pub mod tests {
         shoot(&mut app, "home");
         press(&mut app, &[Key::Enter]);
         shoot(&mut app, "update");
-        let job = || pages::run::Job::new(op::UPDATE_RUN, Vec::new());
+        let job = || pages::run::Job::new(op::UPDATE_RUN, Vec::new()).named(i18n::t("Update now"));
         let output = ":: Starting full system upgrade...\r\n\
             :: Retrieving packages...\r\n\
             :: Processing package changes...\r\n\
@@ -784,7 +786,7 @@ pub mod tests {
         all
     }
 
-    /// The console's font has letters, but none of the glyphs; every page draws it those only.
+    /// The console's font has letters, but none of the glyphs. Every page draws it those only.
     #[test]
     fn every_page_is_ascii_on_the_console() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -806,7 +808,7 @@ pub mod tests {
         }
     }
 
-    /// A terminal can be made as small as one cell; no page may panic in it.
+    /// A terminal can be made as small as one cell. No page may panic in it.
     #[test]
     fn every_page_draws_at_any_size() {
         let (mut app, _) = app();

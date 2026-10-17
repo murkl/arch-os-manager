@@ -93,13 +93,13 @@ impl Row {
 }
 
 /// The columns of a row, as a list and a page of facts both draw it: the lead where the page
-/// has a column for it, the label, the detail.
+/// has a column for it, the label and the detail, each in pieces of their own style.
 pub fn draw_row(
     buf: &mut Buffer,
     area: Rect,
     y: u16,
     (lead, column): (Lead, bool),
-    (label, label_style): (&str, Cell),
+    label: &[(&str, Cell)],
     detail: &[(&str, Cell)],
     ctx: &Ctx,
 ) {
@@ -119,33 +119,48 @@ pub fn draw_row(
     let room = area.right().saturating_sub(x) as usize;
     // The detail gets what the label leaves, at least half the row, cut at its end across the
     // pieces it is drawn in.
-    let budget = (room / 2).max(room.saturating_sub(width(label) + 2));
-    let mut left = budget;
-    let mut pieces = Vec::new();
-    for (text, style) in detail {
-        let piece = cut(text, left, s.glyphs.ellipsis);
-        left -= width(&piece);
-        let whole = piece == *text;
-        pieces.push((piece, *style));
-        if !whole {
-            break;
+    // Pieces cut at their end to a width, across the pieces.
+    let fit = |pieces: &[(&str, Cell)], mut left: usize| {
+        let mut out = Vec::new();
+        for (text, style) in pieces {
+            let piece = cut(text, left, s.glyphs.ellipsis);
+            left -= width(&piece);
+            let whole = piece == *text;
+            out.push((piece, *style));
+            if !whole {
+                break;
+            }
         }
-    }
+        (out, left)
+    };
+    let label_width: usize = label.iter().map(|(t, _)| width(t)).sum();
+    let budget = (room / 2).max(room.saturating_sub(label_width + 2));
+    let (pieces, left) = fit(detail, budget);
     let detail_width = budget - left;
     let label_room = room.saturating_sub(if detail_width == 0 {
         0
     } else {
         detail_width + 2
     });
-    let name = cut(label, label_room, s.glyphs.ellipsis);
-    put(buf, x, y, &name, label_room as u16, label_style);
+    let (name, _) = fit(label, label_room);
+    let mut lx = x;
+    for (piece, style) in &name {
+        lx = put(
+            buf,
+            lx,
+            y,
+            piece,
+            (x + label_room as u16).saturating_sub(lx),
+            *style,
+        );
+    }
     let mut x = area.right() - detail_width as u16;
     for (piece, style) in &pieces {
         x = put(buf, x, y, piece, width(piece) as u16, *style);
     }
 }
 
-/// Each `old → new` of a list padded to the widest, so the arrows stand in one column; a new
+/// Each `old → new` of a list padded to the widest, so the arrows stand in one column. A new
 /// value without an old one stands under the other new ones. Each comes as the part up to the
 /// new value, and the new value.
 pub fn changes(pairs: &[(&str, &str)], arrow: &str) -> Vec<(String, String)> {
@@ -325,7 +340,7 @@ impl List {
         self.height = height;
         let shown = self.shown();
         let query_active = self.filter.as_ref().is_some_and(|f| !f.text.is_empty());
-        // Headings stay while a filter is empty; a filtered list is flat.
+        // Headings stay while a filter is empty. A filtered list is flat.
         let visible: Vec<usize> = (0..self.rows.len())
             .filter(|&i| shown.contains(&i) || (self.rows[i].heading && !query_active))
             .collect();
@@ -342,7 +357,7 @@ impl List {
             }
             return;
         }
-        // Each heading after the first gets a blank line before it; an empty one is only that.
+        // Each heading after the first gets a blank line before it. An empty one is only that.
         let mut lines: Vec<Option<usize>> = Vec::new();
         for &i in &visible {
             if self.rows[i].heading && !lines.is_empty() {
@@ -366,7 +381,7 @@ impl List {
         self.offset = self.offset.min(lines.len().saturating_sub(height.max(1)));
         let rows = Rect::new(area.x, y, area.width, height as u16);
         super::draw::scrollbar(buf, rows, lines.len(), self.offset, ctx);
-        // A column for the leads only where one shows; the console has no icons.
+        // A column for the leads only where one shows. The console has no icons.
         let column = self.markable || self.rows.iter().any(|r| r.lead.shows(s));
         for (n, line) in lines.iter().skip(self.offset).take(height).enumerate() {
             let Some(i) = *line else { continue };
@@ -408,7 +423,7 @@ impl List {
                 (false, true) => s.tone(Tone::Muted),
                 (false, false) => s.tone(Tone::Normal),
             };
-            // Muted reads badly on the selection; the row under the cursor is the one being read.
+            // Muted reads badly on the selection. The row under the cursor is the one being read.
             let detail_tone = match (current, row.tone) {
                 (true, Tone::Muted) => Tone::Normal,
                 (_, tone) => tone,
@@ -418,7 +433,7 @@ impl List {
                 area,
                 ly,
                 (lead, column),
-                (&row.label, style),
+                &[(&row.label, style)],
                 &[(&row.detail, s.tone(detail_tone))],
                 ctx,
             );
@@ -512,7 +527,7 @@ mod tests {
                 area,
                 0,
                 (Lead::None, true),
-                (label, style),
+                &[(label, style)],
                 &detail,
                 &app.ctx,
             );

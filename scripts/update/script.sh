@@ -13,7 +13,7 @@ op_list() {
     *) exit 10 ;;
     esac
 
-    # The helper ends with 1 both when nothing is pending and when it failed; only
+    # The helper ends with 1 both when nothing is pending and when it failed. Only
     # a failure says why.
     if [ -n "$SM_AUR" ]; then
         errors="$(mktemp)"
@@ -28,7 +28,7 @@ op_list() {
         done <<<"$pending"
     fi
 
-    # A version is often missing or unchanged, a commit never; read collapses empty
+    # A version is often missing or unchanged, a commit never, and read collapses empty
     # fields between tabs, so the version comes last.
     if command -v flatpak >/dev/null; then
         local installed app arch branch commit version ref old new

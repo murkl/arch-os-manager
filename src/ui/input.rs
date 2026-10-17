@@ -27,7 +27,7 @@ impl Input {
         }
     }
 
-    /// Takes a key that edits the text; returns whether it did.
+    /// Takes a key that edits the text. Returns whether it did.
     pub fn key(&mut self, key: Key) -> bool {
         match key {
             Key::Char(c) if !c.is_control() => self.text.push(c),

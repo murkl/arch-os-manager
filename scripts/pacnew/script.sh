@@ -19,6 +19,10 @@ op_diff() {
 # The new version in place of the current one.
 op_take() {
     update "$1"
+    if snapshots; then
+        step snapshot
+        sudo snapper --no-dbus -c root create --cleanup-algorithm number --description "system-manager: ${1%.pac*}"
+    fi
     sudo mv -f -- "$1" "${1%.pac*}"
 }
 
@@ -35,6 +39,10 @@ op_merge() {
     local file="$1" target
     update "$file"
     target="${file%.pac*}"
+    if snapshots; then
+        step snapshot
+        sudo snapper --no-dbus -c root create --cleanup-algorithm number --description "system-manager: $target"
+    fi
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
     sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" -- "$target" "${work}/current"
@@ -44,6 +52,12 @@ op_merge() {
     if cmp -s "${work}/current" "${work}/before"; then exit 12; fi
     sudo cp -- "${work}/current" "$target"
     sudo rm -f -- "$file"
+}
+
+# Where snapper keeps the root, a snapshot holds the configuration before it
+# changes, pruned by snapper's own number limit, so nothing is left beside it.
+snapshots() {
+    command -v snapper >/dev/null && [ -e /etc/snapper/configs/root ]
 }
 
 # Nothing but a configuration update is ever moved or removed.

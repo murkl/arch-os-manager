@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Renders docs/banner.png out of two screenshots, so after `make screenshots`.
-# banner.py is the same file in every project that uses it; what is this
+# banner.py is the same file in every project that uses it. What is this
 # project's comes from here. Needs chromium, imagemagick and FiraCode Nerd Font.
 #
 #   docs/banner.sh

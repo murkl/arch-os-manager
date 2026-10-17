@@ -31,11 +31,11 @@
 - English and German
 - Themes such as Nord, Catppuccin, Tokyo Night and Gruvbox, or your own
 
-Optional packages add features; **Settings › Optional packages** installs and removes them.
+Optional packages add features. **Settings › Optional packages** installs and removes them.
 
 ## Installation
 
-From the AUR, where it replaces the Arch OS Manager with an update:
+From the AUR:
 
 ```sh
 paru -S arch-os-manager

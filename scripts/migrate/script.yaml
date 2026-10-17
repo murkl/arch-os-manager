@@ -1,4 +1,4 @@
-# The Arch OS Manager 1.x, taken over once; script.sh says how to remove this.
+# The Arch OS Manager 1.x, taken over once. script.sh says how to remove this.
 ops:
   read:
     title: Looking for the Arch OS Manager
@@ -7,4 +7,4 @@ ops:
 errors:
   10: |
     The GNOME dock still shows the Arch OS Manager
-    GNOME did not keep the change; replace it in the dock by hand.
+    GNOME did not keep the change. Replace it in the dock by hand.

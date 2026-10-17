@@ -1,0 +1,10 @@
+name: GitHub Dark
+colors:
+  background: "#0D1117"
+  surface: "#161B22"
+  muted: "#8B949E"
+  text: "#C9D1D9"
+  accent: "#58A6FF"
+  success: "#3FB950"
+  warning: "#D29922"
+  error: "#F85149"

@@ -28,7 +28,7 @@ operation() {
     "op_${name//-/_}" "$@"
 }
 
-# The phase a run is in; the sentence for it is in the operation's steps.
+# The phase a run is in. The sentence for it is in the operation's steps.
 step() {
     printf 'step\t%s\n' "$1" >&3
 }
@@ -38,7 +38,7 @@ fetch() {
     curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --connect-timeout 10 --max-time 60 "$@"
 }
 
-# The AUR helper chosen in the settings; empty for none.
+# The AUR helper chosen in the settings, empty for none.
 aur() {
     "$SM_AUR" "$@"
 }

@@ -7,10 +7,10 @@ pub struct Service {
     pub user: bool,
     pub unit: String,
     pub description: String,
-    /// active, inactive, failed, activating; empty for a unit file never loaded.
+    /// active, inactive, failed, activating, empty for a unit file never loaded.
     pub active: String,
     pub sub: String,
-    /// enabled, disabled, static, masked, …; empty for a unit without a file.
+    /// enabled, disabled, static, masked, …, empty for a unit without a file.
     pub enabled: String,
 }
 
@@ -41,7 +41,7 @@ struct File {
     state: String,
 }
 
-/// services.sh output: loaded units and unit files, joined; failed first, then running.
+/// services.sh output: loaded units and unit files, joined, failed first, then running.
 pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
     let (mut units, mut files): (Vec<Unit>, Vec<File>) = (Vec::new(), Vec::new());
     for line in out.lines() {

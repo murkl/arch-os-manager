@@ -1,4 +1,4 @@
-//! Firmware updates through fwupd.
+//! Updates the firmware of the device through fwupd.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -42,7 +42,7 @@ impl Page for FirmwarePage {
             for (f, (was, becomes)) in list.iter().zip(change) {
                 body.push(Block::Row(
                     Lead::Icon(icon::FIRMWARE, Tone::Muted),
-                    f.device.clone(),
+                    vec![(f.device.clone(), Tone::Normal)],
                     vec![(was, Tone::Muted), (becomes, Tone::Accent)],
                 ));
                 if !f.summary.is_empty() {

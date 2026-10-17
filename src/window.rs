@@ -149,7 +149,7 @@ impl Face {
     }
 }
 
-/// Fira Code parses from the first moment of the start, for the first frame; the icons, which
+/// Fira Code parses from the first moment of the start, for the first frame. The icons, which
 /// the splash has none of, from `start`, so they hold no frame back.
 struct Faces {
     regular: Face,
@@ -219,7 +219,7 @@ impl Fonts {
                 && faces.symbols.get().lookup_glyph_index(c) != 0;
             if icon {
                 let symbols = faces.symbols.get();
-                // An icon has two cells before its label; one wider is scaled down to them.
+                // An icon has two cells before its label. One wider is scaled down to them.
                 let wide = symbols.metrics(c, px).width as f32;
                 let fit = if wide > 2.0 * cell_width {
                     px * 2.0 * cell_width / wide
@@ -281,7 +281,7 @@ impl Win {
         }
     }
 
-    /// Draws the app into the grid, sized to the window; whether a cell changed since it was
+    /// Draws the app into the grid, sized to the window. Returns whether a cell changed since it was
     /// last shown. Cheap, so it runs after every batch of events and the window paints only then.
     fn compose(&mut self) -> Result<bool, String> {
         let Some(window) = &self.window else {

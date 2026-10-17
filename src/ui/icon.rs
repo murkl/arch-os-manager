@@ -1,5 +1,5 @@
-//! Nerd Font icons from Material Design, by what they stand for. The window carries the font;
-//! a terminal needs a Nerd Font, as Arch OS sets one; the Linux console shows none.
+//! Nerd Font icons from Material Design, by what they stand for. The window carries the font.
+//! A terminal needs a Nerd Font, as Arch OS sets one. The Linux console shows none.
 
 pub const ARCH: &str = "\u{f08c7}";
 pub const UPDATE: &str = "\u{f06b0}";
@@ -42,7 +42,6 @@ pub const CPU: &str = "\u{f0ee0}";
 pub const MEMORY: &str = "\u{f035b}";
 pub const DISK: &str = "\u{f02ca}";
 pub const USAGE: &str = "\u{f029a}";
-pub const TOOLS: &str = "\u{f1322}";
 
 /// Every icon, for the test that the window's font has each.
 #[cfg(test)]
@@ -88,5 +87,4 @@ pub const ALL: &[&str] = &[
     MEMORY,
     DISK,
     USAGE,
-    TOOLS,
 ];

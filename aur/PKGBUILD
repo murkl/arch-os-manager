@@ -11,14 +11,14 @@ license=('GPL-3.0-or-later')
 depends=('gcc-libs' 'glibc')
 makedepends=('cargo')
 optdepends=(
-    'pacman-contrib: the list of updates, the clean-up and the configuration updates'
-    'paru: packages from the AUR'
-    'yay: packages from the AUR'
-    'flatpak: Flatpak apps in the update and the clean-up'
-    'reflector: ranking the mirrors'
-    'meld: merging configuration updates side by side'
-    'libnotify: notifications about new updates'
-    'fwupd: firmware updates'
+    'pacman-contrib: lists updates, trims the cache and finds configuration updates'
+    'paru: builds and updates packages from the AUR'
+    'yay: builds and updates packages from the AUR'
+    'flatpak: updates and cleans up Flatpak apps'
+    'reflector: ranks the mirrors by speed'
+    'fwupd: updates the firmware of the device'
+    'libnotify: desktop notifications about new updates'
+    'meld: merges configuration updates side by side'
     'ttf-nerd-fonts-symbols: icons in a terminal without a Nerd Font'
 )
 provides=('system-manager')

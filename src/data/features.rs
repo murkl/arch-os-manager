@@ -5,10 +5,7 @@ use std::collections::BTreeSet;
 use crate::script::{Failure, Probe, meta, op, query};
 use crate::settings::AUR_HELPERS;
 
-/// The kind the desktop script sets up from extensions.gnome.org, with no package.
-pub const EXTENSION: &str = "gnome-extension";
-
-/// Every optional package as kind, name and probe, by kind and then by name.
+/// Every optional package as group, name and probe, by group and then by name.
 pub fn packages() -> impl Iterator<Item = (&'static str, &'static str, &'static Probe)> {
     meta("features").probe.iter().flat_map(|(kind, packages)| {
         packages
@@ -17,7 +14,7 @@ pub fn packages() -> impl Iterator<Item = (&'static str, &'static str, &'static 
     })
 }
 
-/// The kind and the probe of an optional package.
+/// The group and the probe of an optional package.
 pub fn package(name: &str) -> Option<(&'static str, &'static Probe)> {
     packages()
         .find(|(_, n, _)| *n == name)
@@ -73,7 +70,7 @@ impl Features {
         features
     }
 
-    /// Why something that needs a fact is not offered, untranslated; none while it holds.
+    /// Why something that needs a fact is not offered, untranslated, none while it holds.
     pub fn lacks(&self, fact: &str) -> Option<&'static str> {
         if self.facts.contains(fact) {
             return None;
@@ -81,7 +78,7 @@ impl Features {
         meta("features").facts.get(fact).map(String::as_str)
     }
 
-    /// Why a package is not offered, untranslated; none when it is.
+    /// Why a package is not offered, untranslated, none when it is.
     pub fn unmet(&self, package: &str) -> Option<&'static str> {
         let need = self::package(package)?.1.needs.as_deref()?;
         self.lacks(need)
@@ -126,7 +123,7 @@ mod tests {
             .collect();
         offered.sort();
         let mut probed: Vec<&str> = packages()
-            .filter(|(kind, _, _)| *kind != EXTENSION)
+            .filter(|(_, _, probe)| !probe.extension)
             .map(|(_, name, _)| name)
             .collect();
         probed.sort();
@@ -135,18 +132,17 @@ mod tests {
     }
 
     #[test]
-    fn names_each_package_once_and_the_aur_helpers_as_their_kind() {
+    fn names_each_package_once_in_one_of_two_groups() {
         let mut names: Vec<&str> = packages().map(|(_, name, _)| name).collect();
         names.sort();
         let all = names.len();
         names.dedup();
-        assert_eq!(names.len(), all, "a package under two kinds: {names:?}");
-        let helpers: Vec<&str> = packages()
-            .filter(|(kind, _, _)| *kind == "aur-helper")
-            .map(|(_, name, _)| name)
-            .collect();
-        assert_eq!(helpers, AUR_HELPERS);
-        assert!(packages().any(|(kind, _, _)| kind == EXTENSION));
+        assert_eq!(names.len(), all, "a package under two groups: {names:?}");
+        for helper in AUR_HELPERS {
+            assert!(packages().any(|(group, name, _)| group == "packages" && name == helper));
+        }
+        assert!(packages().all(|(group, ..)| group == "packages" || group == "desktop"));
+        assert_eq!(packages().filter(|(_, _, p)| p.extension).count(), 1);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! What the machine uses right now, from the kernel's counters.
 
-/// The share in use, from 0 to 1, of the processors, the memory and the root file system; each
+/// The share in use, from 0 to 1, of the processors, the memory and the root file system, each
 /// unknown where it was not read.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Usage {
@@ -25,7 +25,7 @@ impl Ticks {
             .split_whitespace()
             .map(|f| f.parse().ok())
             .collect::<Option<_>>()?;
-        // user to steal; guest and guest_nice are already in user and nice.
+        // user to steal. guest and guest_nice are already in user and nice.
         let all: u64 = fields.iter().take(8).sum();
         let idle = fields.get(3)? + fields.get(4).unwrap_or(&0);
         Some(Ticks {

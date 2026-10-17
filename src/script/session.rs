@@ -17,7 +17,7 @@ pub enum Event {
     Output(Vec<u8>),
     /// A line lib.sh wrote to fd 3.
     Script(String),
-    /// The exit code; a signal counts as 128 plus its number.
+    /// The exit code. A signal counts as 128 plus its number.
     Exit(i32),
 }
 
@@ -124,7 +124,7 @@ impl Session {
         let _ = rustix::termios::tcsetwinsize(&*self.master, size);
     }
 
-    /// Whether the terminal echoes; on Linux the master reports its slave's modes.
+    /// Whether the terminal echoes. On Linux the master reports its slave's modes.
     pub fn echoes(&self) -> bool {
         rustix::termios::tcgetattr(&*self.master)
             .is_ok_and(|t| t.local_modes.contains(LocalModes::ECHO))

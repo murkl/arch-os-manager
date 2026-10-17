@@ -315,6 +315,11 @@ impl PackagePage {
             get("Version").or_else(|| aur.map(|a| a.version.clone())),
             Tone::Normal,
         );
+        fact(&mut body, t("License"), get("Licenses"), Tone::Normal);
+        // pacman's own figure, in the units of the rest of the interface.
+        let size =
+            get("Installed Size").map(|s| crate::data::format_size(crate::data::parse_size(&s)));
+        fact(&mut body, t("Size"), size, Tone::Normal);
         fact(
             &mut body,
             t("Website"),
@@ -451,6 +456,8 @@ impl PackagePage {
             );
         }
         self.detail.set(body, acts);
+        // What the repository says stays while the rest scrolls.
+        self.detail.pin_head();
     }
 }
 
@@ -522,7 +529,7 @@ impl MarkedPage {
                     let name = p.rsplit('/').next().unwrap_or(&p).to_string();
                     body.push(Block::Row(
                         Lead::Icon(icon::PACKAGE, Tone::Muted),
-                        name,
+                        vec![(name, Tone::Normal)],
                         Vec::new(),
                     ));
                 }
@@ -704,7 +711,6 @@ impl Page for VersionsPage {
 }
 
 pub struct PkgbuildPage {
-    base: String,
     fetch: Fetch<String>,
     detail: Detail,
     shown: bool,
@@ -714,7 +720,6 @@ impl PkgbuildPage {
     pub fn new(base: &str) -> PkgbuildPage {
         let b = base.to_string();
         PkgbuildPage {
-            base: base.to_string(),
             fetch: Fetch::new("pkgbuild", move || query(op::PACKAGES_PKGBUILD, &[&b])),
             detail: Detail::default(),
             shown: false,
@@ -724,7 +729,7 @@ impl PkgbuildPage {
 
 impl Page for PkgbuildPage {
     fn title(&self) -> String {
-        format!("{} PKGBUILD", self.base)
+        "PKGBUILD".into()
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {

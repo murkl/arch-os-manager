@@ -63,7 +63,7 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
             match rx.recv_timeout(wake.saturating_duration_since(drawn)) {
                 Ok(msg) => {
                     app.handle(msg);
-                    // What follows within a frame is drawn with it; a flood still gets drawn.
+                    // What follows within a frame is drawn with it, and a flood still gets drawn.
                     let (due, budget) = (drawn + FRAME, Instant::now() + FRAME);
                     while !app.done() && Instant::now() < budget {
                         match rx.recv_timeout(due.saturating_duration_since(Instant::now())) {

@@ -26,6 +26,8 @@ pub struct Job {
     pub args: Vec<String>,
     /// Asked before the run, replacing the yaml's confirm: question, then what happens.
     pub confirm: Option<String>,
+    /// The action as the person chose it, which the header names.
+    name: Option<String>,
 }
 
 impl Job {
@@ -34,6 +36,7 @@ impl Job {
             op,
             args,
             confirm: None,
+            name: None,
         }
     }
 
@@ -42,13 +45,23 @@ impl Job {
         self
     }
 
+    pub fn named(mut self, name: &str) -> Job {
+        self.name = Some(name.to_string());
+        self
+    }
+
     fn title(&self) -> String {
-        self.op.title().to_string()
+        self.name
+            .clone()
+            .unwrap_or_else(|| self.op.title().to_string())
     }
 }
 
 /// The first page of a job: the question, the password, or the run itself.
-pub fn start(job: Job, ctx: &mut Ctx) -> Box<dyn Page> {
+pub fn start(mut job: Job, ctx: &mut Ctx) -> Box<dyn Page> {
+    if job.name.is_none() {
+        job.name = ctx.action.clone();
+    }
     let text = job
         .confirm
         .clone()
@@ -67,7 +80,7 @@ fn authorize(job: Job, ctx: &Ctx) -> Box<dyn Page> {
     }
 }
 
-/// Yes or no before something that cannot be undone; the cursor starts on no.
+/// Yes or no before something that cannot be undone. The cursor starts on no.
 pub struct ConfirmPage {
     job: Job,
     detail: Detail,
@@ -580,7 +593,7 @@ impl RunPage {
                 (
                     vec![Block::Row(
                         Lead::Icon(icon::RESTART, Tone::Accent),
-                        line,
+                        vec![(line, Tone::Normal)],
                         Vec::new(),
                     )],
                     Vec::new(),
@@ -602,7 +615,7 @@ impl RunPage {
                 }
             }
             Err(f) => {
-                // The header already names the job; only a recognised cause adds to it.
+                // The header already names the job. Only a recognised cause adds to it.
                 let headline = if f.known.is_some() {
                     f.headline()
                 } else {
@@ -610,7 +623,7 @@ impl RunPage {
                 };
                 let mut body = vec![Block::Row(
                     Lead::Icon(icon::FAILED, Tone::Error),
-                    headline,
+                    vec![(headline, Tone::Normal)],
                     Vec::new(),
                 )];
                 body.extend(failure(f).into_iter().skip(1));

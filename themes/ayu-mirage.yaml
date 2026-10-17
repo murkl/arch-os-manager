@@ -1,0 +1,10 @@
+name: Ayu Mirage
+colors:
+  background: "#1F2430"
+  surface: "#2A3140"
+  muted: "#707A8C"
+  text: "#CCCAC2"
+  accent: "#73D0FF"
+  success: "#D5FF80"
+  warning: "#FFD173"
+  error: "#FF6666"

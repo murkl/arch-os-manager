@@ -1,0 +1,10 @@
+name: Material Palenight
+colors:
+  background: "#292D3E"
+  surface: "#32374D"
+  muted: "#676E95"
+  text: "#A6ACCD"
+  accent: "#82AAFF"
+  success: "#C3E88D"
+  warning: "#FFCB6B"
+  error: "#F07178"

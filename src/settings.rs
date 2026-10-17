@@ -9,15 +9,15 @@ pub struct Settings {
     pub language: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
-    /// The usage under the header of the start page; on unless switched off.
+    /// The usage under the header of the start page, on unless switched off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aur_helper: Option<String>,
-    /// The entry in the app menu, which opens the window; on unless switched off.
+    /// The entry in the app menu, which opens the window, on unless switched off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_menu: Option<bool>,
-    /// How often new updates are announced, one of `NOTIFY`; hourly unless chosen.
+    /// How often new updates are announced, one of `NOTIFY`, hourly unless chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notify: Option<String>,
     /// Journal messages like one of these, numbers aside, are left out of the log page.
@@ -26,7 +26,7 @@ pub struct Settings {
 }
 
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
-/// How often updates are announced, `off` for never; the first is the default.
+/// How often updates are announced, `off` for never. The first is the default.
 pub const NOTIFY: [&str; 4] = ["hourly", "daily", "weekly", "off"];
 
 /// A switch stored only as an exception: absent is on.

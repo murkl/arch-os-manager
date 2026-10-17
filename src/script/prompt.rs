@@ -10,13 +10,13 @@ pub enum Prompt {
         question: String,
         yes: bool,
     },
-    /// Numbered choices, such as pacman's providers; the answer is the number.
+    /// Numbered choices, such as pacman's providers, where the answer is the number.
     Choice {
         question: String,
         options: Vec<(String, String)>,
         default: String,
     },
-    /// Free input, such as the menus of AUR helpers; enter keeps their default.
+    /// Free input, such as the menus of AUR helpers, where enter keeps their default.
     Text {
         question: String,
     },

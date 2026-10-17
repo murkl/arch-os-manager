@@ -48,7 +48,7 @@ pub enum Block {
     Code(Vec<String>),
 }
 
-/// The few elements the news use, as blocks; links keep their address after the text.
+/// The few elements the news use, as blocks. Links keep their address after the text.
 pub fn blocks(html: &str) -> Vec<Block> {
     let mut out = Vec::new();
     let mut text = String::new();

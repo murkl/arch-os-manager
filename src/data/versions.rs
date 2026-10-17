@@ -5,7 +5,7 @@ use super::vercmp::vercmp;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Version {
     pub version: String,
-    /// A path in the cache or an address in the archive; what pacman -U is given.
+    /// A path in the cache or an address in the archive, which pacman -U is given.
     pub location: String,
     pub cached: bool,
 }

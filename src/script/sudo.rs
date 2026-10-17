@@ -2,7 +2,7 @@
 
 use std::sync::Mutex;
 
-/// What sudo prints when asking, through `$SUDO_PROMPT`; recognisable, and readable in the details.
+/// What sudo prints when asking, through `$SUDO_PROMPT`, recognisable and readable in the details.
 pub const PROMPT: &str = "[sudo] password (system-manager): ";
 
 /// What sudo says after a wrong password.
@@ -18,7 +18,7 @@ pub fn get() -> Option<String> {
     PASSWORD.lock().unwrap().clone()
 }
 
-/// Holds the password; an empty one never, since sudo would count it as a failed attempt.
+/// Holds the password, an empty one never, since sudo would count it as a failed attempt.
 pub fn set(password: String) {
     forget();
     if !password.is_empty() {

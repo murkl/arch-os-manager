@@ -196,7 +196,7 @@ pub enum Fresh {
 
 pub enum Flow {
     Stay,
-    /// The key meant nothing here; the app applies back, quit and abort.
+    /// The key meant nothing here. The app applies back, quit and abort.
     Ignored,
     Push(Box<dyn Page>),
     /// Several at once, as a search result that lives below the settings page.
@@ -245,7 +245,7 @@ pub trait Page {
     fn animating(&self, _ctx: &Ctx) -> bool {
         false
     }
-    /// The beat it moves on while animating; the spinner's unless it moves smoothly.
+    /// The beat it moves on while animating, the spinner's unless it moves smoothly.
     fn pace(&self) -> Duration {
         BEAT
     }
@@ -313,7 +313,7 @@ pub struct Ctx {
     /// The Linux console: sixteen colours and ASCII glyphs.
     pub console: bool,
     pub shared: Shared,
-    /// What the machine uses, read anew every few seconds; none before the first reading.
+    /// What the machine uses, read anew every few seconds, none before the first reading.
     pub usage: Option<Usage>,
     /// Counts the runs, so a page can tell its data may be stale.
     pub generation: u64,
@@ -325,10 +325,12 @@ pub struct Ctx {
     tx: Sender<Msg>,
     wake: Arc<dyn Fn() + Send + Sync>,
     page: PageId,
+    /// The action chosen, while it runs: the name of the run it starts.
+    pub action: Option<String>,
 }
 
 impl Ctx {
-    /// Runs a job off the drawing thread; its result arrives at the page that started it.
+    /// Runs a job off the drawing thread. Its result arrives at the page that started it.
     pub fn spawn<T: Send + 'static>(&self, job: impl FnOnce() -> T + Send + 'static) {
         let (tx, wake, page) = (self.tx.clone(), self.wake.clone(), self.page);
         std::thread::spawn(move || {
@@ -356,7 +358,7 @@ impl Ctx {
         });
     }
 
-    /// Reads every shared value anew once nothing is loading any more; asked again meanwhile,
+    /// Reads every shared value anew once nothing is loading any more. Asked again meanwhile,
     /// it still happens once.
     pub fn reload(&mut self) {
         self.reload = true;
@@ -391,7 +393,7 @@ impl Ctx {
         self.shared.features.ready()
     }
 
-    /// Whether a script can run here; unknown while the packages are still being checked.
+    /// Whether a script can run here, unknown while the packages are still being checked.
     pub fn available(&self, op: script::Op) -> bool {
         self.features().is_some_and(|f| script::available(op, f))
     }

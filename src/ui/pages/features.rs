@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use super::run::{Job, start};
-use crate::data::features::{self, EXTENSION, Status};
+use crate::data::features::{self, Status};
 use crate::i18n::{t, tf};
 use crate::script::op;
 use crate::settings::AUR_HELPERS;
@@ -22,15 +22,11 @@ fn status(s: &Status) -> (String, Tone) {
     }
 }
 
-fn kind_icon(kind: &str) -> &'static str {
-    match kind {
-        "aur-helper" => icon::ARCH,
-        "firmware-updater" => icon::FIRMWARE,
-        EXTENSION => icon::OPTIONAL,
-        "merge-tool" => icon::PACNEW,
-        "notifier" => icon::NOTIFICATION,
-        "package-manager" => icon::APP,
-        _ => icon::TOOLS,
+/// A group's name and icon.
+fn group(id: &str) -> (&'static str, &'static str) {
+    match id {
+        "desktop" => (t("Desktop"), icon::APP),
+        _ => (t("Packages"), icon::PACKAGE),
     }
 }
 
@@ -57,18 +53,19 @@ impl Page for FeaturesPage {
         let Some(features) = loaded(&ctx.shared.features, area, buf, ctx) else {
             return;
         };
-        // Under its kind, each with the package icon; the kind with one of its own.
+        // Under its group, each with the package icon, the group with one of its own.
         let mut rows = Vec::new();
         let mut last = None;
         for (package, s) in &features.list {
-            let kind = features::package(package).map_or("", |(kind, _)| kind);
-            if last != Some(kind) {
+            let id = features::package(package).map_or("", |(group, _)| group);
+            if last != Some(id) {
+                let (name, glyph) = group(id);
                 let heading = match ctx.style.glyphs.icons {
-                    true => format!("{}  {kind}", kind_icon(kind)),
-                    false => kind.to_string(),
+                    true => format!("{glyph}  {name}"),
+                    false => name.to_string(),
                 };
                 rows.push(Row::heading(heading));
-                last = Some(kind);
+                last = Some(id);
             }
             let (text, tone) = status(s);
             let row = Row::new(package.clone(), package.clone()).icon(icon::PACKAGE, Tone::Normal);
@@ -136,7 +133,7 @@ impl Page for FeaturePage {
             .map(|(_, p)| t(&p.adds).to_string())
             .unwrap_or_default();
         // An extension is no package: the desktop script sets it up for this user.
-        let extension = known.is_some_and(|(kind, _)| kind == EXTENSION);
+        let extension = known.is_some_and(|(_, p)| p.extension);
         let (install, remove, args) = if extension {
             (
                 op::DESKTOP_EXTENSION_INSTALL,
@@ -187,14 +184,14 @@ impl Page for FeaturePage {
         if state == Status::Missing && AUR_HELPERS.contains(&self.package.as_str()) {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Built from source from the AUR; git and base-devel come along.").into(),
+                t("Built from source with makepkg, as Arch OS does. git and base-devel are installed along.").into(),
                 Tone::Muted,
             ));
         }
         if state == Status::Missing && extension && unmet.is_none() {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Downloaded from extensions.gnome.org; GNOME loads it at the next login.").into(),
+                t("Installed from extensions.gnome.org for this user. GNOME loads it at the next login.").into(),
                 Tone::Muted,
             ));
         }
@@ -227,11 +224,11 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     #[test]
-    fn lists_each_package_under_its_kind() {
+    fn lists_each_package_under_its_group() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = app();
         app.ctx.shared.features = Loaded::Ready(Features::parse(
-            "paru\tok\t2.1.0-1\narch-update\tmissing\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\ngnome-arch-update\tmissing\n@gnome\tok\n",
         ));
         let mut term = Terminal::new(TestBackend::new(40, 16)).unwrap();
         crate::ui::app::tests::open(&mut app, Box::new(FeaturesPage::new(None)));
@@ -239,10 +236,10 @@ mod tests {
         let lines: Vec<&str> = shown.lines().collect();
         let heading = lines
             .iter()
-            .position(|l| l.ends_with("aur-helper"))
+            .position(|l| l.ends_with("Packages"))
             .expect(&shown);
         assert!(lines[heading + 1].contains("paru") && lines[heading + 1].ends_with("2.1.0-1"));
-        let extension = lines.iter().position(|l| l.ends_with(EXTENSION)).unwrap();
-        assert!(lines[extension + 1].contains("arch-update"), "{shown}");
+        let desktop = lines.iter().position(|l| l.ends_with("Desktop")).unwrap();
+        assert!(lines[desktop + 1].contains("gnome-arch-update"), "{shown}");
     }
 }

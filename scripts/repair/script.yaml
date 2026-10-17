@@ -9,6 +9,12 @@ ops:
       lock: Removing the stale lock
       keyring: Creating the keyring anew
       upgrade: Updating the system
+  files:
+    title: Checking the files of every package
+    root: true
+    steps:
+      check: Checking the files
+      reinstall: Reinstalling the altered packages
 errors:
   10: |
     A package manager is running

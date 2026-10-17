@@ -38,7 +38,7 @@ fact_gnome() {
 
 # An optional package, set up as recommended. An AUR helper cannot come from itself:
 # it is built here from source, as Arch OS does, since a -bin build breaks at the
-# next libalpm soname; its build dependencies go again.
+# next libalpm soname. Its build dependencies go again.
 op_install() {
     local package="$1" zone country
     case "$package" in
@@ -53,7 +53,7 @@ op_install() {
     *) sudo pacman -S --needed -- "$package" ;;
     esac
 
-    # reflector's own configuration ranks by age; this one by speed, within the
+    # reflector's own configuration ranks by age, this one by speed, within the
     # country of the time zone where it names one, and weekly.
     if [ "$package" = reflector ]; then
         zone="$(readlink /etc/localtime)" || zone=""
@@ -67,7 +67,7 @@ op_install() {
 }
 
 # What a package started goes with it. An AUR helper may be its -bin or -git
-# package; the owner of its command tells.
+# package. The owner of its command tells.
 op_remove() {
     local package="$1"
     case "$package" in

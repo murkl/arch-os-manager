@@ -1,5 +1,5 @@
 //! The version: what a release hands in as `SM_VERSION`, else a pre-release of the next
-//! patch; build.rs decides.
+//! patch, as build.rs decides.
 
 pub fn version() -> &'static str {
     env!("SM_VERSION")

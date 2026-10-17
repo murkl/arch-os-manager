@@ -1,0 +1,10 @@
+name: Catppuccin Frappé
+colors:
+  background: "#303446"
+  surface: "#414559"
+  muted: "#737994"
+  text: "#C6D0F5"
+  accent: "#8CAAEE"
+  success: "#A6D189"
+  warning: "#E5C890"
+  error: "#E78284"

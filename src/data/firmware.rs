@@ -1,4 +1,4 @@
-//! Firmware updates as `fwupdmgr get-updates --json` lists them.
+//! Updates the firmware of the device as `fwupdmgr get-updates --json` lists them.
 
 use serde::Deserialize;
 

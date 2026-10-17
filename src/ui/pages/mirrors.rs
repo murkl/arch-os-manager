@@ -51,7 +51,7 @@ impl Page for MirrorsPage {
         for server in &m.servers {
             body.push(Block::Row(
                 Lead::Icon(icon::MIRRORS, Tone::Muted),
-                server.clone(),
+                vec![(server.clone(), Tone::Normal)],
                 Vec::new(),
             ));
         }

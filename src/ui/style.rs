@@ -120,7 +120,7 @@ impl Style {
                 background: Color::Reset,
                 // Black is the console's background, so a track in it would not show.
                 surface: Color::DarkGray,
-                // Behind text the console takes only its first eight colours; a bright one,
+                // Behind text the console takes only its first eight colours. A bright one,
                 // such as dark grey, blinks or vanishes.
                 selection: Color::Blue,
                 muted: Color::DarkGray,

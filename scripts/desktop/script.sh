@@ -28,7 +28,7 @@ manager() {
     systemctl --user show-environment >/dev/null 2>&1
 }
 
-# Whether the manager reads the timer from where it was written; a throwaway
+# Whether the manager reads the timer from where it was written. A throwaway
 # configuration, as make run sets, lies where it does not look.
 known() {
     systemctl --user cat system-manager-notify.timer >/dev/null 2>&1
@@ -123,7 +123,7 @@ UNIT
     if [ "$4" = on ]; then indicator "$program"; fi
 }
 
-# Title, text, the label of the one action and the seconds to wait for it; prints the
+# Title, text, the label of the one action and the seconds to wait for it. Prints the
 # action if it was chosen. Unanswered, it ends as if dismissed.
 op_notify() {
     timeout "$4" notify-send --app-name="System Manager" --icon=system-manager \
@@ -158,7 +158,7 @@ op_extension_remove() {
     case "$dir" in /usr/*) exit 12 ;; esac
     on_bus gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
     on_bus gnome-extensions disable "$ARCH_UPDATE"
-    # The running shell unloads it; without one, the folder goes by hand.
+    # The running shell unloads it. Without one, the folder goes by hand.
     gnome-extensions uninstall "$ARCH_UPDATE" 2>/dev/null || rm -rf -- "$dir"
 }
 

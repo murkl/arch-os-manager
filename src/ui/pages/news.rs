@@ -119,7 +119,7 @@ impl ArticlePage {
             Block::Heading(item.title.clone()),
             Block::Text(item.date.clone(), Tone::Muted),
         ];
-        // The items of a list stand together; everything else has a line around it.
+        // The items of a list stand together. Everything else has a line around it.
         let mut listing = false;
         for b in blocks(&item.html) {
             let listed = matches!(b, Html::Item(_));
@@ -144,7 +144,7 @@ impl ArticlePage {
         let mut detail = Detail::default();
         detail.set(body, Vec::new());
         // The title and the date stay while the text scrolls.
-        detail.pin(3);
+        detail.pin_head();
         ArticlePage { detail }
     }
 }

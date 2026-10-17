@@ -36,7 +36,7 @@ pub fn parse(out: &str) -> Vec<Update> {
         .collect()
 }
 
-/// As checkupdates prints them, for scripts and shell extensions reading `system-manager check`;
+/// As checkupdates prints them, for scripts and shell extensions reading `system-manager check`,
 /// an AUR package as `aur/name`, so a menu built from it tells where it comes from. An unknown
 /// version is `?`: arch-update counts only lines with a word on each side of the arrow.
 pub fn checkupdates_format(updates: &[Update]) -> String {

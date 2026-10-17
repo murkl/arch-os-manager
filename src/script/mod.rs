@@ -48,7 +48,7 @@ macro_rules! ops {
     };
 }
 
-/// The operations by name; one the scripts lack fails the tests, not a run.
+/// The operations by name. One the scripts lack fails the tests, not a run.
 pub mod op {
     use super::Op;
     ops! {
@@ -70,7 +70,7 @@ pub mod op {
         PACKAGES_REMOVE = "packages" "remove", PACKAGES_DOWNGRADE = "packages" "downgrade",
         PACNEW_LIST = "pacnew" "list", PACNEW_DIFF = "pacnew" "diff", PACNEW_TAKE = "pacnew" "take",
         PACNEW_KEEP = "pacnew" "keep", PACNEW_MERGE = "pacnew" "merge",
-        REPAIR_RUN = "repair" "run",
+        REPAIR_RUN = "repair" "run", REPAIR_FILES = "repair" "files",
         SERVICES_LIST = "services" "list", SERVICES_LOG = "services" "log",
         SERVICES_SYSTEM = "services" "system", SERVICES_USER = "services" "user",
         SYSTEM_STATE = "system" "state", SYSTEM_NOPASSWD = "system" "nopasswd",
@@ -88,14 +88,14 @@ pub struct Meta {
     /// Exit codes from 10 on: headline, then explanation.
     #[serde(default)]
     pub errors: BTreeMap<i32, String>,
-    /// Output a failure is recognised by; lib.yaml's apply to every script.
+    /// Output a failure is recognised by. lib.yaml's apply to every script.
     #[serde(default)]
     pub hints: BTreeMap<String, Hint>,
-    /// features only: the optional packages by kind, such as `aur-helper`, then by name.
+    /// features only: the optional packages by group, `packages` or `desktop`, then by name.
     #[serde(default)]
     pub probe: BTreeMap<String, BTreeMap<String, Probe>>,
     /// features only: what a package may need of the system, with why it is not offered
-    /// without; `fact_<name>` in the script tells whether it is there.
+    /// without. `fact_<name>` in the script tells whether it is there.
     #[serde(default)]
     pub facts: BTreeMap<String, String>,
 }
@@ -137,6 +137,9 @@ pub struct Probe {
     /// The fact it is offered on.
     #[serde(default)]
     pub needs: Option<String>,
+    /// A GNOME extension: the desktop script sets it up from extensions.gnome.org, no package.
+    #[serde(default)]
+    pub extension: bool,
 }
 
 fn file(path: &str) -> &'static [u8] {
@@ -152,7 +155,7 @@ pub fn parse_meta(src: &[u8]) -> Result<Meta, String> {
     serde_saphyr::from_str(src).map_err(|e| e.to_string())
 }
 
-/// The yaml of a script, by its folder; `lib` is lib.yaml.
+/// The yaml of a script, by its folder, `lib` being lib.yaml.
 pub fn meta(script: &str) -> &'static Meta {
     static METAS: OnceLock<Mutex<HashMap<String, &'static Meta>>> = OnceLock::new();
     let mut metas = METAS.get_or_init(Default::default).lock().unwrap();
@@ -190,7 +193,7 @@ pub fn available(op: Op, features: &crate::data::features::Features) -> bool {
 
 static AUR: Mutex<String> = Mutex::new(String::new());
 
-/// The AUR helper scripts get as `$SM_AUR`; empty for none.
+/// The AUR helper scripts get as `$SM_AUR`, empty for none.
 pub fn set_aur(helper: Option<&str>) {
     *AUR.lock().unwrap() = helper.unwrap_or_default().to_string();
 }
@@ -252,7 +255,7 @@ fn command(op: Op, args: &[String]) -> Result<Command, String> {
 
 /// Puts `fd` at 3 in the child, where lib.sh writes its events. Runs between fork and exec.
 fn attach_fd3(fd: RawFd) -> std::io::Result<()> {
-    // SAFETY: fd stays open in the parent until spawn returns; 3 is ours to replace in the child.
+    // SAFETY: fd stays open in the parent until spawn returns, and 3 is ours to replace in the child.
     unsafe {
         let source = BorrowedFd::borrow_raw(fd);
         if fd == 3 {
@@ -289,7 +292,7 @@ pub struct Failure {
     pub known: Option<&'static str>,
     /// The page a recognised hint names as the fix.
     pub offer: Option<&'static str>,
-    /// Where it failed: file, line, command, exit code; or why it never ran.
+    /// Where it failed: file, line, command, exit code, or why it never ran.
     pub detail: String,
     /// The last lines of its output.
     pub tail: Vec<String>,
@@ -310,7 +313,7 @@ impl Failure {
     /// From an exit code, the first `fail` line lib.sh wrote, and the output.
     pub fn classify(op: Op, code: Option<i32>, fail: Option<&str>, tail: Vec<String>) -> Failure {
         let own = meta(op.script);
-        // The last line that names a cause; the longest key it holds is the most specific.
+        // The last line that names a cause. The longest key it holds is the most specific.
         let hint = || {
             tail.iter().rev().find_map(|line| {
                 own.hints
@@ -382,7 +385,7 @@ mod tests {
         String::from_utf8(file(&format!("{script}/script.sh")).to_vec()).unwrap()
     }
 
-    /// Each function of a script, by name, with its lines; comments left out.
+    /// Each function of a script, by name, with its lines, comments left out.
     fn functions(script: &str) -> BTreeMap<String, Vec<String>> {
         let mut found = BTreeMap::new();
         let mut current: Option<(String, Vec<String>)> = None;

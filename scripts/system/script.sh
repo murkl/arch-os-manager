@@ -10,7 +10,7 @@ op_state() {
     awk '$1 == "btime" { printf "booted\t%s\n", $2 }' /proc/stat
     version="$(pacman -Q pacman)"
     printf 'pacman\t%s\n' "${version#* }"
-    # The desktop of the session it runs in; GNOME also tells its version.
+    # The desktop of the session it runs in. GNOME also tells its version.
     if [ -n "${XDG_CURRENT_DESKTOP:-}" ]; then
         if [ "$XDG_CURRENT_DESKTOP" = GNOME ] && command -v gnome-shell >/dev/null; then
             version="$(gnome-shell --version)"
@@ -40,7 +40,7 @@ op_nopasswd() {
     sudo --non-interactive --validate 2>/dev/null || exit 10
 }
 
-# Proves the password before a run needs it; started only with one to give.
+# Proves the password before a run needs it, started only with one to give.
 op_auth() {
     sudo --validate
 }

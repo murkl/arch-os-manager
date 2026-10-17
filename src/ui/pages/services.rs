@@ -197,6 +197,8 @@ impl ServicePage {
             _ => {}
         }
         self.detail.set(body, acts);
+        // The facts stay while the log scrolls.
+        self.detail.pin_head();
     }
 }
 

@@ -84,7 +84,7 @@ impl Reading {
         }
     }
 
-    /// In whole percent; `?` where unknown.
+    /// In whole percent, `?` where unknown.
     fn of(share: Option<f64>) -> Reading {
         let share = share.map(|s| s.clamp(0.0, 1.0));
         Reading {
@@ -93,7 +93,7 @@ impl Reading {
         }
     }
 
-    /// The state of its share; muted where unknown.
+    /// The state of its share, muted where unknown.
     fn tone(&self) -> Tone {
         self.share.map_or(Tone::Muted, tone)
     }

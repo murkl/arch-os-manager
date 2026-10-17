@@ -89,7 +89,8 @@ op_run() {
             done
             if [ -z "$inside" ]; then exit 11; fi
         done
-        sudo rm -f -- "${files[@]}"
+        # The signature goes with its package, as paccache removes it.
+        sudo rm -f -- "${files[@]}" "${files[@]/%/.sig}"
     fi
 
     cache="${XDG_CACHE_HOME:-$HOME/.cache}"

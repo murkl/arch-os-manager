@@ -33,7 +33,7 @@ impl<T: Send + 'static> Fetch<T> {
         }
     }
 
-    /// Starts a read if there was none since the last run; the shown value stays until it arrives.
+    /// Starts a read if there was none since the last run. The shown value stays until it arrives.
     pub fn ensure(&mut self, ctx: &Ctx) {
         if self.generation == Some(ctx.generation) {
             return;
@@ -43,7 +43,7 @@ impl<T: Send + 'static> Fetch<T> {
         ctx.spawn(move || Tagged { tag, result: job() });
     }
 
-    /// Takes the result if it is this fetch's; returns whether it was.
+    /// Takes the result if it is this fetch's, and returns whether it was.
     pub fn receive(&mut self, data: &mut Option<Box<dyn Any + Send>>) -> bool {
         let Some(boxed) = data.take() else {
             return false;

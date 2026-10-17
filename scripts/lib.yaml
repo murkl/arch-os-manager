@@ -14,7 +14,7 @@ hints:
   exists in filesystem:
     text: |
       A file is in the way
-      A package brings a file that already exists on disk and belongs to no package. The details name it; remove or move it, then update again.
+      A package brings a file that already exists on disk and belongs to no package. The details name it. Remove or move it, then update again.
   failed retrieving file:
     text: |
       A download failed
@@ -23,7 +23,7 @@ hints:
   not enough free disk space:
     text: |
       The disk is full
-      Clean up frees space; then update again.
+      Clean up frees space. Then update again.
     offer: cleanup
   breaks dependency:
     text: |
@@ -42,7 +42,7 @@ hints:
   No space left on device:
     text: |
       The disk is full
-      Clean up frees space; then update again.
+      Clean up frees space. Then update again.
     offer: cleanup
   could not satisfy dependencies:
     text: |

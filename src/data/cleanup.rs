@@ -43,7 +43,7 @@ impl Plan {
             .sum()
     }
 
-    /// Nothing is known to be removable; Flatpak alone may still find something.
+    /// Nothing is known to be removable. Flatpak alone may still find something.
     pub fn is_empty(&self) -> bool {
         self.orphans.is_empty() && self.cache.is_empty() && self.aur.is_empty()
     }

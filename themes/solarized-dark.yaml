@@ -1,0 +1,10 @@
+name: Solarized Dark
+colors:
+  background: "#002B36"
+  surface: "#073642"
+  muted: "#586E75"
+  text: "#93A1A1"
+  accent: "#268BD2"
+  success: "#859900"
+  warning: "#B58900"
+  error: "#DC322F"

@@ -1,12 +1,13 @@
-//! A page of facts with its actions underneath; the facts scroll, the actions stay.
+//! A page of facts with its actions underneath. The facts scroll, the actions stay.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::Style as Cell;
 
 use super::draw::{cut, put, scrollbar, waiting, width, wrap};
 use super::icon;
 use super::list::{Lead, List, Picked, Row, draw_row};
-use super::{Ctx, Flow, Key, Loaded, Nav, Tone};
+use super::{Ctx, Flow, Key, Loaded, Nav, Style, Tone};
 use crate::i18n::t;
 use crate::script::Failure;
 
@@ -19,8 +20,9 @@ pub enum Block {
     Code(Vec<(String, Tone)>),
     /// Lines kept as they are, each in pieces of their own tone, bold or not.
     Styled(Vec<Vec<Span>>),
-    /// A row as lists draw it: the lead column, the label, the detail on the right in pieces.
-    Row(Lead, String, Vec<(String, Tone)>),
+    /// A row as lists draw it: the lead column, the label and the detail on the right, both in
+    /// pieces of their own tone.
+    Row(Lead, Vec<(String, Tone)>, Vec<(String, Tone)>),
     /// Text beside the lead column, wrapped under itself.
     Note(Lead, String, Tone),
     Blank,
@@ -112,9 +114,13 @@ impl Detail {
         self.acts = acts;
     }
 
-    /// Keeps the first `blocks` at the top while the rest scrolls.
-    pub fn pin(&mut self, blocks: usize) {
-        self.pinned = blocks;
+    /// Keeps the head, up to the first blank block, at the top while the rest scrolls.
+    pub fn pin_head(&mut self) {
+        self.pinned = self
+            .body
+            .iter()
+            .position(|b| *b == Block::Blank)
+            .map_or(0, |at| at + 1);
     }
 
     /// Puts the cursor on an action, by its position.
@@ -141,7 +147,10 @@ impl Detail {
                         if act.unavailable.is_some() {
                             Flow::Stay
                         } else {
-                            (act.go)(ctx)
+                            ctx.action = Some(act.label.clone());
+                            let flow = (act.go)(ctx);
+                            ctx.action = None;
+                            flow
                         }
                     }
                     Picked::Used => Flow::Stay,
@@ -183,8 +192,10 @@ impl Detail {
         };
         let body_height = area.height.saturating_sub(acts_height) as usize;
         let pinned = self.pinned.min(self.body.len());
-        let head = render(&self.body[..pinned], area.width as usize, ctx);
-        let lines = render(&self.body[pinned..], area.width as usize, ctx);
+        // One column for the labels of the head and the rest.
+        let labels = label_width(&self.body, area.width as usize);
+        let head = render_part(&self.body[..pinned], area.width as usize, ctx, labels);
+        let lines = render_part(&self.body[pinned..], area.width as usize, ctx, labels);
         let head_height = head.len().min(body_height);
         let rest_height = body_height - head_height;
         self.page = rest_height.saturating_sub(1);
@@ -207,18 +218,20 @@ impl Detail {
                         x = put(buf, x, y, text, area.right().saturating_sub(x), style);
                     }
                 }
-                Line::Row(lead, (label, tone), detail) => {
-                    let pieces: Vec<_> = detail
-                        .iter()
-                        .map(|(text, tone)| (text.as_str(), s.tone(*tone)))
-                        .collect();
+                Line::Row(lead, label, detail) => {
+                    fn styled<'a>(pieces: &'a [(String, Tone)], s: &Style) -> Vec<(&'a str, Cell)> {
+                        pieces
+                            .iter()
+                            .map(|(text, tone)| (text.as_str(), s.tone(*tone)))
+                            .collect()
+                    }
                     draw_row(
                         buf,
                         area,
                         y,
                         (*lead, column),
-                        (label, s.tone(*tone)),
-                        &pieces,
+                        &styled(label, s),
+                        &styled(detail, s),
                         ctx,
                     )
                 }
@@ -246,24 +259,29 @@ pub type Span = (String, Tone, bool);
 
 enum Line {
     Spans(Vec<Span>),
-    Row(Lead, (String, Tone), Vec<(String, Tone)>),
+    Row(Lead, Vec<(String, Tone)>, Vec<(String, Tone)>),
+}
+
+/// The column the fields' labels take: the widest, up to a third of the width.
+fn label_width(body: &[Block], w: usize) -> usize {
+    body.iter()
+        .filter_map(|b| match b {
+            Block::Field(l, ..) => Some(width(l)),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
+        .min(w / 3)
 }
 
 /// The blocks as screen lines of the given width.
 fn render(body: &[Block], w: usize, ctx: &Ctx) -> Vec<Line> {
+    render_part(body, w, ctx, label_width(body, w))
+}
+
+/// Part of a body, its labels in the column of the whole.
+fn render_part(body: &[Block], w: usize, ctx: &Ctx, label_width: usize) -> Vec<Line> {
     let mark = ctx.style.glyphs.ellipsis;
-    let label_width = body
-        .iter()
-        .filter_map(|b| {
-            if let Block::Field(l, ..) = b {
-                Some(width(l))
-            } else {
-                None
-            }
-        })
-        .max()
-        .unwrap_or(0)
-        .min(w / 3);
     let mut out: Vec<Line> = Vec::new();
     for block in body {
         match block {
@@ -300,16 +318,14 @@ fn render(body: &[Block], w: usize, ctx: &Ctx) -> Vec<Line> {
             Block::Styled(lines) => {
                 out.extend(lines.iter().map(|spans| Line::Spans(spans.clone())))
             }
-            Block::Row(lead, label, detail) => out.push(Line::Row(
-                *lead,
-                (label.clone(), Tone::Normal),
-                detail.clone(),
-            )),
+            Block::Row(lead, label, detail) => {
+                out.push(Line::Row(*lead, label.clone(), detail.clone()))
+            }
             // The text starts where a row's label does, as list rows have it.
             Block::Note(lead, text, tone) => {
                 for (i, line) in wrap(text, w.saturating_sub(3)).into_iter().enumerate() {
                     let lead = if i == 0 { *lead } else { Lead::None };
-                    out.push(Line::Row(lead, (line, *tone), Vec::new()));
+                    out.push(Line::Row(lead, vec![(line, *tone)], Vec::new()));
                 }
             }
             Block::Blank => out.push(Line::Spans(Vec::new())),
@@ -443,11 +459,18 @@ mod tests {
         let mut body = vec![
             Block::Field("Time".into(), "12:00".into(), Tone::Normal),
             Block::Blank,
+            Block::Field("Installed".into(), "1.0".into(), Tone::Normal),
         ];
         body.extend((0..30).map(|i| Block::Text(format!("line {i}"), Tone::Normal)));
         d.set(body, Vec::new());
-        d.pin(2);
+        d.pin_head();
         let area = Rect::new(0, 0, 30, 8);
+        let rows = drawn(&mut d, area, &app.ctx);
+        assert_eq!(
+            rows[0].find("12:00"),
+            rows[2].find("1.0"),
+            "one column for the head and the rest: {rows:#?}"
+        );
         d.key(Key::PageDown, &mut app.ctx);
         let rows = drawn(&mut d, area, &app.ctx);
         assert!(
@@ -456,7 +479,8 @@ mod tests {
         );
         assert!(!rows[2].contains("line 0"), "scrolled: {rows:#?}");
         assert!(
-            rows[1].ends_with(' ') && rows[2].ends_with('┃'),
+            rows[..2].iter().all(|r| r.ends_with(' '))
+                && rows[2..].iter().any(|r| r.ends_with('┃')),
             "the bar spans the rest: {rows:#?}"
         );
     }
@@ -494,7 +518,7 @@ mod tests {
         let leads: Vec<(Lead, &str)> = lines
             .iter()
             .filter_map(|l| match l {
-                Line::Row(lead, (text, _), _) => Some((*lead, text.as_str())),
+                Line::Row(lead, label, _) => Some((*lead, label[0].0.as_str())),
                 Line::Spans(_) => None,
             })
             .collect();

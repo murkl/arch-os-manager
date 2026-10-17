@@ -43,26 +43,32 @@ fn sheet(plan: &Plan, ctx: &Ctx) -> Vec<Block> {
             &[],
         )
     });
-    let packages = |label, n| format!("{label} ({})", tn("{n} package", "{n} packages", n, &[]));
+    // The label, then its count in parentheses, muted.
+    let counted = |label: &str, count: String| {
+        vec![
+            (label.to_string(), Tone::Normal),
+            (format!(" ({count})"), Tone::Muted),
+        ]
+    };
+    let packages = |n| tn("{n} package", "{n} packages", n, &[]);
     let mut parts = vec![
         (
             icon::PACKAGE,
-            packages(t("Unneeded packages"), plan.orphans.len()),
+            counted(t("Unneeded packages"), packages(plan.orphans.len())),
             size(bytes(&plan.orphans)),
             (!names.is_empty()).then(|| names.join(", ")),
         ),
         (
             icon::CACHE,
-            packages(t("Package cache"), plan.cache.len()),
+            counted(t("Package cache"), packages(plan.cache.len())),
             size(bytes(&plan.cache)),
             kept,
         ),
         (
             icon::ARCH,
-            format!(
-                "{} ({})",
+            counted(
                 t("Old AUR builds"),
-                tn("{n} build", "{n} builds", plan.aur.len(), &[])
+                tn("{n} build", "{n} builds", plan.aur.len(), &[]),
             ),
             size(bytes(&plan.aur)),
             None,
@@ -71,7 +77,7 @@ fn sheet(plan: &Plan, ctx: &Ctx) -> Vec<Block> {
     if plan.flatpak {
         parts.push((
             icon::APP,
-            t("Flatpak runtimes").to_string(),
+            vec![(t("Flatpak runtimes").to_string(), Tone::Normal)],
             (t("unknown").to_string(), Tone::Muted),
             Some(t("Flatpak looks for unused runtimes while cleaning up.").into()),
         ));
@@ -98,12 +104,12 @@ fn sheet(plan: &Plan, ctx: &Ctx) -> Vec<Block> {
     }
     body.push(Block::Row(
         Lead::None,
-        String::new(),
+        Vec::new(),
         vec![(ctx.style.glyphs.rule.repeat(column), Tone::Muted)],
     ));
     body.push(Block::Row(
         Lead::None,
-        t("Frees").into(),
+        vec![(t("Frees").into(), Tone::Normal)],
         vec![(pad(&sum), Tone::Accent)],
     ));
     body
@@ -159,10 +165,12 @@ mod tests {
             "orphan\texample-lib\t12.00 MiB\ncache\t/c/a.pkg.tar.zst\t901775360\nkeep\tlinux-zen-7.2.8.zen1-1\nflatpak\n",
         );
         let body = sheet(&plan, &app.ctx);
-        let rows: Vec<(&String, &Vec<(String, Tone)>)> = body
+        let rows: Vec<(String, &Vec<(String, Tone)>)> = body
             .iter()
             .filter_map(|b| match b {
-                Block::Row(Lead::Icon(..), label, detail) => Some((label, detail)),
+                Block::Row(Lead::Icon(..), label, detail) => {
+                    Some((label.iter().map(|(t, _)| t.as_str()).collect(), detail))
+                }
                 _ => None,
             })
             .collect();
@@ -179,7 +187,7 @@ mod tests {
         let cache = body
             .iter()
             .position(
-                |b| matches!(b, Block::Row(_, label, _) if label.starts_with("Package cache")),
+                |b| matches!(b, Block::Row(_, label, _) if label.first().is_some_and(|(l, _)| l == "Package cache")),
             )
             .unwrap();
         assert!(

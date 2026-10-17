@@ -7,6 +7,8 @@ ops:
   take:
     title: Applying the configuration update
     root: true
+    steps:
+      snapshot: Taking a snapshot
   keep:
     title: Applying the configuration update
     root: true
@@ -14,6 +16,8 @@ ops:
     title: Merging the configuration
     root: true
     needs: [meld]
+    steps:
+      snapshot: Taking a snapshot
 errors:
   10: |
     The files cannot be compared

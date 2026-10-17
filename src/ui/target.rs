@@ -197,9 +197,10 @@ impl Target {
         }
         let page: Box<dyn Page> = match self {
             Target::Upgrade => Box::new(pages::upgrade::UpgradePage::new()),
-            Target::Reboot => {
-                pages::run::start(pages::run::Job::new(op::SYSTEM_REBOOT, Vec::new()), ctx)
-            }
+            Target::Reboot => pages::run::start(
+                pages::run::Job::new(op::SYSTEM_REBOOT, Vec::new()).named(self.label()),
+                ctx,
+            ),
             Target::News => Box::new(pages::news::NewsPage::new()),
             Target::Packages => Box::new(pages::packages::PackagesPage::new()),
             Target::Services => Box::new(pages::services::ServicesPage::new()),

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Renders docs/screenshots/ out of example data through the window's painter, by
-# hand after a visible change; which pages, and the way to each, is the ignored
+# hand after a visible change. Which pages, and the way to each, is the ignored
 # test `screenshots` in src/ui/app.rs. VERSION is what the pages show, so the
 # next release can be pictured before it exists. docs/banner.sh comes after.
 #

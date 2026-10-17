@@ -1,6 +1,6 @@
 //! The first three seconds of the interface and of every reload, while the values load: the
 //! Arch logo drawn line by line in a sweep of the accent, the name typed after it. Any key but
-//! **r**, which asks for the reading under way, ends it at once; nothing waits on it.
+//! **r**, which asks for the reading under way, ends it at once. Nothing waits on it.
 
 use std::time::{Duration, Instant};
 
@@ -77,7 +77,7 @@ impl Page for SplashPage {
         let at = self.at();
         let logo = s.logo();
         let rows = logo.len() as u16;
-        // The logo, the gap, the name and the version as one block; the rows left split in the
+        // The logo, the gap, the name and the version as one block. The rows left split in the
         // golden ratio, the smaller part above, where the eye puts the middle.
         let free = f64::from(area.height.saturating_sub(rows + GAP + 2));
         let top = area.y + (free * (1.0 - 1.0 / GOLDEN)).round() as u16;

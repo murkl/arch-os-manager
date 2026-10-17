@@ -15,7 +15,7 @@ pub struct Applied {
 }
 
 /// Writes or removes the entry, its icon and the timer, for this program where it lies now.
-/// Both need a desktop and the timer libnotify; without them the settings wait. The update
+/// Both need a desktop and the timer libnotify. Without them the settings wait. The update
 /// indicator, where it is installed, checks and updates through this program.
 pub fn apply(settings: &Settings, features: &Features) -> Result<Applied, Failure> {
     let exe =
@@ -27,7 +27,7 @@ pub fn apply(settings: &Settings, features: &Features) -> Result<Applied, Failur
             true => settings.notify(),
             false => "off",
         },
-        indicator: features.ok("arch-update"),
+        indicator: features.ok("gnome-arch-update"),
     };
     let on = |b: bool| if b { "on" } else { "off" };
     query(

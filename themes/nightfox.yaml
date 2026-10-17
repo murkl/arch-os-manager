@@ -1,0 +1,10 @@
+name: Nightfox
+colors:
+  background: "#192330"
+  surface: "#212E3F"
+  muted: "#71839B"
+  text: "#CDCECF"
+  accent: "#719CD6"
+  success: "#81B29A"
+  warning: "#DBC074"
+  error: "#C94F6D"
