@@ -1,14 +1,14 @@
-# Pull requests are checked, main releases: release-please keeps a release pull
-# request open, and merging it tags the version, builds it and publishes it.
+# Pull requests are checked. On main, release-please keeps a release pull
+# request open, and merging it tags the version, publishes the release and
+# pushes the AUR package.
 
 name: CI
 
 on:
   pull_request:
-    paths-ignore: ["**.md", "docs/**"]
+    paths-ignore: ["**.md", "**.png"]
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions: {}
 
@@ -19,36 +19,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The release pull request, or once that is merged, the tag and a draft page.
-  release:
-    name: Release
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write  # the release branch, the tag and the page
-      pull-requests: write  # the release pull request
-    outputs:
-      version: ${{ steps.please.outputs.version }}
-      tag: ${{ steps.please.outputs.tag_name }}
-    steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
-        id: please
-
-  # `make check` on Arch, as the machines it runs on. On main only for a
-  # release: the pull request checked everything else.
+  # `make check` on Arch, as the machines it runs on.
   check:
     name: Check
-    needs: release
-    if: ${{ !cancelled() && (github.event_name != 'push' || needs.release.outputs.version != '') }}
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     # The date pins the base.
     container: archlinux:base-devel-20261011.0.609700
     permissions:
       contents: read
-    env:
-      RELEASE: ${{ needs.release.outputs.version }}
     steps:
       # The runner's seccomp profile refuses the syscall filter pacman puts on
       # its downloader.
@@ -65,60 +45,31 @@ jobs:
             target
           key: cargo-${{ hashFiles('Cargo.lock') }}
 
-      - run: make check VERSION="$RELEASE"
+      - run: make check
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        if: env.RELEASE != ''
-        with:
-          name: system-manager
-          path: target/release/system-manager
-          if-no-files-found: error
-          retention-days: 1
-
-  # The binary the check built, and the AUR files for the tag's source tarball,
-  # hung on the draft, which goes public last.
-  publish:
-    name: Publish
-    needs: [release, check]
-    if: needs.release.outputs.version != ''
+  # The release pull request, or once that is merged, the tag and the release.
+  release:
+    name: Release
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    container: archlinux:base-devel-20261011.0.609700
+    timeout-minutes: 10
     permissions:
-      contents: write  # the assets and the page
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      TAG: ${{ needs.release.outputs.tag }}
-      VERSION: ${{ needs.release.outputs.version }}
+      contents: write  # the release branch, the tag and the release
+      pull-requests: write  # the release pull request
+    outputs:
+      version: ${{ steps.please.outputs.version }}
+      tag: ${{ steps.please.outputs.tag_name }}
     steps:
-      - run: pacman --disable-sandbox -Syu --noconfirm --needed github-cli
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        id: please
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
-        with:
-          name: system-manager
-          path: release
-
-      - run: |
-          curl --proto '=https' --proto-redir '=https' -fsSL -o source.tar.gz \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
-          tools/aur.sh "$VERSION" source.tar.gz aur-files
-          cp aur-files/PKGBUILD aur-files/arch-os-manager.install release/
-          cp aur-files/.SRCINFO release/SRCINFO
-          (cd release && sha256sum system-manager >system-manager.sha256)
-          gh release upload "$TAG" --clobber release/*
-          gh release edit "$TAG" --draft=false --latest
-
-  # The release's AUR files, built once as a user builds them, then pushed. The
-  # key is a secret of the environment aur, which only main may use; on a
-  # failure the release stands, and a rerun of this job pushes again.
+  # The AUR files for the tag's source tarball, built once as a user builds
+  # them, then pushed. The key is a secret of the environment aur, which only
+  # main may use; on a failure the release stands, and a rerun of this job
+  # pushes again.
   aur:
     name: AUR
-    needs: [release, publish]
+    needs: release
     if: needs.release.outputs.version != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -127,24 +78,27 @@ jobs:
     permissions:
       contents: read
     env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.release.outputs.tag }}
+      VERSION: ${{ needs.release.outputs.version }}
     steps:
-      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust git openssh github-cli
+      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust git openssh
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
 
-      # makepkg refuses root, which the container is; cargo needs a home of the
-      # builder's own.
+      # The tarball lies beside the PKGBUILD, where makepkg looks first and
+      # checks it against the sum. makepkg refuses root, which the container
+      # is; cargo needs a home of the builder's own.
       - run: |
-          gh release download "$TAG" --dir aur --pattern PKGBUILD --pattern arch-os-manager.install --pattern SRCINFO
-          mv aur/SRCINFO aur/.SRCINFO
+          tar="arch-os-manager-${VERSION}.tar.gz"
+          curl --proto '=https' --proto-redir '=https' -fsSL -o "$tar" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          tools/aur.sh "$VERSION" "$tar" aur-files
+          mv "$tar" aur-files/
           useradd --create-home builder
-          chown -R builder aur
-          runuser -u builder -- env HOME=/home/builder bash -c 'cd aur && makepkg --noconfirm'
+          chown -R builder aur-files
+          runuser -u builder -- env HOME=/home/builder bash -c 'cd aur-files && makepkg --noconfirm'
 
       # The host key as https://aur.archlinux.org names its fingerprint.
       - env:
@@ -160,4 +114,4 @@ jobs:
           chmod 600 "${ssh}/key"
           echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' >"${ssh}/known_hosts"
           export GIT_SSH_COMMAND="ssh -i ${ssh}/key -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh}/known_hosts -o StrictHostKeyChecking=yes"
-          tools/aur-push.sh aur
+          tools/aur-push.sh aur-files

@@ -27,8 +27,8 @@ use crate::ui::{App, FRAME, Key, Msg, Target};
 
 const REGULAR: &[u8] = include_bytes!("../assets/fonts/FiraCode-6.2-Regular.ttf");
 const BOLD: &[u8] = include_bytes!("../assets/fonts/FiraCode-6.2-Bold.ttf");
-/// The icons, where Fira Code has none: each one cell wide.
-const SYMBOLS: &[u8] = include_bytes!("../assets/fonts/SymbolsNerdFontMono-3.4.0-Regular.ttf");
+/// The icons src/ui/icon.rs names, cut from the Nerd Fonts symbols by tools/icons.sh: each one cell wide.
+const SYMBOLS: &[u8] = include_bytes!("../assets/fonts/SymbolsNerdFontMono-3.4.0-Icons.ttf");
 /// Logical pixels: the font size, the margin around the cells, the band that resizes.
 const FONT: f32 = 15.0;
 const MARGIN: f64 = 24.0;

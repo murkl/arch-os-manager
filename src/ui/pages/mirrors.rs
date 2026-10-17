@@ -57,7 +57,7 @@ impl Page for MirrorsPage {
         }
         let missing = (!ctx.available(op::MIRRORS_RANK)).then(|| t("needs reflector").to_string());
         let acts = vec![
-            Act::new(t("Rank the mirrors now"), |ctx: &mut Ctx| {
+            Act::new(t("Refresh now"), |ctx: &mut Ctx| {
                 Flow::Push(start(Job::new(op::MIRRORS_RANK, Vec::new()), ctx))
             })
             .icon(icon::MIRRORS)

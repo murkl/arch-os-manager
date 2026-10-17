@@ -473,7 +473,7 @@ pub mod tests {
     }
 
     /// Example data in every shared value, as the screenshots show it.
-    fn example(app: &mut App) {
+    pub fn example(app: &mut App) {
         use crate::data::{
             cleanup::Plan, features::Features, journal::Entry, mirrors::Mirrors, news::Item,
         };
@@ -600,7 +600,7 @@ pub mod tests {
         shoot(&mut app, "home");
         press(&mut app, &[Key::Enter]);
         shoot(&mut app, "update");
-        let job = || pages::run::Job::new(op::UPDATE_RUN, Vec::new()).named(i18n::t("Update now"));
+        let job = || pages::run::Job::new(op::UPDATE_RUN, Vec::new()).named(i18n::t("Install now"));
         let output = ":: Starting full system upgrade...\r\n\
             :: Retrieving packages...\r\n\
             :: Processing package changes...\r\n\
@@ -729,11 +729,11 @@ pub mod tests {
             .expect(&shown);
         let left = line.len() - line.trim_start().len();
         assert!(left.abs_diff(80 - line.len()) <= 1, "{shown}");
-        assert!(!shown.contains("Update now"), "{shown}");
+        assert!(!shown.contains("Install now"), "{shown}");
         press(&mut app, &[Key::Enter]);
         assert_eq!(app.pages.len(), 2);
         app.ctx.shared.updates = ready;
-        assert!(screen(&mut app, &mut term).contains("Update now"));
+        assert!(screen(&mut app, &mut term).contains("Install now"));
         press(&mut app, &[Key::Esc]);
         assert_eq!(app.pages.len(), 1);
     }

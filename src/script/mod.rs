@@ -18,7 +18,7 @@ pub use run::Run;
 pub use session::Event;
 
 use serde::Deserialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::os::fd::{BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
@@ -40,43 +40,10 @@ impl std::fmt::Display for Op {
     }
 }
 
-macro_rules! ops {
-    ($($konst:ident = $script:literal $name:literal),* $(,)?) => {
-        $(pub const $konst: Op = Op { script: $script, name: $name };)*
-        /// Every operation, so a test can hold the list against the folders.
-        pub const ALL: &[Op] = &[$($konst),*];
-    };
-}
-
-/// The operations by name. One the scripts lack fails the tests, not a run.
+/// The operations by name, generated from the scripts' yaml by build.rs.
 pub mod op {
     use super::Op;
-    ops! {
-        CLEANUP_PLAN = "cleanup" "plan", CLEANUP_RUN = "cleanup" "run",
-        DESKTOP_APPLY = "desktop" "apply", DESKTOP_NOTIFY = "desktop" "notify", DESKTOP_OPEN = "desktop" "open",
-        DESKTOP_EXTENSION_INSTALL = "desktop" "extension-install",
-        DESKTOP_EXTENSION_REMOVE = "desktop" "extension-remove",
-        FEATURES_PROBE = "features" "probe", FEATURES_INSTALL = "features" "install",
-        FEATURES_REMOVE = "features" "remove",
-        FIRMWARE_LIST = "firmware" "list", FIRMWARE_UPDATE = "firmware" "update",
-        LOG_ERRORS = "log" "errors",
-        MIGRATE_READ = "migrate" "read", MIGRATE_CLEAN = "migrate" "clean",
-        MIRRORS_LIST = "mirrors" "list", MIRRORS_RANK = "mirrors" "rank",
-        NEWS_FETCH = "news" "fetch",
-        PACKAGES_INSTALLED = "packages" "installed", PACKAGES_SEARCH = "packages" "search",
-        PACKAGES_AUR_SEARCH = "packages" "aur-search", PACKAGES_AUR_INFO = "packages" "aur-info",
-        PACKAGES_INFO = "packages" "info", PACKAGES_VERSIONS = "packages" "versions",
-        PACKAGES_PKGBUILD = "packages" "pkgbuild", PACKAGES_INSTALL = "packages" "install",
-        PACKAGES_REMOVE = "packages" "remove", PACKAGES_DOWNGRADE = "packages" "downgrade",
-        PACNEW_LIST = "pacnew" "list", PACNEW_DIFF = "pacnew" "diff", PACNEW_TAKE = "pacnew" "take",
-        PACNEW_KEEP = "pacnew" "keep", PACNEW_MERGE = "pacnew" "merge",
-        REPAIR_RUN = "repair" "run", REPAIR_FILES = "repair" "files",
-        SERVICES_LIST = "services" "list", SERVICES_LOG = "services" "log",
-        SERVICES_SYSTEM = "services" "system", SERVICES_USER = "services" "user",
-        SYSTEM_STATE = "system" "state", SYSTEM_NOPASSWD = "system" "nopasswd",
-        SYSTEM_AUTH = "system" "auth", SYSTEM_REBOOT = "system" "reboot",
-        UPDATE_LIST = "update" "list", UPDATE_RUN = "update" "run",
-    }
+    include!(concat!(env!("OUT_DIR"), "/ops.rs"));
 }
 
 /// `script.yaml`: the operations, and what the whole script shares.
@@ -142,6 +109,7 @@ pub struct Probe {
     pub extension: bool,
 }
 
+#[cfg(test)]
 fn file(path: &str) -> &'static [u8] {
     crate::embedded::SCRIPTS
         .iter()
@@ -157,20 +125,22 @@ pub fn parse_meta(src: &[u8]) -> Result<Meta, String> {
 
 /// The yaml of a script, by its folder, `lib` being lib.yaml.
 pub fn meta(script: &str) -> &'static Meta {
-    static METAS: OnceLock<Mutex<HashMap<String, &'static Meta>>> = OnceLock::new();
-    let mut metas = METAS.get_or_init(Default::default).lock().unwrap();
-    if let Some(m) = metas.get(script) {
-        return m;
-    }
-    let path = if script == "lib" {
-        "lib.yaml".to_string()
-    } else {
-        format!("{script}/script.yaml")
-    };
-    let parsed = parse_meta(file(&path)).unwrap_or_else(|e| panic!("scripts/{path}: {e}"));
-    let leaked: &'static Meta = Box::leak(Box::new(parsed));
-    metas.insert(script.to_string(), leaked);
-    leaked
+    static METAS: OnceLock<BTreeMap<&str, Meta>> = OnceLock::new();
+    METAS
+        .get_or_init(|| {
+            crate::embedded::SCRIPTS
+                .iter()
+                .filter_map(|(path, bytes)| {
+                    let script = path
+                        .strip_suffix("/script.yaml")
+                        .or_else(|| (*path == "lib.yaml").then_some("lib"))?;
+                    let meta = parse_meta(bytes).unwrap_or_else(|e| panic!("scripts/{path}: {e}"));
+                    Some((script, meta))
+                })
+                .collect()
+        })
+        .get(script)
+        .unwrap_or_else(|| panic!("scripts/{script} has no yaml"))
 }
 
 impl Op {
@@ -406,23 +376,13 @@ mod tests {
     }
 
     #[test]
-    fn every_folder_has_both_files_and_every_operation_a_name() {
-        for s in scripts() {
-            assert!(
-                crate::embedded::SCRIPTS
-                    .iter()
-                    .any(|(f, _)| *f == format!("{s}/script.yaml")),
-                "{s} has no script.yaml"
-            );
-        }
-        let mut named: Vec<String> = op::ALL.iter().map(|o| o.to_string()).collect();
-        named.sort();
-        let mut declared: Vec<String> = scripts()
+    fn every_folder_has_both_files() {
+        let mut declared: Vec<String> = crate::embedded::SCRIPTS
             .iter()
-            .flat_map(|s| meta(s).ops.keys().map(move |o| format!("{s} {o}")))
+            .filter_map(|(f, _)| f.strip_suffix("/script.yaml").map(str::to_string))
             .collect();
         declared.sort();
-        assert_eq!(named, declared);
+        assert_eq!(scripts(), declared);
     }
 
     #[test]

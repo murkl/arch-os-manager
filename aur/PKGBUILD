@@ -4,10 +4,11 @@
 pkgname=arch-os-manager
 pkgver={{VERSION}}
 pkgrel=1
-pkgdesc='Arch Linux kept current, clean and healthy, from one quiet screen'
+pkgdesc='Update, maintain and repair Arch Linux from one place'
 arch=('x86_64')
 url='https://github.com/murkl/arch-os-manager'
-license=('GPL-3.0-or-later')
+# The program, then Fira Code and the Nerd Fonts symbols it carries.
+license=('GPL-3.0-or-later' 'OFL-1.1' 'MIT')
 depends=('gcc-libs' 'glibc')
 makedepends=('cargo')
 optdepends=(
@@ -24,7 +25,7 @@ optdepends=(
 provides=('system-manager')
 conflicts=('system-manager')
 install=arch-os-manager.install
-source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/${pkgver}.tar.gz")
 sha256sums=('{{SHA256}}')
 
 prepare() {
@@ -41,10 +42,17 @@ build() {
     SM_VERSION="$pkgver" cargo build --frozen --release
 }
 
+# What ships answers with the version it was built for.
+check() {
+    cd "${pkgname}-${pkgver}"
+    [ "$(target/release/system-manager --version)" = "system-manager ${pkgver}" ]
+}
+
 # The menu entry and the update notification are set up by the program for the user who
 # runs it, at its first start or with `system-manager init`.
 package() {
     cd "${pkgname}-${pkgver}"
     install -Dm755 target/release/system-manager "${pkgdir}/usr/bin/system-manager"
-    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    install -Dm644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}"
+    install -Dm644 assets/fonts/OFL.txt assets/fonts/NerdFonts-LICENSE.txt -t "${pkgdir}/usr/share/licenses/${pkgname}"
 }

@@ -1,5 +1,15 @@
-// Embeds scripts/ and themes/ so the binary is the whole program, and names its version.
+// Embeds scripts/ and themes/ so the binary is the whole program, names the operations the
+// scripts declare, and names its version.
+use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::{env, fs, path::Path};
+
+/// Of script.yaml, only which operations it declares.
+#[derive(Deserialize)]
+struct Meta {
+    #[serde(default)]
+    ops: BTreeMap<String, serde::de::IgnoredAny>,
+}
 
 /// Every file below `dir` but dotfiles, as paths relative to it.
 fn files(dir: &Path, prefix: &str, out: &mut Vec<String>) {
@@ -36,8 +46,9 @@ fn main() {
         }
         code += "];\n";
     }
-    let out = Path::new(&env::var("OUT_DIR").unwrap()).join("embedded.rs");
-    fs::write(out, code).unwrap();
+    let out = env::var("OUT_DIR").map(std::path::PathBuf::from).unwrap();
+    fs::write(out.join("embedded.rs"), code).unwrap();
+    fs::write(out.join("ops.rs"), ops()).unwrap();
 
     // What a release hands in, else a pre-release of the patch after the last release, as
     // release-please keeps it.
@@ -48,6 +59,27 @@ fn main() {
         _ => next_dev(&fs::read_to_string(".release-please-manifest.json").unwrap()),
     };
     println!("cargo::rustc-env=SM_VERSION={version}");
+}
+
+/// `script::op`: a constant per operation of every `scripts/<name>/script.yaml`, `update run`
+/// as `UPDATE_RUN`, and `ALL`.
+fn ops() -> String {
+    let mut found = Vec::new();
+    files(Path::new("scripts"), "", &mut found);
+    let mut code = String::new();
+    let mut all = Vec::new();
+    for f in found.iter().filter_map(|f| f.strip_suffix("/script.yaml")) {
+        let path = format!("scripts/{f}/script.yaml");
+        let src = fs::read_to_string(&path).unwrap();
+        let meta: Meta = serde_saphyr::from_str(&src).unwrap_or_else(|e| panic!("{path}: {e}"));
+        for name in meta.ops.keys() {
+            let konst = format!("{f}_{name}").to_uppercase().replace('-', "_");
+            code += &format!("pub const {konst}: Op = Op {{ script: {f:?}, name: {name:?} }};\n");
+            all.push(konst);
+        }
+    }
+    code += &format!("pub const ALL: &[Op] = &[{}];\n", all.join(", "));
+    code
 }
 
 /// `{ ".": "1.9.1" }` as `1.9.2-dev`.

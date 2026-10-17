@@ -25,7 +25,7 @@ impl PacnewPage {
 
 impl Page for PacnewPage {
     fn title(&self) -> String {
-        t("Configuration updates").into()
+        t("Config updates").into()
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {

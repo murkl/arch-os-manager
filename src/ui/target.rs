@@ -122,7 +122,7 @@ impl Target {
             Target::Services => t("Services"),
             Target::Log => t("System log"),
             Target::Cleanup => t("Clean up"),
-            Target::Pacnew => t("Configuration updates"),
+            Target::Pacnew => t("Config updates"),
             Target::Mirrors => t("Mirrors"),
             Target::Firmware => t("Firmware"),
             Target::Repair => t("Repair"),

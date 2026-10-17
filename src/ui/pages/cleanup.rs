@@ -130,7 +130,7 @@ impl Page for CleanupPage {
             body.push(Block::Blank);
             body.push(done(t("Nothing to clean up.")));
         } else {
-            acts.push(Act::new(t("Clean up now"), |ctx: &mut Ctx| {
+            acts.push(Act::new(t("Remove now"), |ctx: &mut Ctx| {
                 let text = t("Clean up now?\nWhat is listed is removed for good. Three versions of every installed package stay in the cache.").to_string();
                 Flow::Push(start(Job::new(op::CLEANUP_RUN, Vec::new()).confirm(text), ctx))
             })

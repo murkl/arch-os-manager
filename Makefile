@@ -3,20 +3,13 @@ SHELL       := bash
 .SHELLFLAGS := -eu -o pipefail -c
 
 BIN := target/release/system-manager
-# The release a run builds; without it, build.rs names a pre-release of the
-# next patch.
-VERSION ?=
-export SM_VERSION := $(VERSION)
 
 .PHONY: all build check fmt fmt-check lint test aur-check run install clean
 
 all: build
 
-# What ships, read back against the version it was built for.
 build:
 	cargo build --release --locked
-	@said="$$($(BIN) --version)"; [ -z "$(VERSION)" ] || [ "$$said" = "system-manager $(VERSION)" ] \
-		|| { echo "$(BIN) answers '$$said', not $(VERSION)" >&2; exit 1; }
 
 # The one command that has to pass before a commit.
 check: fmt-check lint test aur-check build

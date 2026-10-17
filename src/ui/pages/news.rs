@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 
 use crate::data::news::{Block as Html, Item, blocks};
 use crate::i18n::t;
-use crate::ui::detail::{Block, Detail, loaded};
+use crate::ui::detail::{Act, Block, Detail, loaded};
 use crate::ui::icon;
 use crate::ui::list::{Lead, List, Picked, Row};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
@@ -15,6 +15,32 @@ pub fn unread(ctx: &Ctx) -> usize {
     ctx.shared.news.ready().map_or(0, |(items, _)| {
         items.iter().filter(|i| !read.contains(&i.link)).count()
     })
+}
+
+/// Remembers an item as read, or as new again. Only what the feed still lists is kept.
+fn mark(ctx: &mut Ctx, link: &str, read: bool) {
+    let Some((items, _)) = ctx.shared.news.ready() else {
+        return;
+    };
+    let list = ctx.state.news_read.get_or_insert_with(Vec::new);
+    if list.iter().any(|l| l == link) == read {
+        return;
+    }
+    list.retain(|l| l != link && items.iter().any(|i| &i.link == l));
+    if read {
+        list.push(link.to_string());
+    }
+    ctx.state.save();
+}
+
+/// Whether an item was read.
+fn is_read(ctx: &Ctx, link: &str) -> bool {
+    ctx.state
+        .news_read
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .any(|l| l == link)
 }
 
 pub struct NewsPage {
@@ -73,11 +99,29 @@ impl Page for NewsPage {
         self.list.draw(list_area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
-        super::list_hints(self.list.typing())
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)> {
+        let mut h = super::list_hints(self.list.typing());
+        if !self.list.typing()
+            && let Some(row) = self.list.selected()
+        {
+            let label = if is_read(ctx, &row.id) {
+                t("unread")
+            } else {
+                t("read")
+            };
+            h.insert(2, ("space", label.into()));
+        }
+        h
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
+        if key == Key::Char(' ') && !self.list.typing() {
+            if let Some(link) = self.list.selected().map(|r| r.id.clone()) {
+                let read = is_read(ctx, &link);
+                mark(ctx, &link, !read);
+            }
+            return Flow::Stay;
+        }
         match self.list.key(key) {
             Picked::Open(link) => {
                 let Some((items, _)) = ctx.shared.news.ready() else {
@@ -86,14 +130,8 @@ impl Page for NewsPage {
                 let Some(item) = items.iter().find(|i| i.link == link).cloned() else {
                     return Flow::Stay;
                 };
-                let read = ctx.state.news_read.get_or_insert_with(Vec::new);
-                if !read.contains(&link) {
-                    read.push(link);
-                    // Only what the feed still lists needs remembering.
-                    read.retain(|l| items.iter().any(|i| &i.link == l));
-                    ctx.state.save();
-                }
-                Flow::Push(Box::new(ArticlePage::new(item)))
+                let read = is_read(ctx, &link);
+                Flow::Push(Box::new(ArticlePage::new(item, read)))
             }
             Picked::Used => Flow::Stay,
             Picked::Ignored => Flow::Ignored,
@@ -114,7 +152,8 @@ pub struct ArticlePage {
 }
 
 impl ArticlePage {
-    pub fn new(item: Item) -> ArticlePage {
+    /// Reading changes nothing. The one action marks the item the other way and goes back.
+    pub fn new(item: Item, read: bool) -> ArticlePage {
         let mut body = vec![
             Block::Heading(item.title.clone()),
             Block::Text(item.date.clone(), Tone::Muted),
@@ -141,8 +180,21 @@ impl ArticlePage {
         }
         body.push(Block::Blank);
         body.push(Block::Text(item.link.clone(), Tone::Muted));
+        let link = item.link;
+        let label = if read {
+            t("Mark as unread")
+        } else {
+            t("Mark as read")
+        };
+        let acts = vec![
+            Act::new(label, move |ctx: &mut Ctx| {
+                mark(ctx, &link, !read);
+                Flow::Pop
+            })
+            .icon(icon::NEWS),
+        ];
         let mut detail = Detail::default();
-        detail.set(body, Vec::new());
+        detail.set(body, acts);
         // The title and the date stay while the text scrolls.
         detail.pin_head();
         ArticlePage { detail }
@@ -172,15 +224,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reading_changes_nothing_while_the_article_action_and_space_mark_an_item() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        example(&mut app);
+        open(&mut app, Box::new(NewsPage::new()));
+        let first = app.ctx.shared.news.ready().unwrap().0[0].link.clone();
+        assert!(screen(&mut app, &mut term).contains("space read"));
+        press(&mut app, &[Key::Enter]);
+        assert!(!is_read(&app.ctx, &first));
+        assert!(screen(&mut app, &mut term).contains("Mark as read"));
+        press(&mut app, &[Key::Esc]);
+        assert!(!is_read(&app.ctx, &first));
+        // The article's one action goes back.
+        press(&mut app, &[Key::Enter, Key::Enter]);
+        assert!(is_read(&app.ctx, &first));
+        assert!(screen(&mut app, &mut term).contains("space unread"));
+        press(&mut app, &[Key::Enter]);
+        assert!(screen(&mut app, &mut term).contains("Mark as unread"));
+        press(&mut app, &[Key::Enter]);
+        assert!(!is_read(&app.ctx, &first));
+        press(&mut app, &[Key::Char(' ')]);
+        assert!(is_read(&app.ctx, &first));
+        press(&mut app, &[Key::Char(' ')]);
+        assert!(!is_read(&app.ctx, &first));
+    }
+
+    #[test]
     fn keeps_a_list_together_and_marks_the_date_a_command_and_the_link() {
-        let body = ArticlePage::new(Item {
+        let body = ArticlePage::new(
+            Item {
             title: "Title".into(),
             link: "https://archlinux.org/news/x/".into(),
             date: "2026-10-12".into(),
             html:
                 "<p>Text.</p><ul><li>one</li><li>two</li></ul><pre><code>pacman -Syu</code></pre>"
                     .into(),
-        })
+            },
+            false,
+        )
         .detail
         .body;
         let note = |lead: Lead, text: &str, tone: Tone| Block::Note(lead, text.into(), tone);

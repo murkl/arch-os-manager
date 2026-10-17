@@ -45,7 +45,7 @@ impl RepairPage {
         detail.set(
             body,
             vec![
-                Act::new(t("Repair"), |ctx: &mut Ctx| {
+                Act::new(t("Renew the keyring"), |ctx: &mut Ctx| {
                     Flow::Push(start(Job::new(op::REPAIR_RUN, Vec::new()), ctx))
                 })
                 .icon(icon::REPAIR),

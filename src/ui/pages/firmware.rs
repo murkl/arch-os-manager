@@ -55,7 +55,7 @@ impl Page for FirmwarePage {
                 Tone::Muted,
             ));
             acts.push(
-                Act::new(t("Update the firmware"), |ctx: &mut Ctx| {
+                Act::new(t("Update now"), |ctx: &mut Ctx| {
                     Flow::Push(start(Job::new(op::FIRMWARE_UPDATE, Vec::new()), ctx))
                 })
                 .icon(icon::FIRMWARE),

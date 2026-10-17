@@ -137,9 +137,6 @@ msgstr "Wird geprüft, ob sudo das Passwort braucht"
 msgid "Clean up"
 msgstr "Aufräumen"
 
-msgid "Clean up now"
-msgstr "Jetzt aufräumen"
-
 msgid ""
 "Clean up now?\n"
 "What is listed is removed for good. Three versions of every installed package stay in the cache."
@@ -154,7 +151,7 @@ msgstr "Wird aufgeräumt"
 msgid "Comparing the configuration"
 msgstr "Konfiguration wird verglichen"
 
-msgid "Configuration updates"
+msgid "Config updates"
 msgstr "Konfigurationsupdates"
 
 msgid "Creating the keyring anew"
@@ -174,6 +171,9 @@ msgstr "Nicht automatisch starten"
 
 msgid "Done"
 msgstr "Fertig"
+
+msgid "Install now"
+msgstr "Jetzt installieren"
 
 msgid "Installed from extensions.gnome.org for this user. GNOME loads it at the next login."
 msgstr "Wird von extensions.gnome.org für diesen Benutzer installiert. GNOME lädt sie bei der nächsten Anmeldung."
@@ -204,6 +204,27 @@ msgstr "Wird abgeschlossen"
 
 msgid "Firmware"
 msgstr "Firmware"
+
+msgid "Mark as read"
+msgstr "Als gelesen markieren"
+
+msgid "Mark as unread"
+msgstr "Als ungelesen markieren"
+
+msgid "read"
+msgstr "gelesen"
+
+msgid "Refresh now"
+msgstr "Manuell aktualisieren"
+
+msgid "Remove now"
+msgstr "Jetzt entfernen"
+
+msgid "Renew the keyring"
+msgstr "Schlüsselbund erneuern"
+
+msgid "unread"
+msgstr "ungelesen"
 
 msgid "Updates the firmware of the device"
 msgstr "Aktualisiert die Firmware des Geräts"
@@ -433,9 +454,6 @@ msgstr "Eine GNOME-Shell-Erweiterung, die ausstehende Updates in der oberen Leis
 
 msgid "Project"
 msgstr "Projekt"
-
-msgid "Rank the mirrors now"
-msgstr "Spiegelserver jetzt sortieren"
 
 msgid "Ranked"
 msgstr "Sortiert"
@@ -821,9 +839,6 @@ msgstr "Update-Benachrichtigung"
 
 msgid "Update now"
 msgstr "Jetzt aktualisieren"
-
-msgid "Update the firmware"
-msgstr "Firmware aktualisieren"
 
 msgid "Updating the app menu entry and the update notification"
 msgstr "Eintrag im App-Menü und Update-Benachrichtigung werden angepasst"
