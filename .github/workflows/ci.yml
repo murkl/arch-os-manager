@@ -63,8 +63,8 @@ jobs:
         id: please
 
   # The AUR files for the tag's source tarball, built once as a user builds
-  # them, then pushed, and the binary out of that package put on the release
-  # with its sum. The key is a secret of the environment aur, which only main
+  # them, then pushed, and the binary out of that package put on the release.
+  # The key is a secret of the environment aur, which only main
   # may use; on a failure the release stands, and a rerun of this job does it
   # all again.
   publish:
@@ -76,7 +76,7 @@ jobs:
     container: archlinux:base-devel-20261011.0.609700
     environment: aur
     permissions:
-      contents: write  # the asset and the notes
+      contents: write  # the asset
     env:
       TAG: ${{ needs.release.outputs.tag }}
       VERSION: ${{ needs.release.outputs.version }}
@@ -116,8 +116,7 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i ${ssh}/key -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh}/known_hosts -o StrictHostKeyChecking=yes"
           tools/aur-push.sh aur-files
 
-      # The same binary the package installs, and the sum to check a download
-      # against, as a section the notes get once.
+      # The same binary the package installs. GitHub shows its sha256 beside it.
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -125,8 +124,3 @@ jobs:
           bin="system-manager-${VERSION}-x86_64"
           bsdtar -xOf aur-files/arch-os-manager-"${VERSION}"-*-x86_64.pkg.tar.zst usr/bin/system-manager >"$bin"
           gh release upload "$TAG" "$bin" --clobber
-          notes="$(gh release view "$TAG" --json body --jq .body)"
-          notes="${notes%%$'\n'### Checksum*}"
-          notes="${notes%"${notes##*[![:space:]]}"}"
-          printf '%s\n\n### Checksum\n\n    %s\n' "$notes" "$(sha256sum "$bin")" >notes.md
-          gh release edit "$TAG" --notes-file notes.md

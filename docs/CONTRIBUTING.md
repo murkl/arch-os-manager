@@ -64,7 +64,7 @@ The title is the one line `main` keeps. The next version and the release notes a
 | `Title` | A pull request is opened, pushed to or edited | Checks the title and the base branch |
 | `Check` | Every pull request | `make check` |
 | `Release` | A push to `main` | The release pull request, or once that is merged, the tag and the release page |
-| `Publish` | A release | Stamps `aur/PKGBUILD` for the tag's source tarball, builds it with makepkg as a user would, which reads the version back from the binary, pushes `PKGBUILD`, `.SRCINFO` and `arch-os-manager.install` to the AUR, and puts the binary of that package on the release page with its sha256 in the notes |
+| `Publish` | A release | Stamps `aur/PKGBUILD` for the tag's source tarball, builds it with makepkg as a user would, which reads the version back from the binary, pushes `PKGBUILD`, `.SRCINFO` and `arch-os-manager.install` to the AUR, and puts the binary of that package on the release page |
 
 ## Releasing
 
