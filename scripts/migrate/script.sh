@@ -3,7 +3,7 @@
 
 # The Arch OS Manager 1.x, taken over once. When no 1.x is left to take over,
 # remove this folder, the MIGRATE operations in src/script/mod.rs, and
-# src/migrate.rs with its call in src/cli.rs.
+# src/migrate.rs with its calls in src/cli.rs and src/ui/app.rs.
 
 autostart="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/arch-os.desktop"
 

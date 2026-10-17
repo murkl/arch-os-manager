@@ -26,45 +26,63 @@ impl Legacy {
         l
     }
 
-    /// Its settings, where settings.yaml has none of its own.
-    pub fn take_over(&self, settings: &mut Settings) {
-        if settings.notify.is_none() {
-            settings.notify = self.notify.and_then(crate::settings::switch);
+    /// Its settings, where settings.yaml has none of its own; whether any was taken.
+    pub fn take_over(&self, settings: &mut Settings) -> bool {
+        let mut taken = false;
+        if settings.notify.is_none() && self.notify == Some(false) {
+            settings.notify = Some("off".into());
+            taken = true;
         }
-        if settings.aur_helper.is_none() {
+        if settings.aur_helper.is_none() && self.aur_helper.is_some() {
             settings.aur_helper = self.aur_helper.clone();
+            taken = true;
         }
+        taken
     }
 }
 
-/// Takes the old manager over where it left something. The settings are written before any of
-/// it goes; what fails is logged, and the next start tries again.
-pub fn run() {
-    let home = crate::paths::home().display().to_string();
-    let legacy = match query(op::MIGRATE_READ, &[&home]) {
+fn home() -> String {
+    crate::paths::home().display().to_string()
+}
+
+/// What the old manager left, where it left something; what fails is logged, and the next
+/// start reads again.
+pub fn read() -> Option<Legacy> {
+    let legacy = match query(op::MIGRATE_READ, &[&home()]) {
         Ok(out) => Legacy::parse(&out),
         Err(f) => {
             crate::warn!("migrate: {}", f.detail);
-            return;
+            return None;
         }
     };
-    if legacy.left.is_empty() {
-        return;
+    (!legacy.left.is_empty()).then_some(legacy)
+}
+
+/// Removes what it left, once its settings are written.
+pub fn clean(legacy: &Legacy) {
+    match query(op::MIGRATE_CLEAN, &[&home()]) {
+        Ok(_) => crate::info!("migrate: took over {}", legacy.left.join(", ")),
+        Err(f) => crate::warn!("migrate: {}", f.detail),
     }
+}
+
+/// Takes the old manager over at once, for `init`; the interface does it behind the splash.
+pub fn run() {
+    let Some(legacy) = read() else {
+        return;
+    };
     let (mut settings, error) = Settings::load();
     if let Some(e) = error {
         crate::warn!("migrate: settings.yaml is not used: {e}");
         return;
     }
-    legacy.take_over(&mut settings);
-    if let Err(e) = settings.save() {
+    if legacy.take_over(&mut settings)
+        && let Err(e) = settings.save()
+    {
         crate::warn!("migrate: settings.yaml not written: {e}");
         return;
     }
-    match query(op::MIGRATE_CLEAN, &[&home]) {
-        Ok(_) => crate::info!("migrate: took over {}", legacy.left.join(", ")),
-        Err(f) => crate::warn!("migrate: {}", f.detail),
-    }
+    clean(&legacy);
 }
 
 #[cfg(test)]
@@ -78,17 +96,18 @@ mod tests {
         );
         assert_eq!(legacy.left, ["/h/bin", "/h/config/settings.conf"]);
         let mut fresh = Settings::default();
-        legacy.take_over(&mut fresh);
+        assert!(legacy.take_over(&mut fresh));
         assert_eq!(
-            (fresh.notify, fresh.aur_helper.as_deref()),
-            (Some(false), Some("yay"))
+            (fresh.notify.as_deref(), fresh.aur_helper.as_deref()),
+            (Some("off"), Some("yay"))
         );
         let mut chosen = Settings {
             aur_helper: Some("paru".into()),
             ..Settings::default()
         };
-        legacy.take_over(&mut chosen);
+        assert!(legacy.take_over(&mut chosen), "the notification is taken");
         assert_eq!(chosen.aur_helper.as_deref(), Some("paru"));
+        assert!(!legacy.take_over(&mut chosen), "nothing left to take");
         assert_eq!(Legacy::parse(""), Legacy::default());
     }
 }

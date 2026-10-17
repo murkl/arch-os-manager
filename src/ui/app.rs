@@ -48,7 +48,6 @@ impl App {
             state: State::load(),
             style: Style::new(&themes[0].colors, console),
             console,
-            aspect: super::ASPECT,
             themes,
             theme_errors,
             shared: Shared::default(),
@@ -76,8 +75,20 @@ impl App {
             }
         }
         app.push(Box::new(pages::splash::SplashPage::new()));
-        app.reload();
         app
+    }
+
+    /// Reads everything, once the splash is on the screen: begun before, the processes it
+    /// starts hold the first frame back.
+    pub fn start(&mut self) {
+        self.reload();
+        let (tx, wake) = (self.ctx.tx.clone(), self.ctx.wake.clone());
+        std::thread::spawn(move || {
+            if let Some(legacy) = crate::migrate::read() {
+                let _ = tx.send(Msg::Legacy(legacy));
+                wake();
+            }
+        });
     }
 
     fn push(&mut self, page: Box<dyn Page>) {
@@ -136,6 +147,7 @@ impl App {
             Msg::Run(id, event) => self.deliver(id, |page, ctx| page.run(event, ctx)),
             Msg::Fresh(fresh) => self.fresh(fresh),
             Msg::Usage(usage) => self.ctx.usage = Some(usage),
+            Msg::Legacy(legacy) => self.legacy(legacy),
         }
         if self.ctx.reload && self.ctx.pending.get() == 0 {
             self.ctx.reload = false;
@@ -194,6 +206,23 @@ impl App {
         page.draw(content, frame.buffer_mut(), &mut self.ctx);
         let hints = page.hints(&self.ctx);
         draw::footer(area, frame.buffer_mut(), &self.ctx, &hints);
+    }
+
+    /// Takes the old manager over: its settings where none are chosen, written before anything
+    /// of it goes, and read anew where they decide what runs.
+    fn legacy(&mut self, legacy: crate::migrate::Legacy) {
+        if self.ctx.settings_error.is_some() {
+            crate::warn!("migrate: settings.yaml is not used");
+            return;
+        }
+        if legacy.take_over(&mut self.ctx.settings) {
+            if let Err(e) = self.ctx.settings.save() {
+                crate::warn!("migrate: settings.yaml not written: {e}");
+                return;
+            }
+            self.ctx.reload();
+        }
+        std::thread::spawn(move || crate::migrate::clean(&legacy));
     }
 
     /// Reads every shared value anew; what is shown stays until the new value arrives.
@@ -394,7 +423,6 @@ pub mod tests {
                 false,
             ),
             console: false,
-            aspect: crate::ui::ASPECT,
             themes,
             theme_errors: Vec::new(),
             shared: Shared::default(),
@@ -594,6 +622,7 @@ pub mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         unsafe { std::env::set_var("SM_HOME", std::env::temp_dir().join("sm-preview")) };
         let mut app = App::new(tx, Arc::new(|| {}), false, None);
+        app.start();
         press(&mut app, &[Key::Esc]);
         let mut term = Terminal::new(TestBackend::new(96, 28)).unwrap();
         let pump = |app: &mut App, secs: u64| {
@@ -753,6 +782,28 @@ pub mod tests {
             vec![locked.into()],
         ))));
         all
+    }
+
+    /// The console's font has letters, but none of the glyphs; every page draws it those only.
+    #[test]
+    fn every_page_is_ascii_on_the_console() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        example(&mut app);
+        let colors = app.ctx.theme().colors;
+        app.ctx.style = Style::new(&colors, true);
+        for stack in every_page(&mut app) {
+            app.pages.truncate(1);
+            for page in stack {
+                app.push(page);
+            }
+            let shown = screen(&mut app, &mut term);
+            let foreign: String = shown
+                .chars()
+                .filter(|c| !c.is_ascii() && !c.is_alphabetic())
+                .collect();
+            assert!(foreign.is_empty(), "{foreign:?} in\n{shown}");
+        }
     }
 
     /// A terminal can be made as small as one cell; no page may panic in it.

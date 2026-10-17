@@ -110,7 +110,6 @@ impl Page for NewsPage {
 }
 
 pub struct ArticlePage {
-    item: Item,
     detail: Detail,
 }
 
@@ -118,11 +117,7 @@ impl ArticlePage {
     pub fn new(item: Item) -> ArticlePage {
         let mut body = vec![
             Block::Heading(item.title.clone()),
-            Block::Note(
-                Lead::Icon(icon::DATE, Tone::Muted),
-                item.date.clone(),
-                Tone::Muted,
-            ),
+            Block::Text(item.date.clone(), Tone::Muted),
         ];
         // The items of a list stand together; everything else has a line around it.
         let mut listing = false;
@@ -145,20 +140,18 @@ impl ArticlePage {
             }
         }
         body.push(Block::Blank);
-        body.push(Block::Note(
-            Lead::Icon(icon::LINK, Tone::Muted),
-            item.link.clone(),
-            Tone::Muted,
-        ));
+        body.push(Block::Text(item.link.clone(), Tone::Muted));
         let mut detail = Detail::default();
         detail.set(body, Vec::new());
-        ArticlePage { item, detail }
+        // The title and the date stay while the text scrolls.
+        detail.pin(3);
+        ArticlePage { detail }
     }
 }
 
 impl Page for ArticlePage {
     fn title(&self) -> String {
-        self.item.title.clone()
+        t("Article").into()
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
@@ -191,14 +184,7 @@ mod tests {
         .detail
         .body;
         let note = |lead: Lead, text: &str, tone: Tone| Block::Note(lead, text.into(), tone);
-        assert_eq!(
-            body[1],
-            note(
-                Lead::Icon(icon::DATE, Tone::Muted),
-                "2026-10-12",
-                Tone::Muted
-            )
-        );
+        assert_eq!(body[1], Block::Text("2026-10-12".into(), Tone::Muted));
         let one = body
             .iter()
             .position(|b| *b == note(Lead::Bullet, "one", Tone::Normal))
@@ -211,9 +197,8 @@ mod tests {
         )));
         assert_eq!(
             body.last(),
-            Some(&note(
-                Lead::Icon(icon::LINK, Tone::Muted),
-                "https://archlinux.org/news/x/",
+            Some(&Block::Text(
+                "https://archlinux.org/news/x/".into(),
                 Tone::Muted
             ))
         );

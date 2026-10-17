@@ -9,7 +9,8 @@ use crate::settings::Settings;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Applied {
     pub entry: bool,
-    pub timer: bool,
+    /// How often the timer announces, or `off`.
+    pub timer: &'static str,
     pub indicator: bool,
 }
 
@@ -22,9 +23,10 @@ pub fn apply(settings: &Settings, features: &Features) -> Result<Applied, Failur
     let desktop = features.lacks("desktop").is_none();
     let applied = Applied {
         entry: settings.app_menu.unwrap_or(true) && desktop,
-        timer: settings.notify.unwrap_or(true)
-            && desktop
-            && script::available(op::DESKTOP_NOTIFY, features),
+        timer: match desktop && script::available(op::DESKTOP_NOTIFY, features) {
+            true => settings.notify(),
+            false => "off",
+        },
         indicator: features.ok("arch-update"),
     };
     let on = |b: bool| if b { "on" } else { "off" };
@@ -33,7 +35,7 @@ pub fn apply(settings: &Settings, features: &Features) -> Result<Applied, Failur
         &[
             &exe.display().to_string(),
             on(applied.entry),
-            on(applied.timer),
+            applied.timer,
             on(applied.indicator),
         ],
     )?;

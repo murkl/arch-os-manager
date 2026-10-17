@@ -7,7 +7,7 @@ use super::features::FeaturesPage;
 use super::log::HiddenPage;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
-use crate::settings::AUR_HELPERS;
+use crate::settings::{AUR_HELPERS, NOTIFY};
 use crate::ui::detail::{Block, Detail};
 use crate::ui::draw::put;
 use crate::ui::list::{List, Picked, Row};
@@ -17,8 +17,8 @@ use crate::ui::{Ctx, Flow, Key, Page, Style, Tone};
 pub struct SettingsPage {
     list: List,
     focus: Option<Target>,
-    /// The switch being put in place; its row waits and no switch takes a press.
-    applying: Option<Target>,
+    /// The app menu entry is being put in place; its row waits and takes no press.
+    applying: bool,
     /// Why the last switch could not be put in place.
     failed: Option<String>,
 }
@@ -28,24 +28,19 @@ impl SettingsPage {
         SettingsPage {
             list: List::default(),
             focus,
-            applying: None,
+            applying: false,
             failed: None,
         }
     }
 
     fn value(&self, target: Target, ctx: &Ctx) -> (String, Tone, bool) {
-        let on_off = |on: bool| {
-            if self.applying == Some(target) {
-                (ctx.style.spinner().to_string(), Tone::Accent)
-            } else if on {
-                (t("on").to_string(), Tone::Ok)
-            } else {
-                (t("off").to_string(), Tone::Muted)
-            }
-        };
         match target {
             Target::Language => (i18n::current().name().into(), Tone::Muted, false),
             Target::Theme => (ctx.theme().name.clone(), Tone::Muted, false),
+            Target::Usage => {
+                let (text, tone) = on_off(ctx.settings.usage.unwrap_or(true));
+                (text.into(), tone, false)
+            }
             Target::AurHelper => {
                 let helper = script::aur().unwrap_or_else(|| t("none").into());
                 let text = if ctx.settings.aur_helper.is_none() {
@@ -69,13 +64,21 @@ impl SettingsPage {
                         true,
                     )
                 } else {
-                    let (text, tone) = on_off(ctx.settings.notify.unwrap_or(true));
-                    (text, tone, false)
+                    let every = ctx.settings.notify();
+                    let tone = if every == "off" {
+                        Tone::Muted
+                    } else {
+                        Tone::Ok
+                    };
+                    (label(every).into(), tone, false)
                 }
+            }
+            Target::Desktop if self.applying => {
+                (ctx.style.spinner().to_string(), Tone::Accent, false)
             }
             Target::Desktop => {
                 let (text, tone) = on_off(ctx.settings.app_menu.unwrap_or(true));
-                (text, tone, false)
+                (text.into(), tone, false)
             }
             Target::Hidden => (
                 ctx.settings.hidden_log.len().to_string(),
@@ -87,31 +90,44 @@ impl SettingsPage {
                     let ok = f.list.iter().filter(|(p, _)| f.ok(p)).count();
                     (format!("{ok}/{}", f.list.len()), Tone::Muted, false)
                 }
-                None => ("…".into(), Tone::Muted, false),
+                None => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
             },
             _ => (String::new(), Tone::Muted, false),
         }
     }
 
-    /// Flips a switch in settings.yaml and puts the entry and the timer in place to match.
-    fn toggle(&mut self, target: Target, ctx: &mut Ctx) {
-        if self.applying.is_some() {
+    /// Flips the app menu entry in settings.yaml and puts it in place to match.
+    fn toggle(&mut self, ctx: &mut Ctx) {
+        if self.applying {
             return;
         }
-        let setting = if target == Target::Desktop {
-            &mut ctx.settings.app_menu
-        } else {
-            &mut ctx.settings.notify
-        };
-        *setting = crate::settings::switch(!setting.unwrap_or(true));
+        let on = ctx.settings.app_menu.unwrap_or(true);
+        ctx.settings.app_menu = crate::settings::switch(!on);
         ctx.save_settings();
         let Some(features) = ctx.features().cloned() else {
             return;
         };
         let settings = ctx.settings.clone();
-        self.applying = Some(target);
+        self.applying = true;
         self.failed = None;
         ctx.spawn(move || crate::integration::apply(&settings, &features));
+    }
+}
+
+fn on_off(on: bool) -> (&'static str, Tone) {
+    match on {
+        true => (t("on"), Tone::Ok),
+        false => (t("off"), Tone::Muted),
+    }
+}
+
+/// What an interval of `NOTIFY` says in a sentence.
+fn label(every: &str) -> &'static str {
+    match every {
+        "hourly" => t("every hour"),
+        "daily" => t("every day"),
+        "weekly" => t("every week"),
+        _ => t("off"),
     }
 }
 
@@ -180,8 +196,15 @@ impl Page for SettingsPage {
             {
                 Flow::Push(Box::new(FeaturesPage::new(Some("libnotify".into()))))
             }
-            Some(t @ (Target::Notifications | Target::Desktop)) => {
-                self.toggle(t, ctx);
+            Some(Target::Notifications) => Flow::Push(choice(Target::Notifications, ctx)),
+            Some(Target::Desktop) => {
+                self.toggle(ctx);
+                Flow::Stay
+            }
+            Some(Target::Usage) => {
+                let on = ctx.settings.usage.unwrap_or(true);
+                ctx.settings.usage = crate::settings::switch(!on);
+                ctx.save_settings();
                 Flow::Stay
             }
             Some(Target::Hidden) => Flow::Push(Box::new(HiddenPage::new())),
@@ -193,7 +216,7 @@ impl Page for SettingsPage {
 
     fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
         if let Ok(result) = data.downcast::<Result<crate::integration::Applied, Failure>>() {
-            self.applying = None;
+            self.applying = false;
             self.failed = result
                 .err()
                 .map(|f| format!("{}: {}", f.headline(), f.detail));
@@ -206,7 +229,7 @@ impl Page for SettingsPage {
     }
 
     fn animating(&self, _: &Ctx) -> bool {
-        self.applying.is_some()
+        self.applying
     }
 }
 
@@ -233,6 +256,13 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
                 .map(|th| Row::new(th.id.clone(), th.name.clone()))
                 .collect(),
             ctx.theme().id.clone(),
+        ),
+        Target::Notifications => (
+            NOTIFY
+                .iter()
+                .map(|every| Row::new(*every, label(every)))
+                .collect(),
+            ctx.settings.notify().into(),
         ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
@@ -285,6 +315,11 @@ impl ChoicePage {
                 i18n::set(Lang::from_code(id).unwrap_or(Lang::En));
             }
             Target::Theme => ctx.settings.theme = Some(id.to_string()),
+            // The timer follows at the reading, which puts it in place after the packages.
+            Target::Notifications => {
+                ctx.settings.notify = (id != NOTIFY[0]).then(|| id.to_string());
+                ctx.reload();
+            }
             _ => {
                 ctx.settings.aur_helper = (id != "auto").then(|| id.to_string());
                 let helper = ctx
@@ -382,7 +417,7 @@ impl Page for AboutPage {
                     format!("{desktop}{}", session.unwrap_or_default()),
                 ));
             }
-            body.push(field("pacman", sys.pacman.clone()));
+            body.push(field("Pacman", sys.pacman.clone()));
             if let Some(booted) = sys.booted {
                 let local = booted.to_zoned(jiff::tz::TimeZone::system());
                 body.push(field(
@@ -410,16 +445,15 @@ impl Page for AboutPage {
                 Tone::Normal,
             ),
             Block::Field(t("Log").into(), path(crate::paths::log()), Tone::Normal),
-            Block::Blank,
-            Block::Heading(t("Command line").into()),
         ]);
-        body.push(Block::Code(
-            crate::cli::USAGE
-                .iter()
-                .chain(&["system-manager --help"])
-                .map(|l| (l.to_string(), Tone::Muted))
-                .collect(),
-        ));
+        for (title, rows) in crate::cli::commands() {
+            body.push(Block::Blank);
+            body.push(Block::Heading(title.into()));
+            body.extend(
+                rows.into_iter()
+                    .map(|(arg, what)| Block::Field(arg.into(), what, Tone::Normal)),
+            );
+        }
         if let Some(e) = &ctx.settings_error {
             body.push(Block::Blank);
             body.push(Block::Text(
@@ -451,16 +485,78 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_switch_being_put_in_place_waits() {
+    fn only_the_app_menu_entry_waits_while_it_is_put_in_place() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (app, _) = crate::ui::app::tests::app();
         let mut page = SettingsPage::new(None);
-        page.applying = Some(Target::Notifications);
+        page.applying = true;
         let spinning = |target| {
             let (text, ..) = page.value(target, &app.ctx);
             app.ctx.style.glyphs.spinner.contains(&text.as_str())
         };
-        assert!(spinning(Target::Notifications));
-        assert!(!spinning(Target::Desktop));
+        assert!(spinning(Target::Desktop));
+        assert!(!spinning(Target::Notifications));
+    }
+
+    #[test]
+    fn the_notification_is_chosen_from_a_list_and_hourly_is_the_default() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        for page in Target::Notifications.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("every hour") && shown.contains("every week") && shown.contains("off"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Down, Key::Enter]);
+        assert_eq!(app.ctx.settings.notify.as_deref(), Some("daily"));
+        assert!(app.ctx.busy(), "the timer follows at the reading");
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("Update notification"));
+        assert!(row.is_some_and(|r| r.ends_with("every day")), "{shown}");
+        for page in Target::Notifications.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Up, Key::Enter]);
+        assert_eq!(app.ctx.settings.notify, None);
+    }
+
+    #[test]
+    fn the_usage_switch_takes_the_row_off_the_start_page_and_back() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        app.ctx.usage = Some(crate::data::usage::Usage {
+            cpu: Some(0.2),
+            memory: Some(0.3),
+            disk: Some(0.4),
+        });
+        assert!(screen(&mut app, &mut term).contains("CPU"));
+        for page in Target::Usage.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.ctx.settings.usage, Some(false));
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("System usage"));
+        assert!(row.is_some_and(|r| r.ends_with("off")), "{shown}");
+        press(&mut app, &[Key::Esc]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("CPU") && shown.contains("Settings"),
+            "{shown}"
+        );
+        for page in Target::Usage.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter, Key::Esc]);
+        assert_eq!(app.ctx.settings.usage, None, "on is the default");
+        assert!(screen(&mut app, &mut term).contains("CPU"));
     }
 }

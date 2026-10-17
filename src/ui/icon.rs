@@ -36,11 +36,13 @@ pub const REMOVE: &str = "\u{f09e7}";
 pub const INSTALL: &str = "\u{f0b8f}";
 pub const TAKE: &str = "\u{f0b33}";
 pub const KEEP: &str = "\u{f0e29}";
-pub const DATE: &str = "\u{f00ed}";
-pub const LINK: &str = "\u{f0337}";
 pub const COMMAND: &str = "\u{f018d}";
 pub const CACHE: &str = "\u{f003c}";
-pub const RECOVERY: &str = "\u{f006f}";
+pub const CPU: &str = "\u{f0ee0}";
+pub const MEMORY: &str = "\u{f035b}";
+pub const DISK: &str = "\u{f02ca}";
+pub const USAGE: &str = "\u{f029a}";
+pub const TOOLS: &str = "\u{f1322}";
 
 /// Every icon, for the test that the window's font has each.
 #[cfg(test)]
@@ -80,9 +82,11 @@ pub const ALL: &[&str] = &[
     INSTALL,
     TAKE,
     KEEP,
-    DATE,
-    LINK,
     COMMAND,
     CACHE,
-    RECOVERY,
+    CPU,
+    MEMORY,
+    DISK,
+    USAGE,
+    TOOLS,
 ];

@@ -51,6 +51,17 @@ aur_sync() {
     esac
 }
 
+# Runs what reads or writes GSettings on the session bus, or where none answers,
+# as in an installer's chroot, on a private one, which dconf writes to this
+# user's database all the same. `man dbus-run-session`
+on_bus() {
+    if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ -S "${XDG_RUNTIME_DIR:-}/bus" ]; then
+        "$@"
+    else
+        dbus-run-session -- "$@"
+    fi
+}
+
 # The GNOME extension that shows pending updates in the top bar.
 ARCH_UPDATE=arch-update@RaphaelRochet
 

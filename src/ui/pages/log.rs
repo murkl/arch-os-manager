@@ -121,6 +121,8 @@ impl EntryPage {
         ];
         let mut detail = Detail::default();
         detail.set(body, acts);
+        // The time and the source stay while the message scrolls.
+        detail.pin(3);
         EntryPage { detail }
     }
 }

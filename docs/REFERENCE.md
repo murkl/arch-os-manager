@@ -95,15 +95,15 @@ A function more than one script needs goes into `lib.sh`; the rest stays in its 
 
 ## The Start Page
 
-Over the menu, three rings show in percent what the machine uses, read every two seconds off the drawing thread:
+Under the header, one row shows in percent what the machine uses, read every two seconds off the drawing thread; `usage: false` switches it off:
 
-| Ring | In use | Read from |
+| Block | In use | Read from |
 |---|---|---|
 | CPU | Busy ticks of all, over the last two seconds | `/proc/stat` |
 | RAM | What `MemAvailable` leaves, as `free` counts it | `/proc/meminfo` |
 | Disk | Of `/`, as `df` counts it | `statvfs` |
 
-A ring has ten dots, a tenth each, in braille points, so it is round for the shape of the cells: the window's, or as the terminal reports it, else twice as high as wide. A lit dot is drawn in `success` below 75 %, `warning` below 90 % and `error` from there, an open one in `muted`; the window also draws a lit dot larger. `?` stands where a value could not be read. Where the whole menu would not fit under the rings, and on the Linux console, which has no braille, one line shows the values in the colour of their ring instead; without room for that, and during a search, neither shows.
+A block shows an icon and the name in `muted`, then a bar and the share in `success` below 75 %, `warning` below 90 % and `error` from there. The bar has 8 cells to the 13 of the rest, the golden ratio, and one less where the two gaps would otherwise differ by a cell. CPU starts in the menu's icon column, disk ends at its right edge, RAM stands in the middle. Short of room the bars go first, then the names where icons say them; the Linux console has no icons and keeps the names. `?` stands where a value could not be read. Where the whole menu would not fit under the row, and during a search, it does not show.
 
 ## Runs
 
@@ -150,7 +150,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `~/.arch-os/cache/news.xml` | The feed as last loaded, for offline |
 | `~/.local/share/applications/system-manager.desktop` | The app menu entry, opening the window |
 | `~/.local/share/icons/hicolor/scalable/apps/system-manager.svg` | Its icon, the Arch OS logo |
-| `~/.config/systemd/user/system-manager-notify.{service,timer}` | The update notification, hourly |
+| `~/.config/systemd/user/system-manager-notify.{service,timer}` | The update notification, as often as `notify` says |
 | `~/.local/share/gnome-shell/extensions/arch-update@RaphaelRochet/` | The update indicator, when installed |
 
 `SM_HOME` puts all of it elsewhere, for a throwaway run.
@@ -161,14 +161,15 @@ Asked once per session, before the first run that elevates, and proven with `sud
 |---|---|---|
 | `language` | `en`, `de` | from `LC_ALL`, `LC_MESSAGES`, `LANG` |
 | `theme` | a theme id | `nord` |
+| `usage` | `true`, `false` | `true` |
 | `aur-helper` | `paru`, `yay`, `none` | paru, else yay |
 | `app-menu` | `true`, `false` | `true` |
-| `notify` | `true`, `false` | `true` |
+| `notify` | `hourly`, `daily`, `weekly`, `off` | `hourly` |
 | `hidden-log` | messages hidden from the system log | none |
 
 A file that does not parse is left alone and named under **Settings › About**; the defaults apply until a setting is changed.
 
-Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now; an installer calls `init` to have both before the first start. Both need a desktop, the notification also libnotify; until they are there, the settings wait. Where the update indicator is installed, they also point its commands at the binary.
+Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now; an installer calls `init` to have both before the first start, from its chroot as the user. Both need a desktop, the notification also libnotify; until they are there, the settings wait. The timer announces two minutes after login and then as often as chosen. Where the update indicator is installed, they also point its commands at the binary; where no session bus answers, as in a chroot, through a private one of `dbus-run-session`, which dconf writes to the user's database all the same.
 
 A hidden message is stored with its numbers, hex values and hashes as `#`, so it stays hidden when only those change. It hides only messages equal to it apart from these.
 
@@ -190,15 +191,15 @@ colors:
 | Slot | Used for |
 |---|---|
 | `background` | Everything behind |
-| `surface` | The track of a progress bar and of a scrollbar |
-| `muted` | Hints, secondary values, disabled rows, the open dots of a ring |
+| `surface` | The track of a bar and of a scrollbar, the row under the cursor |
+| `muted` | Hints, secondary values, disabled rows |
 | `text` | Labels and text |
 | `accent` | Cursor, title, progress, pending updates |
 | `success`, `warning`, `error` | States |
 
 The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background at WCAG AA: 4.5 for `text`, 3 for `accent` and the states; a test holds them to it.
 
-A file in `~/.arch-os/themes/` with the id of a built-in replaces it; one that does not parse is skipped and named under **Settings › About**. The Linux console gets its own sixteen colours and ASCII glyphs.
+A file in `~/.arch-os/themes/` with the id of a built-in replaces it; one that does not parse is skipped and named under **Settings › About**. The Linux console, told by `TERM=linux`, gets its own sixteen colours, the row under the cursor on plain blue, as only the eight plain colours work behind text there, and ASCII in place of every glyph: no icons and no column for them, `#` for the logo, `>` for the cursor, `*` for a dot, `+` for a mark, the keys named in words in the footer.
 
 ## Icons
 
@@ -222,11 +223,11 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 
 On the start page, **f** searches every page and setting, and **r** reads every value anew once the last reading is done.
 
-Actions stay under what they are about, so ↑↓ always reaches them; what does not fit above them scrolls with **⇞⇟** and the wheel. A bar in the right margin shows where a list or a text stands. In a terminal the wheel needs the mouse, so text is selected with shift held.
+Actions stay under what they are about, so ↑↓ always reaches them; what does not fit above them scrolls with **⇞⇟** and the wheel, while a page's head, such as an entry's time and source, stays. A bar in the right margin shows where a list or a text stands. In a terminal the wheel needs the mouse, so text is selected with shift held.
 
 Held down, a key repeats only to move or to type; everything else happens once per press. A terminal sends a held key as presses, so the same key again within 150 ms counts as held.
 
-The start screen stands three seconds while the first values load, and again on **r**; any other key skips it.
+The start screen stands three seconds while the first values load, and again on **r**; any other key skips it. It is drawn before anything is read: the reading, the take-over of the old manager and the icon font begin with its first frame, which processes started earlier would hold back.
 
 ## Command Line
 
@@ -254,7 +255,7 @@ It runs as the user and asks for the sudo password itself; as root it only answe
 | `pacman-tool` | `pacman-contrib` | The list of updates, the clean-up, the configuration updates |
 | `pacman-tool` | `reflector` | Ranking the mirrors |
 
-A package counts when its command answers, as `probe` in `scripts/features/script.yaml` names it under its kind. The page lists each as `kind/package`, sorted by kind, then by package. One that `needs` a fact is offered only where it holds:
+A package counts when its command answers, as `probe` in `scripts/features/script.yaml` names it under its kind. The page lists them under their kind, sorted by kind, then by package. One that `needs` a fact is offered only where it holds:
 
 | Fact | Holds when | Needed by |
 |---|---|---|
@@ -272,6 +273,8 @@ A package counts when its command answers, as `probe` in `scripts/features/scrip
 Removal is `pacman -Rns`; of an AUR helper, whichever package owns its command, such as `paru-bin`. The indicator is disabled and uninstalled with its settings; one from a package goes with that package.
 
 ## Clean-Up and the Recovery
+
+The page lists every part with its count and size, also where there is nothing, with what is good to know right under it; sizes below a KiB are spelled out in bytes.
 
 The cache keeps three versions of every installed package and none of what is gone, as `paccache -r` and `paccache -ruk0` choose. On top, every kernel package a snapshot in `/.snapshots` has installed stays, whatever its age: the Recovery of Arch OS rebuilds a rolled back snapshot's boot files from it. A cache it cannot judge, because `/.snapshots` is unreadable, is not trimmed. Unneeded packages go with `pacman -Rns`, AUR build folders of packages no longer installed are removed, and Flatpak drops unused runtimes.
 
@@ -301,7 +304,7 @@ Tests run on Arch, as the CI does: the scripts against stand-ins for pacman, sud
 | Then | Now |
 |---|---|
 | `arch-os` with gum and kitty downloaded | One binary, terminal or window |
-| 22 settings in a text editor | Six settings, the rest decided |
+| 22 settings in a text editor | Seven settings, the rest decided |
 | `--install` patching `/etc/paru.conf` | No system file patched; optional packages installed and removed in place |
 | Cache emptied with `-Scc` | Trimmed, the Recovery's kernels kept |
 | Own reflector call and country setting | `reflector.service` with Arch OS's configuration |
@@ -314,7 +317,7 @@ The AUR package `arch-os-manager` turns into this one with an update. The first 
 
 | Left by the old manager | Becomes |
 |---|---|
-| `AUTOSTART_NOTIFY=false` | `notify: false` |
+| `AUTOSTART_NOTIFY=false` | `notify: off` |
 | `AUR_SUPPORT=false`, `AUR_MANGER_REPO=yay…` | `aur-helper: none`, `yay` |
 | `~/.arch-os/bin`, `config/`, `database/`, its autostart entry | Removed |
 | `arch-os.desktop` in the GNOME dock | `system-manager.desktop` |

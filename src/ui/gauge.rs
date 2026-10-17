@@ -1,121 +1,91 @@
-//! An instrument: a ring of dots as full as a share, the share in percent inside it.
-
-use std::f64::consts::TAU;
+//! What the machine uses, on one row: per resource an icon, its name, a bar as full as its share
+//! and the share in percent.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use super::draw::{cut, put, width};
-use super::{Ctx, Tone};
+use super::draw::{bar, put, width};
+use super::{Ctx, Tone, icon};
 
-pub const HEIGHT: u16 = 6;
+/// The bar to the rest of its block, icon to value: 8 to 13, the golden ratio in whole cells.
+const BAR: u16 = 8;
+/// An icon and the space after it, as in the menu.
+const ICON: u16 = 3;
+/// The widest name.
+const NAME: u16 = 4;
+/// The widest value, `100%`.
+const VALUE: u16 = 4;
+/// Between blocks: twice the space after an icon, so a block reads as one.
+const GAP: u16 = 4;
 
-/// A tenth each. Not a multiple of four, so no dot falls on the circle's middle line, which runs
-/// between the two rows of text.
-const DOTS: usize = 10;
-const _: () = assert!(DOTS % 4 == 2);
-
-/// The cell aspects a test holds the ring round and even for.
-const ASPECTS: (f64, f64) = (1.8, 2.8);
-
-/// The braille point of a column and a row in its cell, as U+2800 counts them.
-const BRAILLE: [[u8; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
-
-/// A braille point, two across and four down a cell: its column and its row.
-type Point = (i32, i32);
-
-/// The ring for cells `aspect` times as high as wide, on braille points: the dots evenly round a
-/// circle, clockwise from the top, each on the point nearest to it. Its axis is a column of
-/// points, the only place a single dot at the top can stand, and its middle the line between
-/// the rows of text.
-pub struct Ring {
-    points: [Point; DOTS],
-    pub width: u16,
+/// What a block shows, in cells.
+#[derive(Debug)]
+struct Block {
+    icon: bool,
+    name: bool,
+    /// None where 0.
+    bar: u16,
+    /// What the value stands in, at its right.
+    value: u16,
+    /// From one block's start to the next.
+    step: u16,
 }
 
-impl Ring {
-    pub fn new(aspect: f32) -> Ring {
-        let a = f64::from(aspect).clamp(ASPECTS.0, ASPECTS.1);
-        let middle = f64::from(HEIGHT) * a / 2.0;
-        // The top dot in the first row of points.
-        let radius = middle - a / 8.0;
-        let half = radius.ceil() as i32;
-        let axis = 2 * half;
-        // A quarter, mirrored into the others, so the ring stays symmetric whatever rounds.
-        let quarter: [Point; DOTS / 4 + 1] = std::array::from_fn(|m| {
-            let t = TAU * m as f64 / DOTS as f64;
-            let x = (f64::from(axis) + 0.5) / 2.0 + radius * t.sin();
-            let y = middle - radius * t.cos();
-            (
-                (x * 2.0 - 0.5).round() as i32,
-                (y * 4.0 / a - 0.5).round() as i32,
-            )
-        });
-        let rows = 4 * i32::from(HEIGHT);
-        let points = std::array::from_fn(|k| {
-            let right = k <= DOTS / 2;
-            let k = if right { k } else { DOTS - k };
-            let (j, i) = match k <= DOTS / 4 {
-                true => quarter[k],
-                false => {
-                    let (j, i) = quarter[DOTS / 2 - k];
-                    (j, rows - 1 - i)
-                }
-            };
-            (if right { j } else { 2 * axis - j }, i)
-        });
-        Ring {
-            points,
-            width: (2 * half + 1) as u16,
-        }
-    }
-
-    /// Where the axis stands, in cells from the left edge.
-    fn axis(&self) -> f64 {
-        f64::from(self.width / 2) + 0.25
-    }
-
-    /// The cell of a dot, and its point among the cell's braille points.
-    fn cell(&self, k: usize) -> (u16, u16, u8) {
-        let (j, i) = self.points[k];
-        let bit = BRAILLE[(j % 2) as usize][(i % 4) as usize];
-        ((j / 2) as u16, (i / 4) as u16, bit)
-    }
-
-    /// The columns free on a row between its dots, a cell clear of them on each side.
-    fn inside(&self, row: u16) -> u16 {
-        let cols = || {
-            (0..DOTS)
-                .map(|k| self.cell(k))
-                .filter(|c| c.1 == row)
-                .map(|c| c.0)
+impl Block {
+    fn width(&self) -> u16 {
+        let bar = match self.bar {
+            0 => 0,
+            b => b + 1,
         };
-        match (cols().min(), cols().max()) {
-            (Some(left), Some(right)) => right.saturating_sub(left + 3),
-            _ => self.width,
-        }
+        ICON * u16::from(self.icon) + (NAME + 1) * u16::from(self.name) + bar + self.value
     }
 }
 
-/// What an instrument shows: how full, and that in percent.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Reading {
+/// The fullest three blocks that fit `width` with gaps of at least `GAP`, the first at its left
+/// edge and the last at its right. The bar says what the value says and goes first, then the name
+/// where an icon says it. A cell an odd width leaves over comes off the bar, or without one goes
+/// to the value, so both gaps stay equal.
+fn layout(width: u16, icons: bool) -> Option<Block> {
+    [(true, BAR), (true, 0), (false, 0)]
+        .into_iter()
+        .filter(|&(name, _)| name || icons)
+        .find_map(|(name, bar)| {
+            let mut block = Block {
+                icon: icons,
+                name,
+                bar,
+                value: VALUE,
+                step: 0,
+            };
+            if width.checked_sub(3 * block.width())? % 2 == 1 {
+                match bar {
+                    0 => block.value += 1,
+                    _ => block.bar -= 1,
+                }
+            }
+            let gap = width.checked_sub(3 * block.width())? / 2;
+            block.step = block.width() + gap;
+            (gap >= GAP).then_some(block)
+        })
+}
+
+/// What a block shows: how full, and that in percent.
+struct Reading {
     share: Option<f64>,
     value: String,
 }
 
 impl Reading {
     /// Before the first reading.
-    pub fn waiting(ctx: &Ctx) -> Reading {
+    fn waiting(ctx: &Ctx) -> Reading {
         Reading {
             share: None,
             value: ctx.style.glyphs.ellipsis.into(),
         }
     }
 
-    /// In whole percent, without a space, so two digits stand exactly in the middle; `?` where
-    /// unknown.
-    pub fn of(share: Option<f64>) -> Reading {
+    /// In whole percent; `?` where unknown.
+    fn of(share: Option<f64>) -> Reading {
         let share = share.map(|s| s.clamp(0.0, 1.0));
         Reading {
             share,
@@ -138,61 +108,43 @@ fn tone(share: f64) -> Tone {
     }
 }
 
-/// The ring at the top of `cell`, in its middle: the dots as full as the share lit in its state
-/// and bold, which the window draws larger, the rest muted, which every theme sets apart from its
-/// background; the percent and the name under it in its middle.
-pub fn ring(buf: &mut Buffer, cell: Rect, name: &str, reading: &Reading, ctx: &Ctx) {
+/// The usage on the top row of `area`: bar and value in the state of the share, the value bold,
+/// icon and name muted. False where it does not fit.
+pub fn draw(buf: &mut Buffer, area: Rect, ctx: &Ctx) -> bool {
     let s = &ctx.style;
-    let ring = Ring::new(ctx.aspect);
-    let x = cell.x + cell.width.saturating_sub(ring.width) / 2;
-    let full = reading
-        .share
-        .map_or(0, |share| (share * DOTS as f64).round() as usize);
-    for k in 0..DOTS {
-        let style = match k < full {
-            true => s.bold(reading.tone()),
-            false => s.tone(Tone::Muted),
-        };
-        let (col, row, bit) = ring.cell(k);
-        let glyph = char::from_u32(0x2800 + u32::from(bit)).map(String::from);
-        put(
-            buf,
-            x + col,
-            cell.y + row,
-            &glyph.unwrap_or_default(),
-            1,
-            style,
-        );
-    }
-    let lines = [
-        (reading.value.as_str(), s.bold(Tone::Normal)),
-        (name, s.tone(Tone::Muted)),
+    let Some(block) = layout(area.width, s.glyphs.icons) else {
+        return false;
+    };
+    let readings = match ctx.usage {
+        Some(u) => [u.cpu, u.memory, u.disk].map(Reading::of),
+        None => std::array::from_fn(|_| Reading::waiting(ctx)),
+    };
+    let names = [
+        (icon::CPU, "CPU"),
+        (icon::MEMORY, "RAM"),
+        (icon::DISK, "Disk"),
     ];
-    for (row, (text, style)) in (HEIGHT / 2 - 1..).zip(lines) {
-        let room = ring.inside(row);
-        let text = cut(text, room.into(), s.glyphs.ellipsis);
-        let left = (ring.axis() - width(&text) as f64 / 2.0).round() as u16;
-        put(buf, x + left, cell.y + row, &text, room, style);
+    for (i, ((glyph, name), reading)) in (0..).zip(names.iter().zip(&readings)) {
+        let tone = reading.tone();
+        let mut x = area.x + i * block.step;
+        if block.icon {
+            put(buf, x, area.y, glyph, 1, s.tone(Tone::Muted));
+            x += ICON;
+        }
+        if block.name {
+            put(buf, x, area.y, name, NAME, s.tone(Tone::Muted));
+            x += NAME + 1;
+        }
+        if block.bar > 0 {
+            let share = Some(reading.share.unwrap_or(0.0));
+            bar(buf, x, area.y, block.bar, share, tone, ctx);
+            x += block.bar + 1;
+        }
+        let used = width(&reading.value) as u16;
+        let x = x + block.value.saturating_sub(used);
+        put(buf, x, area.y, &reading.value, block.value, s.bold(tone));
     }
-}
-
-/// The name and the value on the top row of `cell`, in its middle, the value in the state of
-/// its share.
-pub fn line(buf: &mut Buffer, cell: Rect, name: &str, reading: &Reading, ctx: &Ctx) {
-    let s = &ctx.style;
-    let room = usize::from(cell.width).saturating_sub(width(name) + 2);
-    let value = cut(&reading.value, room, s.glyphs.ellipsis);
-    let used = (width(name) + 1 + width(&value)) as u16;
-    let x = cell.x + cell.width.saturating_sub(used) / 2;
-    let x = put(buf, x, cell.y, name, cell.width, s.tone(Tone::Muted));
-    put(
-        buf,
-        x + 1,
-        cell.y,
-        &value,
-        cell.right() - x - 1,
-        s.bold(reading.tone()),
-    );
+    true
 }
 
 #[cfg(test)]
@@ -209,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn the_ring_turns_from_success_to_warning_to_error() {
+    fn a_share_turns_from_success_to_warning_to_error() {
         assert_eq!(tone(0.0), Tone::Ok);
         assert_eq!(tone(0.749), Tone::Ok);
         assert_eq!(tone(0.75), Tone::Warn);
@@ -218,44 +170,26 @@ mod tests {
     }
 
     #[test]
-    fn the_ring_is_round_even_and_symmetric_with_one_dot_at_top_and_bottom() {
-        let mut a = ASPECTS.0;
-        while a <= ASPECTS.1 {
-            let ring = Ring::new(a as f32);
-            let (cx, cy) = (ring.axis(), f64::from(HEIGHT) * a / 2.0);
-            let polar: Vec<(f64, f64)> = ring
-                .points
-                .iter()
-                .map(|&(j, i)| {
-                    let (x, y) = ((f64::from(j) + 0.5) / 2.0, (f64::from(i) + 0.5) / 4.0 * a);
-                    let angle = (x - cx).atan2(cy - y).to_degrees().rem_euclid(360.0);
-                    ((x - cx).hypot(y - cy), angle)
-                })
-                .collect();
-            // Round and even to within a braille point, the grid's finest step.
-            let (near, far) = polar
-                .iter()
-                .fold((f64::MAX, 0.0_f64), |(n, f), (r, _)| (n.min(*r), f.max(*r)));
-            assert!(far - near < 0.5, "round at {a}: {near}..{far}");
-            for k in 0..DOTS {
-                let gap = (polar[(k + 1) % DOTS].1 - polar[k].1).rem_euclid(360.0);
-                assert!((gap - 36.0).abs() < 3.0, "even at {a}: dot {k} {gap}");
+    fn three_blocks_span_the_width_with_equal_gaps() {
+        for icons in [true, false] {
+            for w in 0..=120 {
+                let Some(block) = layout(w, icons) else {
+                    continue;
+                };
+                assert_eq!(2 * block.step + block.width(), w, "{w} {block:?}");
+                assert!(block.step - block.width() >= GAP, "{w} {block:?}");
+                assert!(
+                    block.icon == icons && (block.name || icons),
+                    "{w} {block:?}"
+                );
             }
-            let top = ring.points[0];
-            assert_eq!(f64::from(top.0) / 2.0 + 0.25, cx, "on the axis: {a}");
-            assert!(
-                ring.points[1..].iter().all(|p| p.1 > top.1),
-                "alone at the top: {a}"
-            );
-            // A cell has one colour, so it belongs to one dot.
-            let mut taken = std::collections::BTreeSet::new();
-            for k in 0..DOTS {
-                let (col, row, _) = ring.cell(k);
-                assert!(col < ring.width && row < HEIGHT, "inside: {a}");
-                assert!(taken.insert((col, row)), "dot {k} shares a cell: {a}");
-            }
-            assert!(ring.inside(HEIGHT / 2 - 1) >= 4 && ring.inside(HEIGHT / 2) >= 4);
-            a += 0.05;
         }
+        let bar = |w, icons| layout(w, icons).map(|b| (b.name, b.bar));
+        assert_eq!(bar(71, true), Some((true, BAR)), "the golden ratio");
+        assert_eq!(bar(72, true), Some((true, BAR - 1)), "a cell less");
+        assert_eq!(bar(56, true), Some((true, 0)));
+        assert_eq!(bar(36, true), Some((false, 0)), "40 columns");
+        assert_eq!(bar(56, false), Some((true, 0)), "a name without an icon");
+        assert_eq!(bar(20, true), None);
     }
 }

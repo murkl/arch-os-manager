@@ -59,6 +59,9 @@ impl Sandbox {
             )
             .env("SM_EVENTS", &events)
             .env("SM_AUR", "")
+            // A session answers, unless a test takes it away.
+            .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/sandbox")
+            .env_remove("XDG_RUNTIME_DIR")
             .env("HOME", &self.dir)
             .env("XDG_CONFIG_HOME", self.dir.join("config"))
             .env("XDG_CACHE_HOME", self.dir.join("cache"))
@@ -359,6 +362,48 @@ fn the_update_indicator_checks_and_updates_through_the_program() {
 }
 
 #[test]
+fn without_a_session_the_indicator_is_set_up_on_a_private_bus() {
+    let s = Sandbox::new("bus");
+    s.stub("systemctl", "exit 1");
+    s.stub("gsettings", GSETTINGS);
+    s.stub("dbus-run-session", r#"shift; exec "$@""#);
+    indicator_installed(&s);
+    let data = s.dir.join("data");
+    let session = [("XDG_DATA_HOME", data.to_str().unwrap())];
+    let o = s.run(
+        "desktop",
+        &["apply", "/opt/sm", "off", "off", "on"],
+        &session,
+    );
+    assert!(
+        o.code == 0 && !o.calls.contains("dbus-run-session"),
+        "{}",
+        o.calls
+    );
+    let chroot = [
+        ("XDG_DATA_HOME", data.to_str().unwrap()),
+        ("DBUS_SESSION_BUS_ADDRESS", ""),
+    ];
+    let o = s.run(
+        "desktop",
+        &["apply", "/opt/sm", "off", "off", "on"],
+        &chroot,
+    );
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls
+            .contains("dbus-run-session -- gsettings --schemadir"),
+        "{}",
+        o.calls
+    );
+    let stored = std::fs::read_to_string(s.dir.join("gsettings")).unwrap();
+    assert!(
+        stored.contains("check-cmd\t'\"/opt/sm\" check'\n"),
+        "{stored}"
+    );
+}
+
+#[test]
 fn the_update_indicator_comes_from_extensions_gnome_org_and_goes_again() {
     let s = Sandbox::new("extension");
     s.stub("gnome-shell", "echo 'GNOME Shell 51.1'");
@@ -429,7 +474,7 @@ fn the_menu_entry_and_the_timer_follow_on_and_off() {
                 "apply",
                 "/opt/sm with space/system-manager",
                 "on",
-                "on",
+                "hourly",
                 "off"
             ],
             &env
@@ -451,15 +496,36 @@ fn the_menu_entry_and_the_timer_follow_on_and_off() {
         service.contains("ExecStart=\"/opt/sm with space/system-manager\" notify --new\n"),
         "{service}"
     );
+    let timer = config.join("system-manager-notify.timer");
+    assert!(
+        std::fs::read_to_string(&timer)
+            .unwrap()
+            .contains("\nOnUnitActiveSec=1h\n")
+    );
     let wants = config.join("timers.target.wants/system-manager-notify.timer");
     assert_eq!(
         std::fs::read_link(&wants).unwrap(),
         std::path::Path::new("../system-manager-notify.timer")
     );
     assert!(
-        !s.run("desktop", &["apply", "/x", "on", "on", "off"], &env)
+        !s.run("desktop", &["apply", "/x", "on", "hourly", "off"], &env)
             .calls
             .contains("systemctl --user start")
+    );
+    assert_eq!(
+        s.run("desktop", &["apply", "/x", "on", "weekly", "off"], &env)
+            .code,
+        0
+    );
+    assert!(
+        std::fs::read_to_string(&timer)
+            .unwrap()
+            .contains("\nOnUnitActiveSec=1w\n")
+    );
+    assert_eq!(
+        s.run("desktop", &["apply", "/x", "on", "often", "off"], &env)
+            .code,
+        2
     );
 
     assert_eq!(

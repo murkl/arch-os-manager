@@ -22,6 +22,7 @@ pub enum Target {
     Settings,
     Language,
     Theme,
+    Usage,
     AurHelper,
     Notifications,
     Desktop,
@@ -47,6 +48,7 @@ pub const HOME: &[&[Target]] = &[
 pub const SETTINGS: &[Target] = &[
     Target::Language,
     Target::Theme,
+    Target::Usage,
     Target::AurHelper,
     Target::Notifications,
     Target::Desktop,
@@ -70,6 +72,7 @@ pub const ALL: &[Target] = &[
     Target::Settings,
     Target::Language,
     Target::Theme,
+    Target::Usage,
     Target::AurHelper,
     Target::Notifications,
     Target::Desktop,
@@ -96,6 +99,7 @@ impl Target {
             Target::Settings => "settings",
             Target::Language => "language",
             Target::Theme => "theme",
+            Target::Usage => "usage",
             Target::AurHelper => "aur-helper",
             Target::Notifications => "notifications",
             Target::Desktop => "desktop",
@@ -125,6 +129,7 @@ impl Target {
             Target::Settings => t("Settings"),
             Target::Language => t("Language"),
             Target::Theme => t("Theme"),
+            Target::Usage => t("System usage"),
             Target::AurHelper => t("AUR helper"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
@@ -151,6 +156,7 @@ impl Target {
             Target::Settings => icon::SETTINGS,
             Target::Language => icon::LANGUAGE,
             Target::Theme => icon::THEME,
+            Target::Usage => icon::USAGE,
             Target::AurHelper => icon::ARCH,
             Target::Notifications => icon::NOTIFICATION,
             Target::Desktop => icon::APP_MENU,
@@ -207,13 +213,13 @@ impl Target {
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
             Target::Hidden => Box::new(pages::log::HiddenPage::new()),
-            Target::Language | Target::Theme | Target::AurHelper => {
+            Target::Language | Target::Theme | Target::AurHelper | Target::Notifications => {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),
                 ];
             }
-            Target::Notifications | Target::Desktop => {
+            Target::Usage | Target::Desktop => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };

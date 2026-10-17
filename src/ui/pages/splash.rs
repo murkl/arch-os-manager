@@ -13,12 +13,17 @@ use crate::ui::{Ctx, Flow, Key, Page, Tone};
 
 const NAME: &str = "System Manager";
 
-/// When each part starts and how long the whole lasts, in milliseconds.
+const GOLDEN: f64 = 1.618;
+
+/// How long each part takes, in milliseconds: a line of the logo begins every `LINE`, the name
+/// is typed a letter every `LETTER` once the last line has begun, and the whole lasts `END`.
 const LINE: u64 = 70;
 const FADE: u64 = 260;
-const TYPE_AT: u64 = 560;
 const LETTER: u64 = 28;
 pub(crate) const END: u64 = 3000;
+
+/// Rows between the logo and the name.
+const GAP: u16 = 1;
 
 pub struct SplashPage {
     started: Instant,
@@ -71,8 +76,11 @@ impl Page for SplashPage {
         let s = &ctx.style;
         let at = self.at();
         let logo = s.logo();
-        let height = logo.len() as u16 + 4;
-        let top = area.y + area.height.saturating_sub(height) / 2;
+        let rows = logo.len() as u16;
+        // The logo, the gap, the name and the version as one block; the rows left split in the
+        // golden ratio, the smaller part above, where the eye puts the middle.
+        let free = f64::from(area.height.saturating_sub(rows + GAP + 2));
+        let top = area.y + (free * (1.0 - 1.0 / GOLDEN)).round() as u16;
         let logo_width = logo[0].chars().count() as u16;
         let x = area.x + area.width.saturating_sub(logo_width) / 2;
         for (i, line) in logo.iter().enumerate() {
@@ -85,27 +93,28 @@ impl Page for SplashPage {
             let color = mix(s.background, target, (at - begin) as f64 / FADE as f64);
             put(buf, x, top + i as u16, line, logo_width, s.base().fg(color));
         }
-        if at >= TYPE_AT {
-            let letters = (((at - TYPE_AT) / LETTER) as usize + 1).min(NAME.len());
+        let type_at = u64::from(rows) * LINE;
+        if at >= type_at {
+            let letters = (((at - type_at) / LETTER) as usize + 1).min(NAME.len());
             let shown = &NAME[..letters];
             let nx = area.x + area.width.saturating_sub(NAME.len() as u16) / 2;
             put(
                 buf,
                 nx,
-                top + logo.len() as u16 + 2,
+                top + rows + GAP,
                 shown,
                 area.width,
                 s.bold(Tone::Accent),
             );
             if letters == NAME.len() {
-                let since = at - TYPE_AT - (NAME.len() as u64 - 1) * LETTER;
+                let since = at - type_at - (NAME.len() as u64 - 1) * LETTER;
                 let version = crate::version::version();
                 let vx = area.x + area.width.saturating_sub(version.len() as u16) / 2;
                 let color = mix(s.background, s.muted, since as f64 / FADE as f64);
                 put(
                     buf,
                     vx,
-                    top + logo.len() as u16 + 3,
+                    top + rows + GAP + 1,
                     version,
                     area.width,
                     s.base().fg(color),

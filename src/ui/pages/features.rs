@@ -22,6 +22,18 @@ fn status(s: &Status) -> (String, Tone) {
     }
 }
 
+fn kind_icon(kind: &str) -> &'static str {
+    match kind {
+        "aur-helper" => icon::ARCH,
+        "firmware-updater" => icon::FIRMWARE,
+        EXTENSION => icon::OPTIONAL,
+        "merge-tool" => icon::PACNEW,
+        "notifier" => icon::NOTIFICATION,
+        "package-manager" => icon::APP,
+        _ => icon::TOOLS,
+    }
+}
+
 pub struct FeaturesPage {
     list: List,
     focus: Option<String>,
@@ -45,20 +57,28 @@ impl Page for FeaturesPage {
         let Some(features) = loaded(&ctx.shared.features, area, buf, ctx) else {
             return;
         };
-        let rows = features
-            .list
-            .iter()
-            .map(|(package, s)| {
-                let (text, tone) = status(s);
-                let kind = features::package(package).map(|(kind, _)| format!("{kind}/"));
-                let row =
-                    Row::new(package.clone(), package.clone()).prefix(kind.unwrap_or_default());
+        // Under its kind, each with the package icon; the kind with one of its own.
+        let mut rows = Vec::new();
+        let mut last = None;
+        for (package, s) in &features.list {
+            let kind = features::package(package).map_or("", |(kind, _)| kind);
+            if last != Some(kind) {
+                let heading = match ctx.style.glyphs.icons {
+                    true => format!("{}  {kind}", kind_icon(kind)),
+                    false => kind.to_string(),
+                };
+                rows.push(Row::heading(heading));
+                last = Some(kind);
+            }
+            let (text, tone) = status(s);
+            let row = Row::new(package.clone(), package.clone()).icon(icon::PACKAGE, Tone::Normal);
+            rows.push(
                 match features.unmet(package).filter(|_| *s == Status::Missing) {
-                    Some(why) => row.detail(t(why), Tone::Muted).dot(Tone::Muted).dim(true),
-                    None => row.detail(text, tone).dot(tone),
-                }
-            })
-            .collect();
+                    Some(why) => row.detail(t(why), Tone::Muted).dim(true),
+                    None => row.detail(text, tone),
+                },
+            );
+        }
         self.list.set(rows);
         if let Some(p) = self.focus.take() {
             self.list.focus(&p);
@@ -207,9 +227,8 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     #[test]
-    fn names_each_package_after_its_kind_and_cuts_the_kind_first() {
+    fn lists_each_package_under_its_kind() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::De);
         let (mut app, _) = app();
         app.ctx.shared.features = Loaded::Ready(Features::parse(
             "paru\tok\t2.1.0-1\narch-update\tmissing\n@gnome\tok\n",
@@ -217,8 +236,13 @@ mod tests {
         let mut term = Terminal::new(TestBackend::new(40, 16)).unwrap();
         crate::ui::app::tests::open(&mut app, Box::new(FeaturesPage::new(None)));
         let shown = screen(&mut app, &mut term);
-        crate::i18n::set(crate::i18n::Lang::En);
-        assert!(shown.contains("aur-helper/paru"), "{shown}");
-        assert!(shown.contains("…on/arch-update"), "{shown}");
+        let lines: Vec<&str> = shown.lines().collect();
+        let heading = lines
+            .iter()
+            .position(|l| l.ends_with("aur-helper"))
+            .expect(&shown);
+        assert!(lines[heading + 1].contains("paru") && lines[heading + 1].ends_with("2.1.0-1"));
+        let extension = lines.iter().position(|l| l.ends_with(EXTENSION)).unwrap();
+        assert!(lines[extension + 1].contains("arch-update"), "{shown}");
     }
 }

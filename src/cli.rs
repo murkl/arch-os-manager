@@ -12,27 +12,54 @@ use crate::settings::Settings;
 use crate::state::State;
 use crate::ui::Target;
 
-/// The ways to call it, for the help and the about page.
-pub const USAGE: [&str; 2] = [
-    "system-manager [--window] [PAGE]",
-    "system-manager init | check | notify [--new]",
+/// The pages the command line opens on.
+pub const PAGES: [&str; 12] = [
+    "upgrade", "news", "packages", "services", "log", "cleanup", "pacnew", "mirrors", "firmware",
+    "repair", "settings", "features",
 ];
 
-// Starts on the line of the quote: an escaped line break would swallow the indent after it.
-const OPTIONS: &str = "  --window   open in a window of its own; the default without a terminal
-  init       put the app menu entry and the update notification in place
-             as the settings say, for an installer; every start does it too
-  check      print pending updates as checkupdates does; exit 2 if none
-  notify     announce pending updates on the desktop
-  --new      only those not announced before, as the timer runs it
-  --version  print the version
-
-Pages: upgrade, news, packages, services, log, cleanup, pacnew, mirrors,
-firmware, repair, settings, features
-";
+/// The command line in two groups, each row an argument and what it does; the help and the
+/// about page show them.
+pub fn commands() -> [(&'static str, Vec<(&'static str, String)>); 2] {
+    let s = |text: &str| text.to_string();
+    [
+        (
+            t("Interface"),
+            vec![
+                ("system-manager", s("[--window] [<page>]")),
+                ("<page>", PAGES.join(", ")),
+            ],
+        ),
+        (
+            t("Commands"),
+            vec![
+                (
+                    "init",
+                    s(t("Puts the menu entry and the notification in place")),
+                ),
+                (
+                    "check",
+                    s(t("Prints pending updates (exit code 2 without any)")),
+                ),
+                (
+                    "notify [--new]",
+                    s(t("Announces pending updates, with --new only new ones")),
+                ),
+            ],
+        ),
+    ]
+}
 
 fn help() -> String {
-    format!("Usage: {}\n       {}\n\n{OPTIONS}", USAGE[0], USAGE[1])
+    let mut help = String::new();
+    for (title, rows) in commands() {
+        help += &format!("{title}\n");
+        for (arg, what) in rows {
+            help += &format!("  {arg:<16} {what}\n");
+        }
+        help += "\n";
+    }
+    help
 }
 
 pub fn main() -> ExitCode {
@@ -81,12 +108,11 @@ pub fn main() -> ExitCode {
         crate::version::version(),
         std::env::args().skip(1).collect::<Vec<_>>()
     );
-    // What only reports leaves the old manager alone.
-    if !matches!(command.as_deref(), Some("check" | "notify")) {
-        crate::migrate::run();
-    }
     let code = match command.as_deref() {
-        Some("init") => init(),
+        Some("init") => {
+            crate::migrate::run();
+            init()
+        }
         Some("check") => check(),
         Some("notify") => notify(only_new),
         _ => {
@@ -140,7 +166,7 @@ fn init() -> ExitCode {
             println!(
                 "app menu entry: {}\nupdate notification: {}\nupdate indicator: {}",
                 on(a.entry),
-                on(a.timer),
+                a.timer,
                 on(a.indicator)
             );
             ExitCode::SUCCESS
@@ -256,17 +282,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_help_lines_up_every_description() {
+    fn the_help_lines_up_every_description_under_its_group() {
         let help = help();
-        let options: Vec<&str> = help.lines().skip(3).take_while(|l| !l.is_empty()).collect();
-        assert!(options.len() > 5, "{help}");
-        for line in options {
-            let (name, text) = line.split_at(13);
-            assert!(
-                name.starts_with("  ") && name.ends_with(' ') && !text.starts_with(' '),
-                "{line:?}"
-            );
+        let rows: Vec<&str> = help.lines().filter(|l| l.starts_with("  ")).collect();
+        assert!(rows.len() == 5, "{help}");
+        for line in rows {
+            let (name, text) = line.split_at(19);
+            assert!(name.ends_with(' ') && !text.starts_with(' '), "{line:?}");
         }
+        assert!(help.starts_with("Interface\n  system-manager   [--window] [<page>]\n"));
+        assert!(!help.contains("--version"));
     }
 
     #[test]

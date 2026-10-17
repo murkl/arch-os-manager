@@ -41,8 +41,8 @@ indicator() {
     dir="$(arch_update_dir)"
     while IFS=$'\t' read -r key value; do
         value="'${value//\'/\\\'}'"
-        gsettings --schemadir "${dir}/schemas" set org.gnome.shell.extensions.arch-update "$key" "$value"
-        if [ "$(gsettings --schemadir "${dir}/schemas" get org.gnome.shell.extensions.arch-update "$key")" != "$value" ]; then
+        on_bus gsettings --schemadir "${dir}/schemas" set org.gnome.shell.extensions.arch-update "$key" "$value"
+        if [ "$(on_bus gsettings --schemadir "${dir}/schemas" get org.gnome.shell.extensions.arch-update "$key")" != "$value" ]; then
             exit 13
         fi
     done <<COMMANDS
@@ -52,13 +52,20 @@ package-manager	"${1}" --window
 COMMANDS
 }
 
-# The program, then on or off for the app menu entry, for the timer that
-# announces updates and for the update indicator, which is set up only where it
-# is installed. All follow the program wherever it lies.
+# The program, then on or off for the app menu entry, how often the timer
+# announces updates or off, and on or off for the update indicator, which is
+# set up only where it is installed. All follow the program wherever it lies.
 op_apply() {
-    local program="$1" changed=""
+    local program="$1" every
     case "$program" in
     *[\"\\\`\$%]*) exit 10 ;;
+    esac
+    case "$3" in
+    hourly) every=1h ;;
+    daily) every=1d ;;
+    weekly) every=1w ;;
+    off) every="" ;;
+    *) exit 2 ;;
     esac
 
     if [ "$2" = on ]; then
@@ -77,7 +84,8 @@ ENTRY
         rm -f "$entry" "$icon"
     fi
 
-    if [ "$3" = on ]; then
+    if [ -n "$every" ]; then
+        changed=""
         changed+="$(put "$service" <<UNIT
 [Unit]
 Description=Announce system updates
@@ -93,7 +101,7 @@ Description=Announce system updates
 
 [Timer]
 OnStartupSec=2min
-OnUnitActiveSec=1h
+OnUnitActiveSec=${every}
 
 [Install]
 WantedBy=timers.target
@@ -140,7 +148,7 @@ op_extension_install() {
     trap 'rm -rf "$work"' EXIT
     fetch "https://extensions.gnome.org${url}" >"${work}/extension.zip" || exit 11
     gnome-extensions install --force "${work}/extension.zip"
-    gnome-extensions enable "$ARCH_UPDATE"
+    on_bus gnome-extensions enable "$ARCH_UPDATE"
 }
 
 # Takes the indicator out of this user's GNOME, with the commands it was given.
@@ -148,8 +156,8 @@ op_extension_remove() {
     local dir
     dir="$(arch_update_dir)" || return 0
     case "$dir" in /usr/*) exit 12 ;; esac
-    gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
-    gnome-extensions disable "$ARCH_UPDATE"
+    on_bus gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
+    on_bus gnome-extensions disable "$ARCH_UPDATE"
     # The running shell unloads it; without one, the folder goes by hand.
     gnome-extensions uninstall "$ARCH_UPDATE" 2>/dev/null || rm -rf -- "$dir"
 }

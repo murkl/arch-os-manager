@@ -142,9 +142,6 @@ pub const FRAME: Duration = Duration::from_millis(16);
 /// The beat of a page where nothing moves.
 const IDLE: Duration = Duration::from_millis(500);
 
-/// A cell twice as high as wide, as most terminal fonts have it, where the terminal does not say.
-pub const ASPECT: f32 = 2.0;
-
 /// The start every animation counts from.
 fn epoch() -> Instant {
     static EPOCH: OnceLock<Instant> = OnceLock::new();
@@ -178,6 +175,8 @@ pub enum Msg {
     Run(PageId, script::Event),
     Fresh(Fresh),
     Usage(Usage),
+    /// What the old manager left, read behind the splash.
+    Legacy(crate::migrate::Legacy),
 }
 
 /// A shared value read anew.
@@ -313,8 +312,6 @@ pub struct Ctx {
     pub style: Style,
     /// The Linux console: sixteen colours and ASCII glyphs.
     pub console: bool,
-    /// How many times a cell is higher than wide, for what is drawn round.
-    pub aspect: f32,
     pub shared: Shared,
     /// What the machine uses, read anew every few seconds; none before the first reading.
     pub usage: Option<Usage>,

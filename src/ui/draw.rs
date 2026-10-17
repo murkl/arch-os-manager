@@ -269,9 +269,18 @@ pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, S
         return;
     };
     let version = crate::version::version();
+    // The pages name their keys in the glyphs of the window; the console gets them as words.
     let keys: Vec<String> = hints
         .iter()
-        .map(|(k, label)| format!("{k} {label}"))
+        .map(|(k, label)| {
+            let key = match *k {
+                "↑↓" => s.glyphs.up_down,
+                "⏎" => s.glyphs.enter,
+                "⇞⇟" => s.glyphs.page_keys,
+                other => other,
+            };
+            format!("{key} {label}")
+        })
         .collect();
     let sep = format!(" {} ", s.glyphs.separator);
     let line = keys.join(&sep);
@@ -291,8 +300,8 @@ pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, S
     }
 }
 
-/// A progress bar; without a fraction a segment travels along it.
-pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, fraction: Option<f64>, ctx: &Ctx) {
+/// A bar filled in `tone`; without a fraction a segment travels along it.
+pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, fraction: Option<f64>, tone: Tone, ctx: &Ctx) {
     let s = &ctx.style;
     put(
         buf,
@@ -320,7 +329,7 @@ pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, fraction: Option<f64>, ctx:
         y,
         &s.glyphs.bar.repeat(len as usize),
         len,
-        s.tone(Tone::Accent),
+        s.tone(tone),
     );
 }
 
@@ -423,6 +432,7 @@ pub fn waiting(
         top + 5,
         w,
         fraction,
+        Tone::Accent,
         ctx,
     );
     top + 6
@@ -477,6 +487,21 @@ mod tests {
     }
 
     #[test]
+    fn the_console_names_the_keys_in_words() {
+        use crate::ui::app::tests::{app, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        let colors = app.ctx.theme().colors;
+        app.ctx.style = crate::ui::Style::new(&colors, true);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("up/down choose | enter open | f search"),
+            "{shown}"
+        );
+        assert!(shown.is_ascii(), "{shown}");
+    }
+
+    #[test]
     fn a_card_and_a_bar_fit_any_area() {
         let (app, _) = crate::ui::app::tests::app();
         for (w, h) in [(0, 0), (1, 1), (2, 2), (3, 1), (1, 3), (10, 4)] {
@@ -488,7 +513,7 @@ mod tests {
                 "{w}x{h}: {inner:?}"
             );
             for fraction in [None, Some(0.5)] {
-                bar(&mut buf, 0, 0, w, fraction, &app.ctx);
+                bar(&mut buf, 0, 0, w, fraction, Tone::Accent, &app.ctx);
             }
         }
     }

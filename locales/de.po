@@ -152,8 +152,6 @@ msgstr ""
 msgid "Cleaning up"
 msgstr "Wird aufgeräumt"
 
-msgid "Command line"
-msgstr "Kommandozeile"
 
 msgid "Comparing the configuration"
 msgstr "Konfiguration wird verglichen"
@@ -1112,3 +1110,58 @@ msgstr "{n} Updates stehen bereit."
 
 msgid "{title} failed"
 msgstr "{title}: fehlgeschlagen"
+
+
+msgid "Article"
+msgstr "Artikel"
+
+
+
+
+
+
+msgid "Puts the menu entry and the notification in place"
+msgstr "Legt den Menüeintrag und die Benachrichtigung an"
+
+
+msgid "{n} byte"
+msgstr "{n} Byte"
+
+msgid "{n} bytes"
+msgstr "{n} Byte"
+
+msgid "System usage"
+msgstr "Systemauslastung"
+
+msgid "every day"
+msgstr "täglich"
+
+msgid "every hour"
+msgstr "stündlich"
+
+msgid "every week"
+msgstr "wöchentlich"
+
+msgid "{n} package"
+msgstr "{n} Paket"
+
+msgid "{n} packages"
+msgstr "{n} Pakete"
+
+msgid "{n} build"
+msgstr "{n} Build"
+
+msgid "{n} builds"
+msgstr "{n} Builds"
+
+msgid "Interface"
+msgstr "Oberfläche"
+
+msgid "Commands"
+msgstr "Befehle"
+
+msgid "Prints pending updates (exit code 2 without any)"
+msgstr "Gibt ausstehende Updates aus (Exit-Code 2 ohne welche)"
+
+msgid "Announces pending updates, with --new only new ones"
+msgstr "Meldet ausstehende Updates, mit --new nur neue"

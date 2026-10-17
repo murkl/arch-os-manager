@@ -54,7 +54,7 @@ impl Input {
         let after = put(buf, x, y, &prompt, w, s.bold(Tone::Accent));
         let room = w.saturating_sub(after - x + 1) as usize;
         if self.text.is_empty() {
-            put(buf, after, y, "▏", 1, s.tone(Tone::Accent));
+            put(buf, after, y, s.glyphs.caret, 1, s.tone(Tone::Accent));
             put(
                 buf,
                 after + 1,
@@ -66,14 +66,14 @@ impl Input {
             return;
         }
         let shown = if self.masked {
-            "•".repeat(self.text.chars().count())
+            s.glyphs.mask.repeat(self.text.chars().count())
         } else {
             self.text.clone()
         };
         let shown = cut_front(&shown, room, s.glyphs.ellipsis);
         let end = put(buf, after, y, &shown, room as u16, s.tone(Tone::Normal));
         if width(&shown) < room + 1 {
-            put(buf, end, y, "▏", 1, s.tone(Tone::Accent));
+            put(buf, end, y, s.glyphs.caret, 1, s.tone(Tone::Accent));
         }
     }
 }

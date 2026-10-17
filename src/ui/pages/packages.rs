@@ -38,9 +38,11 @@ pub struct PackagesPage {
 
 impl PackagesPage {
     pub fn new() -> PackagesPage {
+        let mut list = List::default();
+        list.markable = true;
         PackagesPage {
             input: Input::new(t("Search packages")),
-            list: List::default(),
+            list,
             results: None,
             due: None,
         }

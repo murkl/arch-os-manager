@@ -43,9 +43,6 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
         }
     });
     let mut app = App::new(tx, Arc::new(|| {}), console, start);
-    if let Some(aspect) = aspect() {
-        app.ctx.aspect = aspect;
-    }
     let mut terminal = ratatui::init();
     mouse(true);
     let restore = std::panic::take_hook();
@@ -54,8 +51,13 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
         restore(info);
     }));
     let result = (|| {
+        let mut started = false;
         loop {
             terminal.draw(|f| app.draw(f))?;
+            if !started {
+                app.start();
+                started = true;
+            }
             let drawn = Instant::now();
             let wake = app.wake(drawn);
             match rx.recv_timeout(wake.saturating_duration_since(drawn)) {
@@ -98,15 +100,6 @@ fn mouse(capture: bool) {
     if let Err(e) = done {
         crate::warn!("mouse capture {capture}: {e}");
     }
-}
-
-/// How many times a cell is higher than wide, where the terminal says its size in pixels.
-fn aspect() -> Option<f32> {
-    let s = ratatui::crossterm::terminal::window_size().ok()?;
-    let cell = |pixels: u16, cells: u16| {
-        (pixels > 0 && cells > 0).then(|| f32::from(pixels) / f32::from(cells))
-    };
-    Some(cell(s.height, s.rows)? / cell(s.width, s.columns)?)
 }
 
 /// Faster than a hand presses a key twice, slower than a keyboard repeats it.

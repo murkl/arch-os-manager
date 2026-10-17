@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 
 use crate::data::{ago, format_size, journal};
 use crate::i18n::{t, tf, tn};
-use crate::ui::gauge::{self, Reading};
+use crate::ui::gauge;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{ALL, HOME, Target};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
@@ -63,36 +63,16 @@ impl HomePage {
     }
 }
 
-/// What the machine uses, over the menu and a row clear of it, each in the middle of its third:
-/// as rings where the font has braille and all of the menu fits under them, else as a line. They say less than the menu,
-/// so without room for either they stand nowhere. Returns the area left for the menu.
+/// What the machine uses, unless switched off, on the first row and a row clear of the menu, only
+/// where all of the menu still fits under it, which says more. Returns the area left for the menu.
 fn instruments(area: Rect, menu: usize, buf: &mut Buffer, ctx: &Ctx) -> Rect {
-    let fits = |height: u16| usize::from(area.height) > menu + usize::from(height);
-    let ring = gauge::Ring::new(ctx.aspect).width;
-    let rings = ctx.style.glyphs.braille && area.width >= 3 * (ring + 2) && fits(gauge::HEIGHT);
-    let height = match (rings, fits(1)) {
-        (true, _) => gauge::HEIGHT,
-        (false, true) => 1,
-        (false, false) => return area,
-    };
-    let readings = match ctx.usage {
-        Some(u) => [u.cpu, u.memory, u.disk].map(Reading::of),
-        None => std::array::from_fn(|_| Reading::waiting(ctx)),
-    };
-    let third = area.width / 3;
-    for (i, (name, reading)) in (0..).zip(["CPU", "RAM", "Disk"].iter().zip(&readings)) {
-        let cell = Rect::new(area.x + i * third, area.y, third, height);
-        match rings {
-            true => gauge::ring(buf, cell, name, reading, ctx),
-            false => gauge::line(buf, cell, name, reading, ctx),
-        }
+    if !ctx.settings.usage.unwrap_or(true)
+        || usize::from(area.height) <= menu + 1
+        || !gauge::draw(buf, area, ctx)
+    {
+        return area;
     }
-    Rect::new(
-        area.x,
-        area.y + height + 1,
-        area.width,
-        area.height - height - 1,
-    )
+    Rect::new(area.x, area.y + 2, area.width, area.height - 2)
 }
 
 fn visible(target: Target, ctx: &Ctx) -> bool {
@@ -103,9 +83,10 @@ fn count<T>(
     value: &Loaded<Vec<T>>,
     some: impl Fn(usize) -> (String, Tone),
     none: (String, Tone),
+    ctx: &Ctx,
 ) -> (String, Tone, bool) {
     match value {
-        Loaded::Loading => ("…".into(), Tone::Muted, false),
+        Loaded::Loading => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
         Loaded::Ready(v) if v.is_empty() => (none.0, none.1, false),
         Loaded::Ready(v) => {
             let (text, tone) = some(v.len());
@@ -125,6 +106,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
             &s.updates,
             |n| (tn("{n} update", "{n} updates", n, &[]), Tone::Accent),
             (t("up to date").into(), Tone::Ok),
+            ctx,
         ),
         Target::Reboot => (t("required").into(), Tone::Warn, false),
         Target::News => match &s.news {
@@ -137,30 +119,27 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
                     (n, _) => (tf("{n} unread", &[("n", &n)]), Tone::Warn, false),
                 }
             }
-            Loaded::Loading => ("…".into(), Tone::Muted, false),
+            Loaded::Loading => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
             _ => (t("offline").into(), Tone::Muted, false),
         },
-        Target::Packages => count(&s.installed, |n| (n.to_string(), Tone::Muted), nothing),
+        Target::Packages => count(&s.installed, |n| (n.to_string(), Tone::Muted), nothing, ctx),
         Target::Services => match &s.services {
             Loaded::Ready(all) => match all.iter().filter(|x| x.failed()).count() {
                 0 => (all.len().to_string(), Tone::Muted, false),
                 n => (tf("{n} failed", &[("n", &n)]), Tone::Error, false),
             },
-            other => count(other, |_| nothing.clone(), nothing.clone()),
+            other => count(other, |_| nothing.clone(), nothing.clone(), ctx),
         },
         Target::Log => match &s.journal {
             Loaded::Ready(all) => match journal::visible(all, &ctx.settings.hidden_log).count() {
                 0 => (String::new(), Tone::Muted, false),
                 n => (tn("{n} error", "{n} errors", n, &[]), Tone::Warn, false),
             },
-            other => count(other, |_| nothing.clone(), nothing.clone()),
+            other => count(other, |_| nothing.clone(), nothing.clone(), ctx),
         },
         Target::Cleanup => match &s.cleanup {
-            Loaded::Ready(plan) if plan.bytes() > 0 => {
-                (format_size(plan.bytes()), Tone::Muted, false)
-            }
-            Loaded::Ready(_) => (String::new(), Tone::Muted, false),
-            Loaded::Loading => ("…".into(), Tone::Muted, false),
+            Loaded::Ready(plan) => (format_size(plan.bytes()), Tone::Muted, false),
+            Loaded::Loading => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
             Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
             Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
         },
@@ -168,6 +147,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
             &s.pacnew,
             |n| (tf("{n} open", &[("n", &n)]), Tone::Warn),
             (t("up to date").into(), Tone::Ok),
+            ctx,
         ),
         Target::Mirrors => match s.mirrors.ready().and_then(|m| m.changed) {
             Some(changed) => (ago(changed), Tone::Muted, false),
@@ -177,6 +157,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
             &s.firmware,
             |n| (tn("{n} update", "{n} updates", n, &[]), Tone::Accent),
             (t("up to date").into(), Tone::Ok),
+            ctx,
         ),
         _ => (String::new(), Tone::Muted, false),
     }
@@ -289,83 +270,92 @@ mod tests {
     }
 
     #[test]
-    fn the_usage_stands_over_the_menu_as_rings_or_a_line_where_all_of_it_fits() {
+    fn the_usage_stands_under_the_header_with_as_much_as_fits() {
         use crate::data::usage::Usage;
         use crate::ui::app::tests::screen;
+        use crate::ui::icon;
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = crate::ui::app::tests::app();
         app.ctx.usage = Some(Usage {
             cpu: Some(0.23),
             memory: Some(0.387),
-            disk: Some(0.95),
+            disk: Some(1.0),
         });
-        let shown = screen(&mut app, &mut term);
-        assert!(
-            ["23%", "39%", "95%", "Settings"]
-                .iter()
-                .all(|v| shown.contains(v)),
-            "{shown}"
-        );
-        let style = app.ctx.style;
         type Term = ratatui::Terminal<ratatui::backend::TestBackend>;
-        let braille = |c: &ratatui::buffer::Cell| {
-            let ch = c.symbol().chars().next()? as u32;
-            (0x2801..=0x28ff)
-                .contains(&ch)
-                .then(|| (ch - 0x2800).count_ones())
+        let row = |term: &Term, y| -> String {
+            let buf = term.backend().buffer();
+            (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect()
         };
-        // Braille points, and cells of anything else, in a colour.
-        let points = |term: &Term, fg| -> u32 {
+        // The bar's cells in a colour.
+        let lit = |term: &Term, fg| {
             let buf = term.backend().buffer();
             buf.content()
                 .iter()
-                .filter(|c| c.fg == fg)
-                .filter_map(braille)
-                .sum()
-        };
-        let cells = |term: &Term, fg| {
-            let buf = term.backend().buffer();
-            buf.content()
-                .iter()
-                .filter(|c| c.fg == fg && braille(c).is_none())
+                .filter(|c| c.fg == fg && c.symbol() == app.ctx.style.glyphs.bar)
                 .count()
         };
-        assert_eq!(
-            (points(&term, style.success), points(&term, style.error)),
-            (2 + 4, 10)
-        );
-        assert_eq!(
-            points(&term, style.muted),
-            (10 - 2) + (10 - 4),
-            "the open dots stand apart from the background"
-        );
-
-        let mut small = ratatui::Terminal::new(ratatui::backend::TestBackend::new(47, 25)).unwrap();
-        let shown = screen(&mut app, &mut small);
+        let style = app.ctx.style;
+        let shown = screen(&mut app, &mut term);
+        let usage = row(&term, 4);
         assert!(
-            ["CPU 23%", "RAM 39%", "Disk 95%", "Settings"]
-                .iter()
-                .all(|v| shown.contains(v)),
+            [
+                icon::CPU,
+                "CPU",
+                "23%",
+                icon::MEMORY,
+                "39%",
+                icon::DISK,
+                "Disk",
+                "100%"
+            ]
+            .iter()
+            .all(|v| usage.contains(v)),
             "{shown}"
         );
-        assert_eq!(points(&small, style.muted), 0, "{shown}");
+        assert!(
+            usage.trim_end().ends_with("100%") && row(&term, 6).contains("Update"),
+            "at the right edge, a row clear of the menu: {shown}"
+        );
         assert_eq!(
-            (cells(&small, style.success), cells(&small, style.error)),
-            ("23%".len() + "39%".len(), "95%".len())
+            (lit(&term, style.success), lit(&term, style.error)),
+            (2 + 3, 7),
+            "{shown}"
+        );
+        let buf = term.backend().buffer();
+        assert!(
+            buf.content()
+                .iter()
+                .filter(|c| [icon::CPU, icon::MEMORY, icon::DISK].contains(&c.symbol()))
+                .all(|c| c.fg == style.muted),
+            "the icons stay calm whatever the state: {shown}"
+        );
+
+        let mut narrow = Term::new(ratatui::backend::TestBackend::new(60, 30)).unwrap();
+        let shown = screen(&mut app, &mut narrow);
+        let usage = row(&narrow, 4);
+        assert!(usage.contains("RAM") && usage.contains("39%"), "{shown}");
+        assert_eq!(lit(&narrow, style.success), 0, "{shown}");
+
+        let mut small = Term::new(ratatui::backend::TestBackend::new(40, 30)).unwrap();
+        let shown = screen(&mut app, &mut small);
+        let usage = row(&small, 4);
+        assert!(
+            usage.contains(icon::MEMORY) && usage.contains("39%") && !usage.contains("RAM"),
+            "{shown}"
         );
 
         let colors = app.ctx.theme().colors;
         app.ctx.style = crate::ui::Style::new(&colors, true);
         let shown = screen(&mut app, &mut term);
+        let usage = row(&term, 4);
         assert!(
-            shown.contains("CPU 23%"),
-            "the console has no braille: {shown}"
+            usage.contains("CPU") && !usage.contains(icon::CPU),
+            "the console has no icons: {shown}"
         );
         app.ctx.style = style;
 
-        let mut smaller =
-            ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 22)).unwrap();
-        let shown = screen(&mut app, &mut smaller);
+        let mut short = Term::new(ratatui::backend::TestBackend::new(80, 22)).unwrap();
+        let shown = screen(&mut app, &mut short);
         assert!(
             !shown.contains("CPU") && shown.contains("Settings"),
             "{shown}"

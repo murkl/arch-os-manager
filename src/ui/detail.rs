@@ -78,6 +78,8 @@ impl Act {
 #[derive(Default)]
 pub struct Detail {
     pub body: Vec<Block>,
+    /// The leading blocks that stay while the rest scrolls.
+    pinned: usize,
     acts: Vec<Act>,
     list: List,
     scroll: usize,
@@ -108,6 +110,11 @@ impl Detail {
             .collect();
         self.list.set(rows);
         self.acts = acts;
+    }
+
+    /// Keeps the first `blocks` at the top while the rest scrolls.
+    pub fn pin(&mut self, blocks: usize) {
+        self.pinned = blocks;
     }
 
     /// Puts the cursor on an action, by its position.
@@ -175,11 +182,22 @@ impl Detail {
             self.acts.len() as u16 + 1
         };
         let body_height = area.height.saturating_sub(acts_height) as usize;
-        let lines = render(&self.body, area.width as usize, ctx);
-        self.page = body_height.saturating_sub(1);
-        self.scroll = self.scroll.min(lines.len().saturating_sub(body_height));
-        self.overflow = lines.len() > body_height;
-        for (n, line) in lines.iter().skip(self.scroll).take(body_height).enumerate() {
+        let pinned = self.pinned.min(self.body.len());
+        let head = render(&self.body[..pinned], area.width as usize, ctx);
+        let lines = render(&self.body[pinned..], area.width as usize, ctx);
+        let head_height = head.len().min(body_height);
+        let rest_height = body_height - head_height;
+        self.page = rest_height.saturating_sub(1);
+        self.scroll = self.scroll.min(lines.len().saturating_sub(rest_height));
+        self.overflow = lines.len() > rest_height;
+        let column = head
+            .iter()
+            .chain(&lines)
+            .any(|l| matches!(l, Line::Row(lead, ..) if lead.shows(s)));
+        let shown = head
+            .iter()
+            .chain(lines.iter().skip(self.scroll).take(rest_height));
+        for (n, line) in shown.enumerate() {
             let y = area.y + n as u16;
             match line {
                 Line::Spans(spans) => {
@@ -198,16 +216,21 @@ impl Detail {
                         buf,
                         area,
                         y,
-                        *lead,
-                        ("", label, s.tone(*tone)),
+                        (*lead, column),
+                        (label, s.tone(*tone)),
                         &pieces,
                         ctx,
                     )
                 }
             }
         }
-        let body = Rect::new(area.x, area.y, area.width, body_height as u16);
-        scrollbar(buf, body, lines.len(), self.scroll, ctx);
+        let rest = Rect::new(
+            area.x,
+            area.y + head_height as u16,
+            area.width,
+            rest_height as u16,
+        );
+        scrollbar(buf, rest, lines.len(), self.scroll, ctx);
         if !self.acts.is_empty() {
             let rows = (self.acts.len() as u16).min(area.height);
             self.list.draw(
@@ -410,6 +433,31 @@ mod tests {
             d.hints(),
             [("esc", "back".to_string())],
             "nothing to scroll"
+        );
+    }
+
+    #[test]
+    fn a_pinned_head_stays_while_the_rest_scrolls() {
+        let (mut app, _) = crate::ui::app::tests::app();
+        let mut d = Detail::default();
+        let mut body = vec![
+            Block::Field("Time".into(), "12:00".into(), Tone::Normal),
+            Block::Blank,
+        ];
+        body.extend((0..30).map(|i| Block::Text(format!("line {i}"), Tone::Normal)));
+        d.set(body, Vec::new());
+        d.pin(2);
+        let area = Rect::new(0, 0, 30, 8);
+        d.key(Key::PageDown, &mut app.ctx);
+        let rows = drawn(&mut d, area, &app.ctx);
+        assert!(
+            rows[0].contains("12:00") && rows[1].trim().is_empty(),
+            "{rows:#?}"
+        );
+        assert!(!rows[2].contains("line 0"), "scrolled: {rows:#?}");
+        assert!(
+            rows[1].ends_with(' ') && rows[2].ends_with('┃'),
+            "the bar spans the rest: {rows:#?}"
         );
     }
 

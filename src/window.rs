@@ -7,6 +7,7 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::Instant;
 
 use fontdue::{Font, FontSettings, Metrics};
@@ -34,6 +35,7 @@ const MARGIN: f64 = 24.0;
 const EDGE: f64 = 6.0;
 
 pub fn run(start: Option<Target>) -> io::Result<()> {
+    let faces = Faces::new();
     let event_loop = EventLoop::<()>::with_user_event()
         .build()
         .map_err(|e| io::Error::other(format!("no display: {e}")))?;
@@ -47,7 +49,7 @@ pub fn run(start: Option<Target>) -> io::Result<()> {
         false,
         start,
     );
-    let mut win = Win::new(app, rx);
+    let mut win = Win::new(app, rx, faces);
     event_loop.run_app(&mut win).map_err(io::Error::other)?;
     win.error.map_or(Ok(()), Err)
 }
@@ -108,10 +110,74 @@ impl Backend for Grid {
     }
 }
 
+/// A face parsed on a thread of its own, taken over when first drawn with.
+struct Face {
+    bytes: &'static [u8],
+    parsing: Option<JoinHandle<Font>>,
+    font: Option<Font>,
+}
+
+impl Face {
+    fn new(bytes: &'static [u8]) -> Face {
+        Face {
+            bytes,
+            parsing: None,
+            font: None,
+        }
+    }
+
+    fn start(&mut self) {
+        if self.parsing.is_none() && self.font.is_none() {
+            let bytes = self.bytes;
+            // A cell holds one glyph, so no ligature is ever drawn.
+            let settings = FontSettings {
+                load_substitutions: false,
+                ..FontSettings::default()
+            };
+            self.parsing = Some(std::thread::spawn(move || {
+                Font::from_bytes(bytes, settings).expect("embedded font")
+            }));
+        }
+    }
+
+    fn get(&mut self) -> &Font {
+        self.start();
+        if let Some(parsing) = self.parsing.take() {
+            self.font = Some(parsing.join().expect("the font thread"));
+        }
+        self.font.as_ref().expect("parsed")
+    }
+}
+
+/// Fira Code parses from the first moment of the start, for the first frame; the icons, which
+/// the splash has none of, from `start`, so they hold no frame back.
+struct Faces {
+    regular: Face,
+    bold: Face,
+    symbols: Face,
+}
+
+impl Faces {
+    fn new() -> Faces {
+        let mut faces = Faces {
+            regular: Face::new(REGULAR),
+            bold: Face::new(BOLD),
+            symbols: Face::new(SYMBOLS),
+        };
+        faces.regular.start();
+        faces.bold.start();
+        faces
+    }
+
+    fn start(&mut self) {
+        self.symbols.start();
+    }
+}
+
+/// The faces and the cells they are drawn in, which `rescale` sets with the window, so the
+/// start never waits for a face before there is one.
 struct Fonts {
-    regular: Font,
-    bold: Font,
-    symbols: Font,
+    faces: Faces,
     px: f32,
     cell: (u32, u32),
     baseline: f32,
@@ -119,38 +185,40 @@ struct Fonts {
 }
 
 impl Fonts {
-    fn new(scale: f64) -> Fonts {
-        let load = |bytes| Font::from_bytes(bytes, FontSettings::default()).expect("embedded font");
-        let (regular, bold, symbols) = (load(REGULAR), load(BOLD), load(SYMBOLS));
+    fn new(faces: Faces) -> Fonts {
+        Fonts {
+            faces,
+            px: 0.0,
+            cell: (1, 1),
+            baseline: 0.0,
+            cache: HashMap::new(),
+        }
+    }
+
+    /// The cells for this scale.
+    fn rescale(&mut self, scale: f64) {
         let px = (FONT as f64 * scale) as f32;
+        let regular = self.faces.regular.get();
         let width = regular.metrics('M', px).advance_width.round().max(1.0) as u32;
         let line = regular
             .horizontal_line_metrics(px)
             .expect("horizontal metrics");
         let glyph_height = line.ascent - line.descent;
         let height = (glyph_height * 1.25).round().max(1.0) as u32;
-        let baseline = (height as f32 - glyph_height) / 2.0 + line.ascent;
-        Fonts {
-            regular,
-            bold,
-            symbols,
-            px,
-            cell: (width, height),
-            baseline,
-            cache: HashMap::new(),
-        }
-    }
-
-    /// How many times a cell is higher than wide.
-    fn aspect(&self) -> f32 {
-        self.cell.1 as f32 / self.cell.0 as f32
+        self.px = px;
+        self.cell = (width, height);
+        self.baseline = (height as f32 - glyph_height) / 2.0 + line.ascent;
+        self.cache.clear();
     }
 
     fn glyph(&mut self, c: char, bold: bool) -> &(Metrics, Vec<u8>) {
-        let (regular, heavy, symbols, px) = (&self.regular, &self.bold, &self.symbols, self.px);
-        let cell_width = self.cell.0 as f32;
+        let (faces, px, cell_width) = (&mut self.faces, self.px, self.cell.0 as f32);
         self.cache.entry((c, bold)).or_insert_with(|| {
-            if regular.lookup_glyph_index(c) == 0 && symbols.lookup_glyph_index(c) != 0 {
+            let regular = faces.regular.get();
+            let icon = regular.lookup_glyph_index(c) == 0
+                && faces.symbols.get().lookup_glyph_index(c) != 0;
+            if icon {
+                let symbols = faces.symbols.get();
                 // An icon has two cells before its label; one wider is scaled down to them.
                 let wide = symbols.metrics(c, px).width as f32;
                 let fit = if wide > 2.0 * cell_width {
@@ -160,7 +228,7 @@ impl Fonts {
                 };
                 symbols.rasterize(c, fit)
             } else if bold {
-                heavy.rasterize(c, px)
+                faces.bold.get().rasterize(c, px)
             } else {
                 regular.rasterize(c, px)
             }
@@ -180,16 +248,12 @@ struct Win {
     /// When the next tick is due.
     wake: Instant,
     error: Option<io::Error>,
+    /// The first frame is on the screen and the reading has begun.
+    started: bool,
 }
 
 impl Win {
-    /// The fonts for this scale, and the cells' shape the interface draws round for.
-    fn rescale(&mut self, scale: f64) {
-        self.fonts = Fonts::new(scale);
-        self.app.ctx.aspect = self.fonts.aspect();
-    }
-
-    fn new(app: App, rx: Receiver<Msg>) -> Win {
+    fn new(app: App, rx: Receiver<Msg>, faces: Faces) -> Win {
         let terminal = Terminal::new(Grid {
             buffer: Buffer::empty(Rect::new(0, 0, 80, 24)),
             changed: true,
@@ -201,11 +265,12 @@ impl Win {
             window: None,
             surface: None,
             terminal,
-            fonts: Fonts::new(1.0),
+            fonts: Fonts::new(faces),
             modifiers: ModifiersState::empty(),
             pointer: PhysicalPosition::new(0.0, 0.0),
             wake: Instant::now(),
             error: None,
+            started: false,
         }
     }
 
@@ -258,7 +323,13 @@ impl Win {
         self.terminal.backend_mut().changed = false;
         // Lets winit hold the next redraw for the compositor's frame on Wayland.
         window.pre_present_notify();
-        pixels.present().map_err(|e| e.to_string())
+        pixels.present().map_err(|e| e.to_string())?;
+        if !self.started {
+            self.app.start();
+            self.fonts.faces.start();
+            self.started = true;
+        }
+        Ok(())
     }
 
     /// The edge the pointer is on, for resizing a window without decorations.
@@ -349,7 +420,7 @@ impl ApplicationHandler<()> for Win {
             });
         match created {
             Ok((w, surface)) => {
-                self.rescale(w.scale_factor());
+                self.fonts.rescale(w.scale_factor());
                 self.window = Some(w);
                 self.surface = Some(surface);
             }
@@ -394,7 +465,7 @@ impl ApplicationHandler<()> for Win {
                 }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.rescale(scale_factor);
+                self.fonts.rescale(scale_factor);
                 self.handle(Msg::Resize, event_loop);
                 if let Some(w) = &self.window {
                     w.request_redraw();
@@ -507,22 +578,32 @@ fn paint(
         width,
         height,
     };
+    let colors = |cell: &ratatui::buffer::Cell| {
+        let (fg, bg) = (rgb(cell.fg, text), rgb(cell.bg, background));
+        match cell.modifier.contains(Modifier::REVERSED) {
+            true => (bg, fg),
+            false => (fg, bg),
+        }
+    };
+    // Every background first: an icon reaches into the cell after it, which must not cover it.
+    for y in 0..grid.area.height {
+        for x in 0..grid.area.width {
+            let (_, bg) = colors(&grid[(x, y)]);
+            if bg != background {
+                canvas.fill(ox + x as u32 * cw, oy + y as u32 * ch, cw, ch, bg);
+            }
+        }
+    }
     for y in 0..grid.area.height {
         for x in 0..grid.area.width {
             let cell = &grid[(x, y)];
-            let (mut fg, mut bg) = (rgb(cell.fg, text), rgb(cell.bg, background));
-            if cell.modifier.contains(Modifier::REVERSED) {
-                std::mem::swap(&mut fg, &mut bg);
-            }
+            let (fg, bg) = colors(cell);
             let (px, py) = (ox + x as u32 * cw, oy + y as u32 * ch);
-            if bg != background {
-                canvas.fill(px, py, cw, ch, bg);
-            }
             let Some(c) = cell.symbol().chars().next().filter(|c| *c != ' ') else {
                 continue;
             };
             let bold = cell.modifier.contains(Modifier::BOLD);
-            if !canvas.drawn(c, (px, py, cw, ch), (fg, bg), bold, scale) {
+            if !canvas.drawn(c, (px, py, cw, ch), (fg, bg), scale) {
                 let baseline = fonts.baseline;
                 let (m, coverage) = fonts.glyph(c, bold);
                 let gx = px as i32 + m.xmin;
@@ -591,7 +672,6 @@ impl Canvas<'_> {
         c: char,
         (x, y, w, h): (u32, u32, u32, u32),
         (fg, bg): (u32, u32),
-        bold: bool,
         scale: f64,
     ) -> bool {
         let thin = scale.round().max(1.0) as u32;
@@ -604,10 +684,9 @@ impl Canvas<'_> {
             '▏' => self.fill(x, y + h / 8, thin.max(w / 8), h - h / 4, fg),
             '█' => self.fill(x, y, w, h, fg),
             '\u{2800}'..='\u{28ff}' => {
-                // Round points, two across and four down; bold ones a cell wide, so a ring's lit
-                // dots stand out from its open ones.
+                // Round points, two across and four down.
                 let bits = c as u32 - 0x2800;
-                let r = w as f32 * if bold { 0.5 } else { 0.3 };
+                let r = w as f32 * 0.3;
                 let points = [
                     (0, 0),
                     (0, 1),
@@ -739,8 +818,8 @@ pub mod tests {
 
     /// Writes what a page looks like in the window, as PNG, from the same painter.
     pub fn png(app: &mut App, width: u32, height: u32, scale: f64, path: &std::path::Path) {
-        let mut fonts = Fonts::new(scale);
-        app.ctx.aspect = fonts.aspect();
+        let mut fonts = Fonts::new(Faces::new());
+        fonts.rescale(scale);
         let (_, _, area) = layout(width, height, &fonts, scale);
         let mut term = Terminal::new(Grid {
             buffer: Buffer::empty(area),
@@ -775,7 +854,8 @@ pub mod tests {
 
     #[test]
     fn the_grid_fills_the_window_inside_the_margin() {
-        let fonts = Fonts::new(1.0);
+        let mut fonts = Fonts::new(Faces::new());
+        fonts.rescale(1.0);
         assert!(fonts.cell.0 >= 7 && fonts.cell.1 > fonts.cell.0);
     }
 }

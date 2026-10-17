@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style as Cell;
 
-use super::draw::{cut, cut_front, put, width};
+use super::draw::{cut, put, width};
 use super::input::Input;
 use super::{Ctx, Key, Nav, Tone};
 use crate::i18n::t;
@@ -22,13 +22,24 @@ pub enum Lead {
     Dot(Tone),
     /// An item of running text.
     Bullet,
+    /// A marked row.
+    Mark,
+}
+
+impl Lead {
+    /// Whether anything is drawn for it: an icon only where the font has icons.
+    pub fn shows(self, s: &super::Style) -> bool {
+        match self {
+            Lead::None => false,
+            Lead::Icon(..) => s.glyphs.icons,
+            Lead::Dot(_) | Lead::Bullet | Lead::Mark => true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
     pub id: String,
-    /// Muted before the label, such as the kind of a package.
-    pub prefix: String,
     pub label: String,
     /// Right-aligned: a count, a state, a version.
     pub detail: String,
@@ -43,7 +54,6 @@ impl Row {
     pub fn new(id: impl Into<String>, label: impl Into<String>) -> Row {
         Row {
             id: id.into(),
-            prefix: String::new(),
             label: label.into(),
             detail: String::new(),
             tone: Tone::Muted,
@@ -58,11 +68,6 @@ impl Row {
             heading: true,
             ..Row::new("", label)
         }
-    }
-
-    pub fn prefix(mut self, prefix: impl Into<String>) -> Row {
-        self.prefix = prefix.into();
-        self
     }
 
     pub fn detail(mut self, detail: impl Into<String>, tone: Tone) -> Row {
@@ -87,14 +92,14 @@ impl Row {
     }
 }
 
-/// The columns of a row, as a list and a page of facts both draw it: lead, label after its
-/// muted prefix, detail.
+/// The columns of a row, as a list and a page of facts both draw it: the lead where the page
+/// has a column for it, the label, the detail.
 pub fn draw_row(
     buf: &mut Buffer,
     area: Rect,
     y: u16,
-    lead: Lead,
-    (prefix, label, label_style): (&str, &str, Cell),
+    (lead, column): (Lead, bool),
+    (label, label_style): (&str, Cell),
     detail: &[(&str, Cell)],
     ctx: &Ctx,
 ) {
@@ -106,14 +111,15 @@ pub fn draw_row(
         Lead::Dot(Tone::Muted) => (s.glyphs.ring, Tone::Muted),
         Lead::Dot(tone) => (s.glyphs.dot, tone),
         Lead::Bullet => (s.glyphs.bullet, Tone::Accent),
+        Lead::Mark => (s.glyphs.mark, Tone::Accent),
     };
     put(buf, area.x, y, glyph, 1, s.tone(tone));
     // Room for an icon a font draws wider than its cell, as Nerd Fonts without Mono do.
-    let x = area.x + 3;
+    let x = area.x + if column { 3 } else { 0 };
     let room = area.right().saturating_sub(x) as usize;
     // The detail gets what the label leaves, at least half the row, cut at its end across the
     // pieces it is drawn in.
-    let budget = (room / 2).max(room.saturating_sub(width(prefix) + width(label) + 2));
+    let budget = (room / 2).max(room.saturating_sub(width(label) + 2));
     let mut left = budget;
     let mut pieces = Vec::new();
     for (text, style) in detail {
@@ -131,22 +137,8 @@ pub fn draw_row(
     } else {
         detail_width + 2
     });
-    // A prefix says less than the label after it: it gives way first, from its front.
     let name = cut(label, label_room, s.glyphs.ellipsis);
-    let prefix_room = label_room - width(&name);
-    let prefix = match prefix_room {
-        0 => String::new(),
-        room => cut_front(prefix, room, s.glyphs.ellipsis),
-    };
-    let after = put(buf, x, y, &prefix, prefix_room as u16, s.tone(Tone::Muted));
-    put(
-        buf,
-        after,
-        y,
-        &name,
-        (label_room as u16).saturating_sub(after - x),
-        label_style,
-    );
+    put(buf, x, y, &name, label_room as u16, label_style);
     let mut x = area.right() - detail_width as u16;
     for (piece, style) in &pieces {
         x = put(buf, x, y, piece, width(piece) as u16, *style);
@@ -188,6 +180,8 @@ pub struct List {
     pub filter: Option<Input>,
     /// Marked rows by id, where the page allows marking.
     pub marked: BTreeSet<String>,
+    /// The page marks rows, so the column for the mark stays, marked or not.
+    pub markable: bool,
     height: usize,
 }
 
@@ -245,9 +239,7 @@ impl List {
                 let r = &self.rows[i];
                 !r.heading
                     && (query.is_empty()
-                        || format!("{}{}", r.prefix, r.label)
-                            .to_lowercase()
-                            .contains(&query)
+                        || r.label.to_lowercase().contains(&query)
                         || r.detail.to_lowercase().contains(&query))
             })
             .collect()
@@ -374,6 +366,8 @@ impl List {
         self.offset = self.offset.min(lines.len().saturating_sub(height.max(1)));
         let rows = Rect::new(area.x, y, area.width, height as u16);
         super::draw::scrollbar(buf, rows, lines.len(), self.offset, ctx);
+        // A column for the leads only where one shows; the console has no icons.
+        let column = self.markable || self.rows.iter().any(|r| r.lead.shows(s));
         for (n, line) in lines.iter().skip(self.offset).take(height).enumerate() {
             let Some(i) = *line else { continue };
             let row = &self.rows[i];
@@ -401,7 +395,7 @@ impl List {
                 );
             }
             let lead = if self.marked.contains(&row.id) {
-                Lead::Icon(s.glyphs.mark, Tone::Accent)
+                Lead::Mark
             } else {
                 match row.lead {
                     Lead::Icon(icon, _) if current => Lead::Icon(icon, Tone::Accent),
@@ -414,15 +408,29 @@ impl List {
                 (false, true) => s.tone(Tone::Muted),
                 (false, false) => s.tone(Tone::Normal),
             };
+            // Muted reads badly on the selection; the row under the cursor is the one being read.
+            let detail_tone = match (current, row.tone) {
+                (true, Tone::Muted) => Tone::Normal,
+                (_, tone) => tone,
+            };
             draw_row(
                 buf,
                 area,
                 ly,
-                lead,
-                (&row.prefix, &row.label, style),
-                &[(&row.detail, s.tone(row.tone))],
+                (lead, column),
+                (&row.label, style),
+                &[(&row.detail, s.tone(detail_tone))],
                 ctx,
             );
+            if current {
+                // The whole row on the selection, from the cursor in the margin to the right
+                // edge, so the eye finds its value.
+                let from = area.x.saturating_sub(2);
+                buf.set_style(
+                    Rect::new(from, ly, area.right() - from, 1),
+                    Cell::new().bg(s.selection),
+                );
+            }
         }
     }
 }
@@ -503,8 +511,8 @@ mod tests {
                 &mut buf,
                 area,
                 0,
-                Lead::None,
-                ("", label, style),
+                (Lead::None, true),
+                (label, style),
                 &detail,
                 &app.ctx,
             );
@@ -550,16 +558,55 @@ mod tests {
     }
 
     #[test]
-    fn the_filter_reads_the_prefix_with_the_label() {
+    fn the_row_under_the_cursor_lies_on_the_selection_with_its_value_readable() {
+        let (app, _) = crate::ui::app::tests::app();
+        let s = &app.ctx.style;
         let mut l = List::new(vec![
-            Row::new("paru", "paru").prefix("aur-helper/"),
-            Row::new("meld", "meld").prefix("merge-tool/"),
+            Row::new("a", "Packages").detail("1284", Tone::Muted),
+            Row::new("b", "Services").detail("2", Tone::Muted),
         ]);
-        l.key(Key::Char('f'));
-        for c in "helper/p".chars() {
-            l.key(Key::Char(c));
-        }
-        assert_eq!(l.shown(), [0]);
+        let area = Rect::new(2, 0, 30, 2);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 32, 2));
+        l.draw(area, &mut buf, &app.ctx);
+        assert!(
+            (0..32).all(|x| buf[(x, 0)].bg == s.selection),
+            "the whole row, cursor included"
+        );
+        assert!((0..32).all(|x| buf[(x, 1)].bg != s.selection));
+        assert_eq!(
+            buf[(31, 0)].fg,
+            s.text,
+            "muted turns to text on the selection"
+        );
+        assert_eq!(buf[(31, 1)].fg, s.muted);
+    }
+
+    #[test]
+    fn without_icons_the_labels_start_at_the_edge_unless_a_mark_or_dot_needs_the_column() {
+        let (mut app, _) = crate::ui::app::tests::app();
+        let colors = app.ctx.theme().colors;
+        app.ctx.style = crate::ui::Style::new(&colors, true);
+        let line = |y: u16, buf: &Buffer| -> String {
+            (0..20).map(|x| buf[(x, y)].symbol()).collect::<String>()
+        };
+        let area = Rect::new(2, 0, 18, 2);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 20, 2));
+        let mut l = List::new(vec![
+            Row::new("a", "paru").icon("x", Tone::Normal),
+            Row::new("b", "yay").icon("x", Tone::Normal),
+        ]);
+        l.draw(area, &mut buf, &app.ctx);
+        assert_eq!(line(0, &buf), "> paru              ");
+        l.markable = true;
+        l.toggle_mark();
+        let mut buf = Buffer::empty(Rect::new(0, 0, 20, 2));
+        l.draw(area, &mut buf, &app.ctx);
+        assert_eq!(line(0, &buf), "> +  paru           ");
+        assert_eq!(line(1, &buf), "     yay            ");
+        let mut dots = List::new(vec![Row::new("a", "sshd").dot(Tone::Ok)]);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 20, 2));
+        dots.draw(area, &mut buf, &app.ctx);
+        assert_eq!(line(0, &buf), "> *  sshd           ");
     }
 
     #[test]
