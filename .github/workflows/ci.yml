@@ -1,6 +1,6 @@
 # Pull requests are checked. On main, release-please keeps a release pull
-# request open, and merging it tags the version, publishes the release and
-# pushes the AUR package.
+# request open, and merging it tags the version, publishes the release, pushes
+# the AUR package and hangs its binary on the release.
 
 name: CI
 
@@ -63,11 +63,12 @@ jobs:
         id: please
 
   # The AUR files for the tag's source tarball, built once as a user builds
-  # them, then pushed. The key is a secret of the environment aur, which only
-  # main may use; on a failure the release stands, and a rerun of this job
-  # pushes again.
-  aur:
-    name: AUR
+  # them, then pushed, and the binary out of that package put on the release
+  # with its sum. The key is a secret of the environment aur, which only main
+  # may use; on a failure the release stands, and a rerun of this job does it
+  # all again.
+  publish:
+    name: Publish
     needs: release
     if: needs.release.outputs.version != ''
     runs-on: ubuntu-24.04
@@ -75,12 +76,12 @@ jobs:
     container: archlinux:base-devel-20261011.0.609700
     environment: aur
     permissions:
-      contents: read
+      contents: write  # the asset and the notes
     env:
       TAG: ${{ needs.release.outputs.tag }}
       VERSION: ${{ needs.release.outputs.version }}
     steps:
-      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust git openssh
+      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust git openssh github-cli
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -114,3 +115,18 @@ jobs:
           echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' >"${ssh}/known_hosts"
           export GIT_SSH_COMMAND="ssh -i ${ssh}/key -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh}/known_hosts -o StrictHostKeyChecking=yes"
           tools/aur-push.sh aur-files
+
+      # The same binary the package installs, and the sum to check a download
+      # against, as a section the notes get once.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          bin="system-manager-${VERSION}-x86_64"
+          bsdtar -xOf aur-files/arch-os-manager-"${VERSION}"-*-x86_64.pkg.tar.zst usr/bin/system-manager >"$bin"
+          gh release upload "$TAG" "$bin" --clobber
+          notes="$(gh release view "$TAG" --json body --jq .body)"
+          notes="${notes%%$'\n'### Checksum*}"
+          notes="${notes%"${notes##*[![:space:]]}"}"
+          printf '%s\n\n### Checksum\n\n    %s\n' "$notes" "$(sha256sum "$bin")" >notes.md
+          gh release edit "$TAG" --notes-file notes.md
