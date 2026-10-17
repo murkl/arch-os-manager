@@ -484,7 +484,7 @@ pub mod tests {
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {
-            hostname: "zeus".into(),
+            hostname: "tux-notebook".into(),
             kernel: "7.2.8-zen1-1-zen".into(),
             pacman: "7.1.0.r9.g54d9411-1".into(),
             desktop: Some("GNOME 51.1".into()),

@@ -49,11 +49,11 @@ mod tests {
     #[test]
     fn reads_pacman_log_time() {
         let s = System::parse(concat!(
-            "hostname\tzeus\nreboot\tyes\nlast-upgrade\t2026-10-10T22:21:45+0200\n",
+            "hostname\ttux-notebook\nreboot\tyes\nlast-upgrade\t2026-10-10T22:21:45+0200\n",
             "kernel\t7.2.9-zen1-1-zen\nbooted\t1792130400\npacman\t7.1.0.r9.g54d9411-1\n",
             "desktop\tGNOME 51.1\nsession\twayland\n"
         ));
-        assert_eq!(s.hostname, "zeus");
+        assert_eq!(s.hostname, "tux-notebook");
         assert!(s.reboot);
         assert_eq!(s.last_upgrade.unwrap().to_string(), "2026-10-10T20:21:45Z");
         assert_eq!(s.kernel, "7.2.9-zen1-1-zen");

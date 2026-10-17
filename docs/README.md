@@ -49,4 +49,6 @@ system-manager
 
 The first start adds the **System Manager** to the app menu. From there it runs in a window of its own.
 
-<p align="center"><img src="screenshots/update.png" width="100%" alt="The update page: the news to read first, then what the update brings"><br><sub><b>Update</b> · Repositories, AUR and Flatpak in one run</sub></p>
+<p align="center"><img src="screenshots/home.png" width="100%" alt="The home page: CPU, memory and disk in use, then every task with its state"><br><sub><b>Home</b> · the system at a glance, every task with its state</sub></p>
+
+<p align="center"><img src="screenshots/update.png" width="100%" alt="The update page: the news to read first, then what the update brings"><br><sub><b>Update</b> · the news first, then every update with its versions</sub></p>
