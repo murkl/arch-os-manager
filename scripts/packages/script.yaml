@@ -1,0 +1,34 @@
+ops:
+  installed:
+    title: Listing the installed packages
+  search:
+    title: Searching the repositories
+  aur-search:
+    title: Asking the AUR
+  aur-info:
+    title: Asking the AUR
+  info:
+    title: Reading the package details
+  versions:
+    title: Listing the package versions
+  pkgbuild:
+    title: Loading the PKGBUILD
+  install:
+    title: Installing
+    root: true
+  remove:
+    title: Removing
+    root: true
+  downgrade:
+    title: Installing the older version
+    root: true
+errors:
+  10: |
+    The AUR could not be reached
+    Check the internet connection.
+  11: |
+    The package was not found
+    It may have been removed from its repository. Refresh the package list.
+  12: |
+    The archive could not be reached
+    Only the versions in the package cache are shown. Check the internet connection.

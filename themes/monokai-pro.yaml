@@ -1,0 +1,10 @@
+name: Monokai Pro
+colors:
+  background: "#2D2A2E"
+  surface: "#403E41"
+  muted: "#727072"
+  text: "#FCFCFA"
+  accent: "#78DCE8"
+  success: "#A9DC76"
+  warning: "#FFD866"
+  error: "#FF6188"

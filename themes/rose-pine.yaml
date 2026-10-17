@@ -1,0 +1,11 @@
+# Rosé Pine has no green; foam stands for success.
+name: Rosé Pine
+colors:
+  background: "#191724"
+  surface: "#26233A"
+  muted: "#6E6A86"
+  text: "#E0DEF4"
+  accent: "#C4A7E7"
+  success: "#9CCFD8"
+  warning: "#F6C177"
+  error: "#EB6F92"

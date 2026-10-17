@@ -1,0 +1,10 @@
+ops:
+  list:
+    title: Listing the services
+  log:
+    title: Reading the service log
+  system:
+    title: Changing the service
+    root: true
+  user:
+    title: Changing the service

@@ -1,0 +1,116 @@
+# Pull requests are checked. On main, release-please keeps a release pull
+# request open, and merging it tags the version, publishes the release and
+# pushes the AUR package.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+# A new push replaces a pull request's run; main queues, so no release is cut
+# short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # `make check` on Arch, as the machines it runs on.
+  check:
+    name: Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # The date pins the base.
+    container: archlinux:base-devel-20261011.0.609700
+    permissions:
+      contents: read
+    steps:
+      # The runner's seccomp profile refuses the syscall filter pacman puts on
+      # its downloader.
+      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust shellcheck yamllint actionlint zizmor gettext pacman-contrib nodejs git
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: cargo-${{ hashFiles('Cargo.lock') }}
+
+      - run: make check
+
+  # The release pull request, or once that is merged, the tag and the release.
+  release:
+    name: Release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write  # the release branch, the tag and the release
+      pull-requests: write  # the release pull request
+    outputs:
+      version: ${{ steps.please.outputs.version }}
+      tag: ${{ steps.please.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+        id: please
+
+  # The AUR files for the tag's source tarball, built once as a user builds
+  # them, then pushed. The key is a secret of the environment aur, which only
+  # main may use; on a failure the release stands, and a rerun of this job
+  # pushes again.
+  aur:
+    name: AUR
+    needs: release
+    if: needs.release.outputs.version != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: archlinux:base-devel-20261011.0.609700
+    environment: aur
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release.outputs.tag }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - run: pacman --disable-sandbox -Syu --noconfirm --needed rust git openssh
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The tarball lies beside the PKGBUILD, where makepkg looks first and
+      # checks it against the sum. makepkg refuses root, which the container
+      # is; cargo needs a home of the builder's own.
+      - run: |
+          tar="arch-os-manager-${VERSION}.tar.gz"
+          curl --proto '=https' --proto-redir '=https' -fsSL -o "$tar" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          tools/aur.sh "$VERSION" "$tar" aur-files
+          mv "$tar" aur-files/
+          useradd --create-home builder
+          chown -R builder aur-files
+          runuser -u builder -- env HOME=/home/builder bash -c 'cd aur-files && makepkg --noconfirm'
+
+      # The host key as https://aur.archlinux.org names its fingerprint.
+      - env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_KEY" ]; then
+            echo "::error::The environment aur has no secret AUR_SSH_KEY; tools/aur-key.sh sets it, then rerun this job."
+            exit 1
+          fi
+          ssh="${RUNNER_TEMP}/ssh"
+          install -d -m 700 "$ssh"
+          printf '%s\n' "$AUR_SSH_KEY" >"${ssh}/key"
+          chmod 600 "${ssh}/key"
+          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' >"${ssh}/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i ${ssh}/key -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh}/known_hosts -o StrictHostKeyChecking=yes"
+          tools/aur-push.sh aur-files

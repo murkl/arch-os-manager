@@ -1,0 +1,163 @@
+//! Journal entries from `journalctl --output=json`.
+
+use serde_json::Value;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Entry {
+    /// Microseconds since the epoch.
+    pub time: i64,
+    pub ident: String,
+    pub message: String,
+}
+
+impl Entry {
+    pub fn clock(&self) -> String {
+        jiff::Timestamp::from_microsecond(self.time)
+            .map(|t| {
+                t.to_zoned(jiff::tz::TimeZone::system())
+                    .strftime("%H:%M:%S")
+                    .to_string()
+            })
+            .unwrap_or_default()
+    }
+}
+
+pub fn parse(out: &str) -> Vec<Entry> {
+    out.lines()
+        .filter_map(|line| {
+            let v: Value = serde_json::from_str(line).ok()?;
+            let text = |key: &str| match &v[key] {
+                Value::String(s) => s.clone(),
+                // Fields that are not valid UTF-8 come as an array of bytes.
+                Value::Array(bytes) => String::from_utf8_lossy(
+                    &bytes
+                        .iter()
+                        .filter_map(|b| b.as_u64().map(|b| b as u8))
+                        .collect::<Vec<_>>(),
+                )
+                .into_owned(),
+                _ => String::new(),
+            };
+            Some(Entry {
+                time: text("__REALTIME_TIMESTAMP").parse().ok()?,
+                ident: Some(text("SYSLOG_IDENTIFIER"))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| text("_COMM")),
+                message: text("MESSAGE"),
+            })
+        })
+        .collect()
+}
+
+impl Entry {
+    /// Whether the person chose to hide it: it is one of the texts, numbers aside.
+    pub fn hidden(&self, texts: &[String]) -> bool {
+        let message = pattern(&self.message);
+        texts.iter().any(|h| message == pattern(h))
+    }
+}
+
+/// A message with what changes between two of its kind made one sign: numbers, addresses,
+/// hashes. Hiding one hides the next of its kind, with another PID or another address.
+pub fn pattern(message: &str) -> String {
+    let mut out = String::new();
+    let mut word = String::new();
+    let flush = |word: &mut String, out: &mut String| {
+        let numeric = word.chars().any(|c| c.is_ascii_digit());
+        let hexish = numeric && word.len() >= 6 && word.chars().all(|c| c.is_ascii_hexdigit());
+        if hexish
+            || numeric
+                && word
+                    .trim_start_matches("0x")
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit())
+        {
+            out.push('#');
+        } else if numeric {
+            // A word with digits in it: each run of digits goes.
+            let mut digits = false;
+            for c in word.chars() {
+                if c.is_ascii_digit() {
+                    if !digits {
+                        out.push('#');
+                    }
+                    digits = true;
+                } else {
+                    out.push(c);
+                    digits = false;
+                }
+            }
+        } else {
+            out.push_str(word);
+        }
+        word.clear();
+    };
+    for c in message.chars() {
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+        } else {
+            flush(&mut word, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut word, &mut out);
+    out
+}
+
+pub fn visible<'a>(entries: &'a [Entry], hidden: &'a [String]) -> impl Iterator<Item = &'a Entry> {
+    entries.iter().filter(|e| !e.hidden(hidden))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_text_and_byte_messages_and_hides_by_message() {
+        let out = concat!(
+            r#"{"__REALTIME_TIMESTAMP":"1792086079523448","SYSLOG_IDENTIFIER":"kernel","MESSAGE":"ACPI Error: AE_NOT_FOUND"}"#,
+            "\n",
+            r#"{"__REALTIME_TIMESTAMP":"1792086079523449","_COMM":"foo","MESSAGE":[104,105,255]}"#,
+            "\n"
+        );
+        let e = parse(out);
+        assert_eq!(e.len(), 2);
+        assert_eq!(
+            (e[0].ident.as_str(), e[1].ident.as_str()),
+            ("kernel", "foo")
+        );
+        assert!(e[1].message.starts_with("hi"));
+        let hidden = vec!["ACPI Error: AE_NOT_FOUND".to_string()];
+        assert_eq!(visible(&e, &hidden).count(), 1);
+    }
+
+    #[test]
+    fn hides_the_next_message_of_its_kind() {
+        let a = "usb 1-2: device descriptor read/64, error -71 at 0x7f3a2c00 (pid 4312)";
+        let b = "usb 3-1: device descriptor read/64, error -71 at 0x7f3a9e10 (pid 977)";
+        assert_eq!(pattern(a), pattern(b));
+        assert_eq!(
+            pattern("fs-verity: hash 6dd0af06ad12 inode 759644"),
+            "fs-verity: hash # inode #"
+        );
+        let entry = |m: &str| Entry {
+            time: 0,
+            ident: "kernel".into(),
+            message: m.into(),
+        };
+        assert!(entry(b).hidden(&[pattern(a)]));
+        assert!(!entry("usb 1-2: new device").hidden(&[pattern(a)]));
+    }
+
+    #[test]
+    fn hides_only_its_own_kind() {
+        let entry = |m: &str| Entry {
+            time: 0,
+            ident: "kernel".into(),
+            message: m.into(),
+        };
+        assert!(!entry("usb 1-2: new device").hidden(&["".into()]));
+        assert!(!entry("error -71").hidden(&[pattern("1")]));
+        assert!(!entry("ACPI Error: AE_NOT_FOUND").hidden(&["AE_NOT_FOUND".into()]));
+    }
+}

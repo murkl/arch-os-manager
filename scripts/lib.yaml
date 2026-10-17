@@ -1,0 +1,62 @@
+# Causes recognised in the output of any run, by a line containing the key, and
+# the page that fixes them.
+hints:
+  unable to lock database:
+    text: |
+      The package database is locked
+      Another package manager is running, or one stopped halfway. Once none is running, Repair removes the stale lock.
+    offer: repair
+  "(PGP signature)":
+    text: |
+      A signature could not be verified
+      The keyring is probably out of date. Repair renews it and updates afterwards.
+    offer: repair
+  exists in filesystem:
+    text: |
+      A file is in the way
+      A package brings a file that already exists on disk and belongs to no package. The details name it. Remove or move it, then update again.
+  failed retrieving file:
+    text: |
+      A download failed
+      Check the internet connection, or rank the mirrors again.
+    offer: mirrors
+  not enough free disk space:
+    text: |
+      The disk is full
+      Clean up frees space. Then update again.
+    offer: cleanup
+  breaks dependency:
+    text: |
+      A dependency would break
+      Another package still needs what was to be removed or replaced. The details name both.
+  invalid or corrupted database:
+    text: |
+      A package database could not be verified
+      A mirror is probably out of date. Rank the mirrors, then update again.
+    offer: mirrors
+  is unknown trust:
+    text: |
+      A signature could not be verified
+      The keyring is probably out of date. Repair renews it and updates afterwards.
+    offer: repair
+  No space left on device:
+    text: |
+      The disk is full
+      Clean up frees space. Then update again.
+    offer: cleanup
+  could not satisfy dependencies:
+    text: |
+      A dependency is missing
+      A package needs another that no repository offers, often one that left the repositories. The details name both.
+  Could not resolve host:
+    text: |
+      The internet could not be reached
+      Check the connection, then try again.
+  is not in the sudoers file:
+    text: |
+      This user may not use sudo
+      As root, add it to the wheel group, then log in again.
+  incorrect password attempt:
+    text: |
+      The password was wrong three times
+      sudo gave up. Try again with the password of this user.

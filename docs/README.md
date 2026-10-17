@@ -1,289 +1,52 @@
 <div align="center">
-  <h1>
-    <img src="./logo.svg" width="150" height="150">
-    <p><b>Arch OS Manager</b></p>
-  </h1>
+
+<img src="banner.png" alt="System Manager">
+
+<p><b>Update</b>, <b>maintain</b> and <b>repair</b> Arch Linux from one place.</p>
+
+**[➜ Reference](REFERENCE.md)** · **[➜ Contributing](CONTRIBUTING.md)**
+
+<p>
+  <a href="https://aur.archlinux.org/packages/arch-os-manager"><img src="https://img.shields.io/aur/version/arch-os-manager?style=flat-square&label=aur&color=5e81ac" alt="AUR version"></a>
+  <a href="https://github.com/murkl/arch-os-manager/releases/latest"><img src="https://img.shields.io/github/v/release/murkl/arch-os-manager?style=flat-square&label=release&color=5e81ac" alt="Latest release"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/github/license/murkl/arch-os-manager?style=flat-square&color=5e81ac" alt="License"></a>
+</p>
+
 </div>
-
-<div align="center">
-  
-  <p><img src="./screenshots/main.png"></p>
-
-**[ ➜ More Screenshots ](#screenshots)**
-
-  <p>The Arch OS Manager is a tool for managing Arch Linux systems. It provides a straightforward interface for system administration and supports execution via tty or desktop. Offering features like system upgrade, package management, health monitoring and some more... </p>
-
-  <p>
-    <img src="https://img.shields.io/badge/MAINTAINED-YES-green?style=for-the-badge">
-    <img src="https://img.shields.io/badge/License-GPL_v2-blue?style=for-the-badge">
-  </p>
-  <p><sub>100% shellcheck approved</sub></p>
-  <p><sub>powered by <a href="https://github.com/murkl/arch-os">Arch OS</a></sub></p>
-</div>
-
-## Install from AUR
-
-1. Install Package **[ ➜ AUR/arch-os-manager](https://aur.archlinux.org/packages/arch-os-manager)**
-
-2. Run Arch OS Manager:
-
-```
-arch-os
-```
-
-**Note:** Add parameter `-k` to start with built-in kitty in standalone mode
-
-## Install from GitHub
-
-1. Install [Dependencies](#install-dependencies):
-
-```
-sudo pacman -S git base-devel pacman-contrib
-```
-
-2. Clone GitHub Repo:
-
-```
-git clone https://github.com/murkl/arch-os-manager.git && cd arch-os-manager
-```
-
-3. Run Arch OS Manager:
-
-```
-./arch-os
-```
-
-**Note:** Add parameter `-k` to start with built-in kitty in standalone mode
 
 ## Features
 
-- Check & list updates in _checkupdates_ format
-- Rich startup notification on available updates
-- Dashboard: System health info, packages & logs
-- Show unread/latest Arch Linux news
-- Notice on orphaned packages & pacdiff files
-- Search & manage packages
-- Manage system & user services
-- Upgrade system packages
-- Remove orphaned packages
-- Clear Package cache
-- Reset Pacman keyring
-- Built-in system log blacklist
-- Built-in config editor
-- Standalone mode with built-in kitty
-- System-oriented design
+- Updates of the repositories, the AUR and Flatpak in one run
+- Arch Linux news, read in place
+- Packages installed, in the repositories and in the AUR, older versions from the cache or the archive
+- Services of the system and of the user
+- Errors of this boot, the harmless ones hidden
+- CPU, memory and disk in use, live
+- Clean-up that keeps what a recovery needs
+- Config updates compared, merged or taken over
+- Mirrors ranked, firmware updated, a broken keyring repaired
+- Next steps after every run, a restart hint after a kernel update
+- Notification of new updates, or their count in the GNOME top bar
+- Terminal or a window of its own
+- English and German
+- Themes such as Nord, Catppuccin, Tokyo Night and Gruvbox, or your own
 
-Install these **optional** dependencies to equip Arch OS Manager with additional features:
+Optional packages add features, installed under **Settings › Optional packages**.
 
-- `paru`: Add support for manage AUR packages
-- `libnotify`: Add notification support
-- `flatpak`: Add support for manage Flatpak packages
-- `reflector`: Add support for refresh Pacman mirrorlist
-- `downgrade`: Add support for downgrade packages
-- `meld`: Add support for merge pacdiff configurations
-- `xdg-utils`: Add support for open news in browser
-- `gnome-shell-extensions`: Add support for GNOME Extensions
+## Installation
 
-**Note:** _see [Install Dependencies](#install-dependencies) for more information_
+From the **[AUR](https://aur.archlinux.org/packages/arch-os-manager)**, with paru or yay:
 
-## Usage
-
-The manager can be opened regularly with `arch-os` or in standalone mode with `arch-os --kitty`.
-
-```
-arch-os [--kitty | -k] [action]
+```sh
+paru -S arch-os-manager
 ```
 
-**Note:** If no parameter is specified, the main menu is opened.
+## First Start
 
-### App Actions
-
-```
-help             ➜  Open help page
-version          ➜  Print version info
-config           ➜  Edit config in built-in ediitor
+```sh
+system-manager
 ```
 
-### System Actions
+The first start adds the **System Manager** to the app menu. From there it runs in a window of its own.
 
-```
-check            ➜  Print package updates (checkupdates)
-notify           ➜  Notify on new package updates (autostart)
-dashboard        ➜  Show dashboard (logs, services, health)
-upgrade          ➜  System upgrade (news, health, pacman, aur, flatpak)
-package          ➜  Search & manage packages (pacman, aur)
-service          ➜  Manage services (system & user)
-orphans          ➜  Remove orphaned packages (pacman, aur, flatpak)
-merge            ➜  Merge updated configurations (pacdiff, meld)
-refresh          ➜  Refresh & edit pacman mirrorlist (reflector)
-downgrade        ➜  Downgrade packages (pacman)
-cache            ➜  Clear package cache (pacman, aur)
-reset            ➜  Reset pacman keyring & upgrade (pacman)
-```
-
-### Install Dependencies
-
-Use parameter `--install` to install and preconfigure **all required packages** from the Arch OS Manager. Use parameter `--install-gnome` to install incl. Font & GNOME Shell extension settings.
-
-#### Install & Set Font
-
-Install and set font icons that are used to display information:
-
-```
-sudo pacman -S ttf-firacode-nerd
-gsettings set org.gnome.desktop.interface monospace-font-name 'FiraCode Nerd Font 10'
-```
-
-Source: [Nerd Fonts](https://www.nerdfonts.com/cheat-sheet)
-
-#### Pacman Packages (mandatory)
-
-```
-git base-devel pacman-contrib
-```
-
-#### Binary Packages (mandatory)
-
-These packages are downloaded to `~/.arch-os/bin`:
-
-- `gum` ➜ [GitHub Release](https://github.com/charmbracelet/gum/releases)
-- `kitty` ➜ [GitHub Release](https://github.com/kovidgoyal/kitty/releases)
-
-#### Pacman Packages (optional)
-
-```
-reflector libnotify fzf xdg-utils meld
-```
-
-#### AUR Packages (optional)
-
-These packages are built and installed manually from the AUR-Git repository using `makepkg`:
-
-- paru (see `AUR_MANAGER_REPO` property for more details)
-- downgrade
-
-Paru is preconfigured in `/etc/paru.conf`. Old configurations are copied to `/etc/paru.conf.20240919170446`, for example (before editing).
-
-## Config
-
-Edit the config with the built-in editor in Arch OS Manager or edit the config file manually.
-
-```
-COLOR_FOREGROUND=110                  # Color foreground (see color chart)
-COLOR_BACKGROUND=236                  # Color background (see color chart)
-CONTENT_MAX_WIDTH=110                 # Cut text after width in packages & logs (min: 80)
-CONTENT_MAX_HEIGHT=16                 # Max lines in packages & downgrade (max: 100)
-REFLECTOR_COUNTRY=none                # Set prefered reflector country (example: Germany,France)
-ARCH_UPGRADE_CONFIRM=true             # Enable confirm upgrade system packages (experimental) (disable: false)
-ARCH_DOWNLOAD_TIMEOUT=false           # Disable pacman/paru download timeout (enable: true)
-AUR_SUPPORT=true                      # Enable AUR support (disable: false)
-AUR_MANAGER_REPO=paru                 # Set AUR manager package for --install (paru, paru-bin, paru-git)
-AUR_REVIEW=false                      # Disable AUR review (enable: true)
-FLATPAK_SUPPORT=true                  # Enable flatpak support (disable: false)
-FLATPAK_UPGRADE_ENABLED=false         # Disable flatpak upgrade to use GNOME Software instead (enable: true)
-FLATPAK_UPGRADE_CONFIRM=false         # Disable confirm flatpak upgrade (experimental) (enable: true)
-AUTOSTART_NOTIFY=true                 # Enable update notify on system boot (disable: false)
-AUTOSTART_DELAY=30                    # Delay update check after boot in seconds (min: 10)
-ORPHANS_CONFIRM=false                 # Disable confirm remove orphans (enable: true)
-NEWS_QUANTITY=3                       # Number of news to shown (disable: 0)
-UPGRADE_SHOW_HEALTH=false             # Show health view in upgrade (enable: true)
-HEALTH_ENABLE_UNKNOWN_PKG_LIST=false  # Show unknown package counter instead of name list (enable: true)
-HEALTH_SHOW_LOG=true                  # Show system log in healt (disable: false)
-DASHBOARD_SHOW_LOG=true               # Show system log in dashboard & health (disable: false)
-DASHBOARD_SHOW_SERVICES=true          # Show running services in dashboard (disable: false)
-DASHBOARD_SHOW_USER_SERVICES=false    # Show user services in dashboard & health (enable: true)
-DASHBOARD_SHOW_TIMESTAMP=true         # Show local databse timestamp (disable: false)
-```
-
-<details>
-
-<summary style="font-weight: bold;" id="color-chart">Color Chart</summary>
-
-<p><img src="./color-chart.png"></p>
-
-Source: [Link](https://github.com/muesli/termenv?tab=readme-ov-file#color-chart)
-
-</details>
-
-### Configuration Files
-
-- Arch OS Manager config: `~/.arch-os/config/settings.conf`
-- Built-in kitty config: `~/.arch-os/config/kitty.conf`
-- System log blacklist: `~/.arch-os/config/blacklist.conf`
-
-## Integrate GNOME Extension
-
-1. Install GNOME Extension **[➜ archlinux-updates-indicator](https://extensions.gnome.org/extension/1010/)**
-
-2. Set `Check command`:
-
-```
-dconf write /org/gnome/shell/extensions/arch-update/check-cmd "'/usr/bin/arch-os check'"
-```
-
-3. Set `Update command`:
-
-```
-dconf write /org/gnome/shell/extensions/arch-update/update-cmd "'arch-os --kitty upgrade'"
-```
-
-4. Set `Package Manager` (optional):
-
-```
-dconf write /org/gnome/shell/extensions/arch-update/package-manager "'arch-os --kitty'"
-```
-
-<details>
-
-<summary><h2 style="display: inline;" id="screenshots">Screenshots</h2></summary>
-
-<div align="center">
-
-<sub><b>This screenshots may outdated.</b></sub>
-
-<p><img src="./screenshots/notification.png"></p>
-<p><img src="./screenshots/dashboard.png"></p>
-<p><img src="./screenshots/health.png"></p>
-<p><img src="./screenshots/upgrade.png"></p>
-<p><img src="./screenshots/package.png"></p>
-
-</div>
-
-</details>
-
-<details>
-
-<summary><h2 style="display: inline;" id="development">Development</h2></summary>
-
-```
-# Start with custom binaries
-GUM=/my/custom/gum ./arch-os
-KITTY=/my/custom/kitty ./arch-os --kitty
-
-# Install dependencies
-./arch-os --install
-./arch-os --install-gnome
-
-# Init Arch OS Manager (binaries, dirs & files)
-./arch-os --init
-
-# Sync all databases
-./arch-os --sync
-```
-
-</details>
-
-<details>
-
-<summary><h2 style="display: inline;" id="credits">Credits</h2></summary>
-
-- https://www.nerdfonts.com/cheat-sheet
-- https://github.com/RaphaelRochet/arch-update
-- https://github.com/Morganamilo/paru
-- https://github.com/kovidgoyal/kitty
-- https://github.com/charmbracelet/gum
-- https://github.com/archlinux-downgrade/downgrade
-- https://meldmerge.org
-- https://archlinux.org
-
-</details>
+<p align="center"><img src="screenshots/update.png" width="100%" alt="The update page: the news to read first, then what the update brings"><br><sub><b>Update</b> · Repositories, AUR and Flatpak in one run</sub></p>

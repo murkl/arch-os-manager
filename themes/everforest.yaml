@@ -1,0 +1,10 @@
+name: Everforest
+colors:
+  background: "#2D353B"
+  surface: "#343F44"
+  muted: "#859289"
+  text: "#D3C6AA"
+  accent: "#7FBBB3"
+  success: "#A7C080"
+  warning: "#DBBC7F"
+  error: "#E67E80"

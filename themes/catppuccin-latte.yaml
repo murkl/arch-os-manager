@@ -1,0 +1,11 @@
+# Green and yellow darkened until they read on the base, as Latte's own do not.
+name: Catppuccin Latte
+colors:
+  background: "#EFF1F5"
+  surface: "#E6E9EF"
+  muted: "#7C7F93"
+  text: "#4C4F69"
+  accent: "#8839EF"
+  success: "#3A9227"
+  warning: "#B8740F"
+  error: "#D20F39"
