@@ -133,9 +133,11 @@ UNIT
 }
 
 # Title, text, the label of the one action and the seconds to wait for it. Prints the
-# action if it was chosen. Unanswered, it ends as if dismissed.
+# action if it was chosen. Unanswered, it ends as if dismissed. GNOME takes the
+# icon in the header from the menu entry the hint names.
 op_notify() {
     timeout "$4" notify-send --app-name="System Manager" --icon=system-manager \
+        --hint=string:desktop-entry:system-manager \
         --action="open=$3" -- "$1" "$2" || allow 124
 }
 
