@@ -11,7 +11,7 @@ use crate::ui::target::{ALL, HOME, Target};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
 
 pub struct HomePage {
-    list: List,
+    list: List<Target>,
     /// The person moved the cursor, so arriving data no longer moves it.
     touched: bool,
 }
@@ -24,7 +24,7 @@ impl HomePage {
         }
     }
 
-    fn rows(&self, ctx: &Ctx) -> Vec<Row> {
+    fn rows(&self, ctx: &Ctx) -> Vec<Row<Target>> {
         if self.list.typing() {
             return ALL
                 .iter()
@@ -40,7 +40,7 @@ impl HomePage {
             for &target in group.iter().filter(|t| visible(**t, ctx)) {
                 let (detail, tone, dim) = status(target, ctx);
                 rows.push(
-                    Row::new(target.id(), target.label())
+                    Row::new(target, target.label())
                         .icon(target.icon(), Tone::Normal)
                         .detail(detail, tone)
                         .dim(dim),
@@ -178,7 +178,7 @@ impl Page for HomePage {
         if !self.touched
             && let Some(target) = HomePage::suggested(ctx)
         {
-            self.list.focus(target.id());
+            self.list.focus(&target);
         }
         self.list.draw(area, buf, ctx);
     }
@@ -212,12 +212,7 @@ impl Page for HomePage {
             self.list.set(rows);
         }
         match picked {
-            Picked::Open(id) => {
-                let Some(target) = Target::from_id(&id) else {
-                    return Flow::Stay;
-                };
-                Flow::PushAll(target.open(ctx))
-            }
+            Picked::Open(target) => Flow::PushAll(target.open(ctx)),
             Picked::Used => {
                 self.touched = true;
                 Flow::Stay

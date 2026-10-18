@@ -17,7 +17,6 @@ pub use app::App;
 pub use style::Style;
 pub use target::Target;
 
-use std::any::Any;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
@@ -154,7 +153,7 @@ pub fn beats(now: Instant, pace: Duration) -> u64 {
 }
 
 /// The first beat of `pace` after `now`, or the start where `now` lies before it.
-fn next_beat(now: Instant, pace: Duration) -> Instant {
+pub fn next_beat(now: Instant, pace: Duration) -> Instant {
     let start = epoch();
     if now < start {
         return start;
@@ -170,8 +169,8 @@ pub enum Msg {
     Held(Key),
     Tick,
     Resize,
-    /// The result of a job a page started.
-    Data(PageId, Box<dyn Any + Send>),
+    /// A job a page started is done: its result waits in the page's own channel.
+    Done(PageId),
     Run(PageId, script::Event),
     Fresh(Fresh),
     Usage(Usage),
@@ -228,7 +227,8 @@ pub trait Page {
     /// The keys the footer names, as key and what it does.
     fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)>;
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow;
-    fn data(&mut self, _data: Box<dyn Any + Send>, _ctx: &mut Ctx) -> Flow {
+    /// A job of this page is done: its result is ready to take.
+    fn done(&mut self, _ctx: &mut Ctx) -> Flow {
         Flow::Stay
     }
     fn run(&mut self, _event: script::Event, _ctx: &mut Ctx) -> Flow {
@@ -327,15 +327,18 @@ pub struct Ctx {
     page: PageId,
     /// The action chosen, while it runs: the name of the run it starts.
     pub action: Option<String>,
+    /// Where a text box is typed into this frame, for the terminal's own cursor.
+    pub cursor: std::cell::Cell<Option<(u16, u16)>>,
 }
 
 impl Ctx {
-    /// Runs a job off the drawing thread. Its result arrives at the page that started it.
-    pub fn spawn<T: Send + 'static>(&self, job: impl FnOnce() -> T + Send + 'static) {
+    /// Runs a job off the drawing thread and tells the page that started it once it is done.
+    /// The result goes through the page's own channel: a `Fetch` or a `Task`.
+    pub fn spawn(&self, job: impl FnOnce() + Send + 'static) {
         let (tx, wake, page) = (self.tx.clone(), self.wake.clone(), self.page);
         std::thread::spawn(move || {
-            let result = job();
-            let _ = tx.send(Msg::Data(page, Box::new(result)));
+            job();
+            let _ = tx.send(Msg::Done(page));
             wake();
         });
     }

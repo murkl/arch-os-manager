@@ -84,7 +84,7 @@ fn authorize(job: Job, ctx: &Ctx) -> Box<dyn Page> {
 pub struct ConfirmPage {
     job: Job,
     detail: Detail,
-    list: List,
+    list: List<bool>,
 }
 
 impl ConfirmPage {
@@ -99,7 +99,7 @@ impl ConfirmPage {
             ],
             Vec::new(),
         );
-        let list = List::new(vec![Row::new("no", t("No")), Row::new("yes", t("Yes"))]);
+        let list = List::new(vec![Row::new(false, t("No")), Row::new(true, t("Yes"))]);
         ConfirmPage { job, detail, list }
     }
 }
@@ -134,8 +134,8 @@ impl Page for ConfirmPage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         match self.list.key(key) {
-            Picked::Open(id) if id == "yes" => Flow::Replace(authorize(self.job.clone(), ctx)),
-            Picked::Open(_) => Flow::Pop,
+            Picked::Open(true) => Flow::Replace(authorize(self.job.clone(), ctx)),
+            Picked::Open(false) => Flow::Pop,
             Picked::Used => Flow::Stay,
             Picked::Ignored => Flow::Ignored,
         }
@@ -348,12 +348,12 @@ pub struct RunPage {
     run: Option<Run>,
     outcome: Option<(Result<(), Failure>, Instant)>,
     details: bool,
-    choices: List,
+    choices: List<String>,
     input: Input,
     /// ⏎ came at the password prompt with nothing typed.
     empty: bool,
     /// The question whether to stop the run, while it is asked.
-    cancel: Option<List>,
+    cancel: Option<List<bool>>,
     size: (u16, u16),
     /// The outcome and what to do next.
     result: Detail,
@@ -408,18 +408,21 @@ impl RunPage {
     fn prepare(&mut self) {
         let rows = match self.prompt().cloned() {
             Some(Prompt::YesNo { yes, .. }) => {
-                let rows = vec![Row::new("y", t("Yes")), Row::new("n", t("No"))];
-                let default = if yes { "y" } else { "n" };
+                let rows = vec![
+                    Row::new("y".to_string(), t("Yes")),
+                    Row::new("n".to_string(), t("No")),
+                ];
+                let default = String::from(if yes { "y" } else { "n" });
                 if self.choices.rows() != rows.as_slice() {
                     self.choices = List::new(rows);
-                    self.choices.focus(default);
+                    self.choices.focus(&default);
                 }
                 return;
             }
             Some(Prompt::Choice {
                 options, default, ..
             }) => {
-                let rows: Vec<Row> = options
+                let rows: Vec<Row<String>> = options
                     .iter()
                     .map(|(n, label)| Row::new(n.clone(), label.clone()))
                     .collect();
@@ -752,10 +755,8 @@ impl Page for RunPage {
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         if let Some(list) = self.cancel.as_mut() {
             match list.key(key) {
-                Picked::Open(id) => {
-                    if id == "yes"
-                        && let Some(run) = &self.run
-                    {
+                Picked::Open(yes) => {
+                    if yes && let Some(run) = &self.run {
                         run.interrupt();
                     }
                     self.cancel = None;
@@ -783,8 +784,8 @@ impl Page for RunPage {
             || (!self.details && (key == Key::Esc || (key == Key::Char('q') && !typing)));
         if asks_to_stop {
             self.cancel = Some(List::new(vec![
-                Row::new("no", t("No")),
-                Row::new("yes", t("Yes")),
+                Row::new(false, t("No")),
+                Row::new(true, t("Yes")),
             ]));
             return Flow::Stay;
         }

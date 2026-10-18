@@ -52,17 +52,18 @@ impl Input {
         let s = &ctx.style;
         let prompt = format!("{} ", s.glyphs.path);
         let after = put(buf, x, y, &prompt, w, s.bold(Tone::Accent));
+        // One cell stays free for the cursor, which stands where the next letter goes.
         let room = w.saturating_sub(after - x + 1) as usize;
         if self.text.is_empty() {
-            put(buf, after, y, s.glyphs.caret, 1, s.tone(Tone::Accent));
             put(
                 buf,
-                after + 1,
+                after,
                 y,
                 &self.placeholder,
                 room as u16,
                 s.tone(Tone::Muted),
             );
+            ctx.cursor.set(Some((after, y)));
             return;
         }
         let shown = if self.masked {
@@ -73,7 +74,7 @@ impl Input {
         let shown = cut_front(&shown, room, s.glyphs.ellipsis);
         let end = put(buf, after, y, &shown, room as u16, s.tone(Tone::Normal));
         if width(&shown) < room + 1 {
-            put(buf, end, y, s.glyphs.caret, 1, s.tone(Tone::Accent));
+            ctx.cursor.set(Some((end, y)));
         }
     }
 }

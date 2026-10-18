@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use fontdue::{Font, FontSettings, Metrics};
 use ratatui::Terminal;
@@ -23,12 +23,14 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key as Named, ModifiersState, NamedKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowAttributes, WindowId};
 
-use crate::ui::{App, FRAME, Key, Msg, Target};
+use crate::ui::{App, FRAME, Key, Msg, Target, beats, next_beat};
 
 const REGULAR: &[u8] = include_bytes!("../assets/fonts/FiraCode-6.2-Regular.ttf");
 const BOLD: &[u8] = include_bytes!("../assets/fonts/FiraCode-6.2-Bold.ttf");
 /// The icons src/ui/icon.rs names, cut from the Nerd Fonts symbols by tools/icons.sh: each one cell wide.
 const SYMBOLS: &[u8] = include_bytes!("../assets/fonts/SymbolsNerdFontMono-3.4.0-Icons.ttf");
+/// The cursor of a text box shows and hides on this beat, as a terminal's does.
+const BLINK: Duration = Duration::from_millis(500);
 /// Logical pixels: the font size, the margin around the cells, the band that resizes.
 const FONT: f32 = 15.0;
 const MARGIN: f64 = 24.0;
@@ -57,6 +59,8 @@ pub fn run(start: Option<Target>) -> io::Result<()> {
 /// The cell grid ratatui draws into.
 struct Grid {
     buffer: Buffer,
+    /// Where ratatui put the cursor of a text box, none while no box is typed into.
+    cursor: Option<Position>,
     /// A cell changed since the window last showed the grid.
     changed: bool,
 }
@@ -77,15 +81,20 @@ impl Backend for Grid {
         Ok(())
     }
     fn hide_cursor(&mut self) -> io::Result<()> {
+        self.changed |= self.cursor.take().is_some();
         Ok(())
     }
+    // Shown wherever ratatui put it, so this has nothing left to do.
     fn show_cursor(&mut self) -> io::Result<()> {
         Ok(())
     }
     fn get_cursor_position(&mut self) -> io::Result<Position> {
-        Ok(Position::ORIGIN)
+        Ok(self.cursor.unwrap_or(Position::ORIGIN))
     }
-    fn set_cursor_position<P: Into<Position>>(&mut self, _: P) -> io::Result<()> {
+    fn set_cursor_position<P: Into<Position>>(&mut self, at: P) -> io::Result<()> {
+        let at = Some(at.into());
+        self.changed |= self.cursor != at;
+        self.cursor = at;
         Ok(())
     }
     fn clear(&mut self) -> io::Result<()> {
@@ -247,6 +256,8 @@ struct Win {
     pointer: PhysicalPosition<f64>,
     /// When the next tick is due.
     wake: Instant,
+    /// The cursor was shown, not hidden, when the window was last painted.
+    blinked: bool,
     error: Option<io::Error>,
     /// The first frame is on the screen and the reading has begun.
     started: bool,
@@ -256,6 +267,7 @@ impl Win {
     fn new(app: App, rx: Receiver<Msg>, faces: Faces) -> Win {
         let terminal = Terminal::new(Grid {
             buffer: Buffer::empty(Rect::new(0, 0, 80, 24)),
+            cursor: None,
             changed: true,
         })
         .expect("an in-memory grid");
@@ -269,6 +281,7 @@ impl Win {
             modifiers: ModifiersState::empty(),
             pointer: PhysicalPosition::new(0.0, 0.0),
             wake: Instant::now(),
+            blinked: false,
             error: None,
             started: false,
         }
@@ -311,12 +324,18 @@ impl Win {
         };
         surface.resize(w, h).map_err(|e| e.to_string())?;
         let mut pixels = surface.buffer_mut().map_err(|e| e.to_string())?;
+        let cursor = self
+            .terminal
+            .backend()
+            .cursor
+            .filter(|_| blink_on(Instant::now()));
+        self.blinked = cursor.is_some();
         paint(
             &self.terminal.backend().buffer,
+            cursor,
             &mut self.fonts,
             &self.app.ctx.style,
-            size.width,
-            size.height,
+            (size.width, size.height),
             window.scale_factor(),
             &mut pixels,
         );
@@ -532,18 +551,30 @@ impl ApplicationHandler<()> for Win {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = Instant::now();
+        let cursor = self.terminal.backend().cursor.is_some();
         match self.compose() {
-            Ok(true) => {
-                if let Some(w) = &self.window {
+            // A cursor that is shown blinks: its beat redraws without a cell changing.
+            Ok(changed) => {
+                if (changed || (cursor && blink_on(now) != self.blinked))
+                    && let Some(w) = &self.window
+                {
                     w.request_redraw();
                 }
             }
-            Ok(false) => {}
             Err(e) => crate::error!("drawing the window: {e}"),
         }
-        self.wake = self.app.wake(Instant::now());
+        self.wake = self.app.wake(now);
+        if cursor {
+            self.wake = self.wake.min(next_beat(now, BLINK));
+        }
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.wake));
     }
+}
+
+/// Whether the cursor is in the shown half of its beat.
+fn blink_on(now: Instant) -> bool {
+    beats(now, BLINK).is_multiple_of(2)
 }
 
 /// Where the grid starts inside the margin, centred, and how many cells fit.
@@ -562,10 +593,10 @@ fn layout(width: u32, height: u32, fonts: &Fonts, scale: f64) -> (u32, u32, Rect
 /// The grid as pixels, 0RGB.
 fn paint(
     grid: &Buffer,
+    cursor: Option<Position>,
     fonts: &mut Fonts,
     style: &crate::ui::Style,
-    width: u32,
-    height: u32,
+    (width, height): (u32, u32),
     scale: f64,
     pixels: &mut [u32],
 ) {
@@ -611,6 +642,18 @@ fn paint(
                 canvas.blend((gx, gy), (m.width, m.height), coverage, (fg, bg));
             }
         }
+    }
+    // The cursor of a text box: a bar at the start of its cell, in the cell's text colour.
+    if let Some(at) = cursor.filter(|at| grid.area.contains(*at)) {
+        let (fg, _) = colors(&grid[(at.x, at.y)]);
+        let thin = (scale.round() as u32).max(1);
+        canvas.fill(
+            ox + u32::from(at.x) * cw,
+            oy + u32::from(at.y) * ch + ch / 8,
+            thin.max(cw / 8),
+            ch - ch / 4,
+            fg,
+        );
     }
 }
 
@@ -681,7 +724,6 @@ impl Canvas<'_> {
             '━' => self.fill(x, cy - thin, w, thin * 2, fg),
             '│' => self.fill(cx - thin / 2, y, thin, h, fg),
             '┃' => self.fill(cx - thin, y, thin * 2, h, fg),
-            '▏' => self.fill(x, y + h / 8, thin.max(w / 8), h - h / 4, fg),
             '█' => self.fill(x, y, w, h, fg),
             '\u{2800}'..='\u{28ff}' => {
                 // Round points, two across and four down.
@@ -755,6 +797,22 @@ impl Canvas<'_> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    /// The grid keeps the cursor where ratatui puts it, and forgets it when hidden.
+    #[test]
+    fn the_grid_keeps_the_cursor_until_it_is_hidden() {
+        let mut grid = Grid {
+            buffer: Buffer::empty(Rect::new(0, 0, 8, 2)),
+            cursor: None,
+            changed: false,
+        };
+        grid.set_cursor_position((3, 1)).unwrap();
+        assert!(grid.changed);
+        assert_eq!(grid.get_cursor_position().unwrap(), Position::new(3, 1));
+        grid.changed = false;
+        grid.hide_cursor().unwrap();
+        assert!(grid.changed && grid.cursor.is_none());
+    }
     use crate::ui::Style;
 
     #[test]
@@ -787,18 +845,8 @@ pub mod tests {
             for c in s.chars() {
                 let drawn = matches!(
                     c,
-                    '─' | '━'
-                        | '│'
-                        | '┃'
-                        | '╭'
-                        | '╮'
-                        | '╰'
-                        | '╯'
-                        | '▏'
-                        | '█'
-                        | '▀'
-                        | '▄'
-                        | '\u{2800}'..='\u{28ff}'
+                    '─' | '━' | '│' | '┃' | '╭' | '╮' | '╰' | '╯' | '█' | '▀' | '▄' | '\u{2800}'
+                        ..='\u{28ff}'
                 );
                 assert!(
                     font.lookup_glyph_index(c) != 0 || drawn,
@@ -822,6 +870,7 @@ pub mod tests {
         fonts.rescale(scale);
         let (_, _, area) = layout(width, height, &fonts, scale);
         let mut term = Terminal::new(Grid {
+            cursor: None,
             buffer: Buffer::empty(area),
             changed: true,
         })
@@ -830,10 +879,10 @@ pub mod tests {
         let mut pixels = vec![0u32; (width * height) as usize];
         paint(
             &term.backend().buffer,
+            None,
             &mut fonts,
             &app.ctx.style,
-            width,
-            height,
+            (width, height),
             scale,
             &mut pixels,
         );

@@ -56,6 +56,7 @@ impl App {
             authorized: false,
             reload: false,
             pending: Default::default(),
+            cursor: Default::default(),
             tx: tx.clone(),
             wake: wake.clone(),
             page: 0,
@@ -144,7 +145,7 @@ impl App {
                 }
             }
             Msg::Resize | Msg::Held(_) => {}
-            Msg::Data(id, data) => self.deliver(id, |page, ctx| page.data(data, ctx)),
+            Msg::Done(id) => self.deliver(id, |page, ctx| page.done(ctx)),
             Msg::Run(id, event) => self.deliver(id, |page, ctx| page.run(event, ctx)),
             Msg::Fresh(fresh) => self.fresh(fresh),
             Msg::Usage(usage) => self.ctx.usage = Some(usage),
@@ -198,15 +199,20 @@ impl App {
         let path: Vec<String> = self.pages.iter().skip(1).map(|(_, p)| p.title()).collect();
         let (id, page) = self.pages.last_mut().expect("the start page stays");
         self.ctx.page = *id;
+        self.ctx.cursor.set(None);
         if page.bare() {
             frame.buffer_mut().set_style(area, self.ctx.style.base());
             page.draw(area, frame.buffer_mut(), &mut self.ctx);
-            return;
+        } else {
+            let content = draw::frame(area, frame.buffer_mut(), &self.ctx, &path);
+            page.draw(content, frame.buffer_mut(), &mut self.ctx);
+            let hints = page.hints(&self.ctx);
+            draw::footer(area, frame.buffer_mut(), &self.ctx, &hints);
         }
-        let content = draw::frame(area, frame.buffer_mut(), &self.ctx, &path);
-        page.draw(content, frame.buffer_mut(), &mut self.ctx);
-        let hints = page.hints(&self.ctx);
-        draw::footer(area, frame.buffer_mut(), &self.ctx, &hints);
+        // The terminal's own cursor where a text box was drawn, hidden everywhere else.
+        if let Some(at) = self.ctx.cursor.get() {
+            frame.set_cursor_position(at);
+        }
     }
 
     /// Takes the old manager over: its settings where none are chosen, written before anything
@@ -432,6 +438,7 @@ pub mod tests {
             authorized: false,
             reload: false,
             pending: Default::default(),
+            cursor: Default::default(),
             tx,
             wake: Arc::new(|| {}),
             page: 0,
@@ -470,6 +477,25 @@ pub mod tests {
         for k in keys {
             app.handle(Msg::Key(*k));
         }
+    }
+
+    /// Typing shows the terminal's own cursor, after the text.
+    #[test]
+    fn typing_puts_the_terminals_cursor_after_the_text() {
+        let (mut app, mut term) = app();
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Char('f')]);
+        for c in "Pak".chars() {
+            press(&mut app, &[Key::Char(c)]);
+        }
+        let shown = screen(&mut app, &mut term);
+        let at = term.get_cursor_position().unwrap();
+        let line = shown.lines().nth(at.y as usize).unwrap();
+        assert_eq!(
+            line.find("Pak").map(|i| line[..i].chars().count() + 3),
+            Some(at.x as usize),
+            "the cursor stands after what was typed: {line}"
+        );
     }
 
     /// Example data in every shared value, as the screenshots show it.

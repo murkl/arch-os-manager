@@ -38,8 +38,9 @@ impl Lead {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Row {
-    pub id: String,
+pub struct Row<I> {
+    /// What choosing the row means to its page. A heading means nothing.
+    pub id: Option<I>,
     pub label: String,
     /// Right-aligned: a count, a state, a version.
     pub detail: String,
@@ -50,10 +51,24 @@ pub struct Row {
     pub heading: bool,
 }
 
-impl Row {
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Row {
+impl<I> Row<I> {
+    pub fn new(id: I, label: impl Into<String>) -> Row<I> {
         Row {
-            id: id.into(),
+            id: Some(id),
+            ..Row::blank(label)
+        }
+    }
+
+    pub fn heading(label: impl Into<String>) -> Row<I> {
+        Row {
+            heading: true,
+            ..Row::blank(label)
+        }
+    }
+
+    fn blank(label: impl Into<String>) -> Row<I> {
+        Row {
+            id: None,
             label: label.into(),
             detail: String::new(),
             tone: Tone::Muted,
@@ -63,30 +78,23 @@ impl Row {
         }
     }
 
-    pub fn heading(label: impl Into<String>) -> Row {
-        Row {
-            heading: true,
-            ..Row::new("", label)
-        }
-    }
-
-    pub fn detail(mut self, detail: impl Into<String>, tone: Tone) -> Row {
+    pub fn detail(mut self, detail: impl Into<String>, tone: Tone) -> Row<I> {
         self.detail = detail.into();
         self.tone = tone;
         self
     }
 
-    pub fn icon(mut self, icon: &'static str, tone: Tone) -> Row {
+    pub fn icon(mut self, icon: &'static str, tone: Tone) -> Row<I> {
         self.lead = Lead::Icon(icon, tone);
         self
     }
 
-    pub fn dot(mut self, tone: Tone) -> Row {
+    pub fn dot(mut self, tone: Tone) -> Row<I> {
         self.lead = Lead::Dot(tone);
         self
     }
 
-    pub fn dim(mut self, dim: bool) -> Row {
+    pub fn dim(mut self, dim: bool) -> Row<I> {
         self.dim = dim;
         self
     }
@@ -180,28 +188,41 @@ pub fn changes(pairs: &[(&str, &str)], arrow: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-pub enum Picked {
+pub enum Picked<I> {
     /// The list used the key.
     Used,
-    Open(String),
+    Open(I),
     Ignored,
 }
 
-#[derive(Default)]
-pub struct List {
-    rows: Vec<Row>,
+pub struct List<I> {
+    rows: Vec<Row<I>>,
     cursor: usize,
     offset: usize,
     pub filter: Option<Input>,
-    /// Marked rows by id, where the page allows marking.
-    pub marked: BTreeSet<String>,
+    /// Marked rows, where the page allows marking.
+    pub marked: BTreeSet<I>,
     /// The page marks rows, so the column for the mark stays, marked or not.
     pub markable: bool,
     height: usize,
 }
 
-impl List {
-    pub fn new(rows: Vec<Row>) -> List {
+impl<I> Default for List<I> {
+    fn default() -> Self {
+        List {
+            rows: Vec::new(),
+            cursor: 0,
+            offset: 0,
+            filter: None,
+            marked: BTreeSet::new(),
+            markable: false,
+            height: 0,
+        }
+    }
+}
+
+impl<I: Clone + Ord> List<I> {
+    pub fn new(rows: Vec<Row<I>>) -> List<I> {
         let mut l = List::default();
         l.set(rows);
         l
@@ -209,16 +230,17 @@ impl List {
 
     /// Replaces the rows. The cursor stays on its row, or where its row was when it is gone,
     /// so taking a row out does not send the cursor back to the top.
-    pub fn set(&mut self, rows: Vec<Row>) {
-        let id = self.selected().map(|r| r.id.clone());
+    pub fn set(&mut self, rows: Vec<Row<I>>) {
+        let id = self.selected().and_then(|r| r.id.clone());
         let at = self
             .shown()
             .iter()
             .position(|&i| i == self.cursor)
             .unwrap_or(0);
         self.rows = rows;
-        self.marked.retain(|m| self.rows.iter().any(|r| &r.id == m));
-        if id.as_deref().is_some_and(|id| self.focus(id)) {
+        self.marked
+            .retain(|m| self.rows.iter().any(|r| r.id.as_ref() == Some(m)));
+        if id.as_ref().is_some_and(|id| self.focus(id)) {
             return;
         }
         let shown = self.shown();
@@ -228,8 +250,12 @@ impl List {
             .unwrap_or(0);
     }
 
-    pub fn focus(&mut self, id: &str) -> bool {
-        match self.shown().into_iter().find(|&i| self.rows[i].id == id) {
+    pub fn focus(&mut self, id: &I) -> bool {
+        match self
+            .shown()
+            .into_iter()
+            .find(|&i| self.rows[i].id.as_ref() == Some(id))
+        {
             Some(i) => {
                 self.cursor = i;
                 true
@@ -238,7 +264,7 @@ impl List {
         }
     }
 
-    pub fn rows(&self) -> &[Row] {
+    pub fn rows(&self) -> &[Row<I>] {
         &self.rows
     }
 
@@ -260,7 +286,7 @@ impl List {
             .collect()
     }
 
-    pub fn selected(&self) -> Option<&Row> {
+    pub fn selected(&self) -> Option<&Row<I>> {
         self.shown()
             .contains(&self.cursor)
             .then(|| &self.rows[self.cursor])
@@ -286,7 +312,7 @@ impl List {
         self.cursor = shown[next as usize];
     }
 
-    pub fn key(&mut self, key: Key) -> Picked {
+    pub fn key(&mut self, key: Key) -> Picked<I> {
         let typing = self.filter.is_some();
         match key.nav(typing) {
             Some(Nav::Up) => self.step(-1),
@@ -298,7 +324,8 @@ impl List {
             Some(Nav::Open) => {
                 return self
                     .selected()
-                    .map_or(Picked::Used, |r| Picked::Open(r.id.clone()));
+                    .and_then(|r| r.id.clone())
+                    .map_or(Picked::Used, Picked::Open);
             }
             Some(Nav::Filter) => self.open_filter(),
             Some(Nav::Back) if typing => self.filter = None,
@@ -322,7 +349,7 @@ impl List {
 
     /// Marks or unmarks the row under the cursor.
     pub fn toggle_mark(&mut self) {
-        if let Some(id) = self.selected().map(|r| r.id.clone())
+        if let Some(id) = self.selected().and_then(|r| r.id.clone())
             && !self.marked.remove(&id)
         {
             self.marked.insert(id);
@@ -409,7 +436,7 @@ impl List {
                     s.tone(Tone::Accent),
                 );
             }
-            let lead = if self.marked.contains(&row.id) {
+            let lead = if row.id.as_ref().is_some_and(|id| self.marked.contains(id)) {
                 Lead::Mark
             } else {
                 match row.lead {
@@ -486,7 +513,7 @@ mod tests {
         );
     }
 
-    fn list() -> List {
+    fn list() -> List<&'static str> {
         List::new(vec![
             Row::heading("A"),
             Row::new("1", "Updates"),
@@ -500,7 +527,7 @@ mod tests {
     fn a_list_longer_than_its_room_has_a_thumb_where_the_cursor_is() {
         let (app, _) = crate::ui::app::tests::app();
         let mut l = List::new((0..30).map(|i| Row::new(i.to_string(), "row")).collect());
-        let thumb = |l: &mut List| {
+        let thumb = |l: &mut List<String>| {
             let mut buf = Buffer::empty(Rect::new(0, 0, 14, 10));
             l.draw(Rect::new(2, 0, 10, 10), &mut buf, &app.ctx);
             (0..10)
@@ -510,7 +537,7 @@ mod tests {
         assert_eq!(thumb(&mut l), [0, 1, 2]);
         l.key(Key::Char('G'));
         assert_eq!(thumb(&mut l), [7, 8, 9]);
-        let mut short = List::new(vec![Row::new("1", "row")]);
+        let mut short = List::new(vec![Row::new("1".to_string(), "row")]);
         assert_eq!(thumb(&mut short), Vec::<u16>::new());
     }
 
@@ -544,14 +571,14 @@ mod tests {
     #[test]
     fn skips_headings_and_stops_at_the_ends() {
         let mut l = list();
-        assert_eq!(l.selected().unwrap().id, "1");
+        assert_eq!(l.selected().unwrap().id, Some("1"));
         l.key(Key::Down);
         l.key(Key::Char('j'));
-        assert_eq!(l.selected().unwrap().id, "3");
+        assert_eq!(l.selected().unwrap().id, Some("3"));
         l.key(Key::Down);
-        assert_eq!(l.selected().unwrap().id, "3");
+        assert_eq!(l.selected().unwrap().id, Some("3"));
         l.key(Key::Char('g'));
-        assert_eq!(l.selected().unwrap().id, "1");
+        assert_eq!(l.selected().unwrap().id, Some("1"));
     }
 
     #[test]
@@ -562,7 +589,7 @@ mod tests {
         for c in "dien".chars() {
             assert!(matches!(l.key(Key::Char(c)), Picked::Used));
         }
-        assert_eq!(l.selected().unwrap().id, "3");
+        assert_eq!(l.selected().unwrap().id, Some("3"));
         assert!(matches!(l.key(Key::Enter), Picked::Open(id) if id == "3"));
         l.key(Key::Esc);
         assert!(!l.typing());
@@ -640,7 +667,7 @@ mod tests {
         let mut l = list();
         l.key(Key::Down);
         l.set(vec![Row::new("0", "Neu"), Row::new("2", "Pakete")]);
-        assert_eq!(l.selected().unwrap().id, "2");
+        assert_eq!(l.selected().unwrap().id, Some("2"));
     }
 
     #[test]
@@ -658,7 +685,7 @@ mod tests {
                 .map(|i| Row::new(i.to_string(), format!("r{i}")))
                 .collect(),
         );
-        assert_eq!(l.selected().unwrap().id, "3");
+        assert_eq!(l.selected().unwrap().id.as_deref(), Some("3"));
         l.key(Key::Char('G'));
         l.set(
             [0, 1, 3]
@@ -666,6 +693,6 @@ mod tests {
                 .map(|i| Row::new(i.to_string(), format!("r{i}")))
                 .collect(),
         );
-        assert_eq!(l.selected().unwrap().id, "3");
+        assert_eq!(l.selected().unwrap().id.as_deref(), Some("3"));
     }
 }

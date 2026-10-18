@@ -45,8 +45,7 @@ pub struct Glyphs {
     pub up_down: &'static str,
     pub enter: &'static str,
     pub page_keys: &'static str,
-    /// The caret of a text box, and what stands for a typed letter of a password.
-    pub caret: &'static str,
+    /// What stands for a typed letter of a password.
     pub mask: &'static str,
     /// Whether the font has the icons in `icon`.
     pub icons: bool,
@@ -74,7 +73,6 @@ pub static UNICODE: Glyphs = Glyphs {
     up_down: "↑↓",
     enter: "⏎",
     page_keys: "⇞⇟",
-    caret: "▏",
     mask: "•",
     icons: true,
     blocks: true,
@@ -100,7 +98,6 @@ pub static ASCII: Glyphs = Glyphs {
     up_down: "up/down",
     enter: "enter",
     page_keys: "pgup/pgdn",
-    caret: "_",
     mask: "*",
     icons: false,
     blocks: false,
