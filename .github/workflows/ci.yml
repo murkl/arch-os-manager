@@ -47,20 +47,29 @@ jobs:
       - run: make check
 
   # The release pull request, or once that is merged, the tag and the release.
+  # Done as the account, not as the workflow's bot: GitHub holds the checks of
+  # a bot's pull request until someone approves its runs.
   release:
     name: Release
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions:
-      contents: write  # the release branch, the tag and the release
-      pull-requests: write  # the release pull request
     outputs:
       version: ${{ steps.please.outputs.version }}
       tag: ${{ steps.please.outputs.tag_name }}
     steps:
+      - env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::The repository has no secret RELEASE_TOKEN; docs/CONTRIBUTING.md says how to make it, then rerun this job."
+            exit 1
+          fi
+
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
         id: please
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
 
   # The AUR files for the tag's source tarball, built once as a user builds
   # them, then pushed, and the binary out of that package put on the release.
