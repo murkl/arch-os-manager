@@ -6,7 +6,7 @@ use super::{Ctx, Page, Tone};
 use crate::i18n::t;
 use crate::script::op;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Target {
     Upgrade,
     Reboot,
@@ -235,13 +235,13 @@ impl Target {
     }
 
     /// The row in the search over everything: the label, and where it lives.
-    pub fn search_row(self) -> Row {
+    pub fn search_row(self) -> Row<Target> {
         let place = if self.in_settings() {
             Target::Settings.label()
         } else {
             ""
         };
-        Row::new(self.id(), self.label())
+        Row::new(self, self.label())
             .icon(self.icon(), Tone::Normal)
             .detail(place, Tone::Muted)
     }

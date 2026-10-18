@@ -29,7 +29,7 @@ fn state(s: &Service) -> (String, Tone) {
 }
 
 pub struct ServicesPage {
-    list: List,
+    list: List<String>,
 }
 
 impl ServicesPage {
@@ -107,7 +107,7 @@ impl ServicePage {
             if service.user { "user" } else { "system" },
             service.unit.clone(),
         );
-        let log = Fetch::new("unit-log", move || {
+        let log = Fetch::new(move || {
             query(op::SERVICES_LOG, &[scope, &unit]).map(|o| journal::parse(&o))
         });
         ServicePage {
@@ -221,8 +221,8 @@ impl Page for ServicePage {
         self.detail.key(key, ctx)
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        self.log.receive(&mut Some(data));
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        self.log.receive();
         Flow::Stay
     }
 }

@@ -12,7 +12,7 @@ use crate::ui::list::{List, Picked, Row};
 use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
 
 pub struct PacnewPage {
-    list: List,
+    list: List<String>,
 }
 
 impl PacnewPage {
@@ -81,7 +81,7 @@ impl FilePage {
         let f = file.clone();
         FilePage {
             file,
-            diff: Fetch::new("diff", move || query(op::PACNEW_DIFF, &[&f])),
+            diff: Fetch::new(move || query(op::PACNEW_DIFF, &[&f])),
             detail: Detail::default(),
         }
     }
@@ -187,8 +187,8 @@ impl Page for FilePage {
         self.detail.key(key, ctx)
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        self.diff.receive(&mut Some(data));
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        self.diff.receive();
         Flow::Stay
     }
 }

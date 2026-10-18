@@ -10,15 +10,16 @@ use crate::script::{self, Failure, op};
 use crate::settings::{AUR_HELPERS, NOTIFY};
 use crate::ui::detail::{Block, Detail};
 use crate::ui::draw::put;
+use crate::ui::fetch::Task;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{SETTINGS, Target};
 use crate::ui::{Ctx, Flow, Key, Page, Style, Tone};
 
 pub struct SettingsPage {
-    list: List,
+    list: List<Target>,
     focus: Option<Target>,
     /// The app menu entry is being put in place. Its row waits and takes no press.
-    applying: bool,
+    applying: Option<Task<Result<crate::integration::Applied, Failure>>>,
     /// Why the last switch could not be put in place.
     failed: Option<String>,
 }
@@ -28,7 +29,7 @@ impl SettingsPage {
         SettingsPage {
             list: List::default(),
             focus,
-            applying: false,
+            applying: None,
             failed: None,
         }
     }
@@ -73,7 +74,7 @@ impl SettingsPage {
                     (label(every).into(), tone, false)
                 }
             }
-            Target::Desktop if self.applying => {
+            Target::Desktop if self.applying.is_some() => {
                 (ctx.style.spinner().to_string(), Tone::Accent, false)
             }
             Target::Desktop => {
@@ -98,7 +99,7 @@ impl SettingsPage {
 
     /// Flips the app menu entry in settings.yaml and puts it in place to match.
     fn toggle(&mut self, ctx: &mut Ctx) {
-        if self.applying {
+        if self.applying.is_some() {
             return;
         }
         let on = ctx.settings.app_menu.unwrap_or(true);
@@ -108,9 +109,10 @@ impl SettingsPage {
             return;
         };
         let settings = ctx.settings.clone();
-        self.applying = true;
         self.failed = None;
-        ctx.spawn(move || crate::integration::apply(&settings, &features));
+        self.applying = Some(Task::start(ctx, move || {
+            crate::integration::apply(&settings, &features)
+        }));
     }
 }
 
@@ -141,7 +143,7 @@ impl Page for SettingsPage {
             .iter()
             .map(|&target| {
                 let (detail, tone, dim) = self.value(target, ctx);
-                Row::new(target.id(), target.label())
+                Row::new(target, target.label())
                     .icon(target.icon(), Tone::Normal)
                     .detail(detail, tone)
                     .dim(dim)
@@ -149,7 +151,7 @@ impl Page for SettingsPage {
             .collect();
         self.list.set(rows);
         if let Some(target) = self.focus.take() {
-            self.list.focus(target.id());
+            self.list.focus(&target);
         }
         let height = SETTINGS.len() as u16;
         self.list.draw(
@@ -177,46 +179,46 @@ impl Page for SettingsPage {
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
-        let id = match self.list.key(key) {
-            Picked::Open(id) => id,
+        let target = match self.list.key(key) {
+            Picked::Open(target) => target,
             Picked::Used => return Flow::Stay,
             Picked::Ignored => return Flow::Ignored,
         };
-        match Target::from_id(&id) {
-            Some(t @ (Target::Language | Target::Theme | Target::AurHelper)) => {
+        match target {
+            t @ (Target::Language | Target::Theme | Target::AurHelper) => {
                 Flow::Push(choice(t, ctx))
             }
-            Some(Target::Notifications | Target::Desktop)
+            Target::Notifications | Target::Desktop
                 if ctx.features().is_some_and(|f| f.lacks("desktop").is_some()) =>
             {
                 Flow::Stay
             }
-            Some(Target::Notifications)
+            Target::Notifications
                 if ctx.features().is_some() && !ctx.available(op::DESKTOP_NOTIFY) =>
             {
                 Flow::Push(Box::new(FeaturesPage::new(Some("libnotify".into()))))
             }
-            Some(Target::Notifications) => Flow::Push(choice(Target::Notifications, ctx)),
-            Some(Target::Desktop) => {
+            Target::Notifications => Flow::Push(choice(Target::Notifications, ctx)),
+            Target::Desktop => {
                 self.toggle(ctx);
                 Flow::Stay
             }
-            Some(Target::Usage) => {
+            Target::Usage => {
                 let on = ctx.settings.usage.unwrap_or(true);
                 ctx.settings.usage = crate::settings::switch(!on);
                 ctx.save_settings();
                 Flow::Stay
             }
-            Some(Target::Hidden) => Flow::Push(Box::new(HiddenPage::new())),
-            Some(Target::Features) => Flow::Push(Box::new(FeaturesPage::new(None))),
-            Some(Target::About) => Flow::Push(Box::new(AboutPage::new())),
+            Target::Hidden => Flow::Push(Box::new(HiddenPage::new())),
+            Target::Features => Flow::Push(Box::new(FeaturesPage::new(None))),
+            Target::About => Flow::Push(Box::new(AboutPage::new())),
             _ => Flow::Stay,
         }
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        if let Ok(result) = data.downcast::<Result<crate::integration::Applied, Failure>>() {
-            self.applying = false;
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        if let Some(result) = self.applying.as_mut().and_then(Task::take) {
+            self.applying = None;
             self.failed = result
                 .err()
                 .map(|f| format!("{}: {}", f.headline(), f.detail));
@@ -229,24 +231,24 @@ impl Page for SettingsPage {
     }
 
     fn animating(&self, _: &Ctx) -> bool {
-        self.applying
+        self.applying.is_some()
     }
 }
 
 /// A choice among a few values, opening on the current one.
 pub struct ChoicePage {
     target: Target,
-    list: List,
+    list: List<String>,
     /// The theme as it was, for leaving a preview without choosing.
     before: Option<Style>,
 }
 
 pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
-    let (rows, current): (Vec<Row>, String) = match target {
+    let (rows, current): (Vec<Row<String>>, String) = match target {
         Target::Language => (
             Lang::ALL
                 .iter()
-                .map(|l| Row::new(l.code(), l.name()))
+                .map(|l| Row::new(l.code().to_string(), l.name()))
                 .collect(),
             i18n::current().code().into(),
         ),
@@ -260,23 +262,27 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
         Target::Notifications => (
             NOTIFY
                 .iter()
-                .map(|every| Row::new(*every, label(every)))
+                .map(|every| Row::new(every.to_string(), label(every)))
                 .collect(),
             ctx.settings.notify().into(),
         ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
-            let mut rows =
-                vec![Row::new("auto", t("Automatic")).detail(t("paru, else yay"), Tone::Muted)];
+            let mut rows = vec![
+                Row::new("auto".to_string(), t("Automatic"))
+                    .detail(t("paru, else yay"), Tone::Muted),
+            ];
             rows.extend(AUR_HELPERS.iter().map(|h| {
                 let (text, tone) = if installed(h) {
                     (t("installed"), Tone::Ok)
                 } else {
                     (t("not installed"), Tone::Muted)
                 };
-                Row::new(*h, *h).detail(text, tone).dim(!installed(h))
+                Row::new(h.to_string(), *h)
+                    .detail(text, tone)
+                    .dim(!installed(h))
             }));
-            rows.push(Row::new("none", t("None")).detail(t("no AUR"), Tone::Muted));
+            rows.push(Row::new("none".to_string(), t("None")).detail(t("no AUR"), Tone::Muted));
             (
                 rows,
                 ctx.settings
@@ -289,7 +295,7 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
     let rows = rows
         .into_iter()
         .map(|r| {
-            let lead = if r.id == current {
+            let lead = if r.id.as_deref() == Some(current.as_str()) {
                 crate::ui::icon::CHECK
             } else {
                 ""
@@ -334,7 +340,7 @@ impl ChoicePage {
 
     fn preview(&self, ctx: &mut Ctx) {
         if self.target == Target::Theme
-            && let Some(id) = self.list.selected().map(|r| r.id.clone())
+            && let Some(id) = self.list.selected().and_then(|r| r.id.as_deref())
             && let Some(theme) = ctx.themes.iter().find(|th| th.id == id)
         {
             ctx.style = Style::new(&theme.colors, ctx.console);
@@ -489,7 +495,7 @@ mod tests {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (app, _) = crate::ui::app::tests::app();
         let mut page = SettingsPage::new(None);
-        page.applying = true;
+        page.applying = Some(Task::pending());
         let spinning = |target| {
             let (text, ..) = page.value(target, &app.ctx);
             app.ctx.style.glyphs.spinner.contains(&text.as_str())

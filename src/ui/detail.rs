@@ -83,7 +83,7 @@ pub struct Detail {
     /// The leading blocks that stay while the rest scrolls.
     pinned: usize,
     acts: Vec<Act>,
-    list: List,
+    list: List<usize>,
     scroll: usize,
     page: usize,
     /// The facts are longer than their room, as last drawn.
@@ -97,7 +97,7 @@ impl Detail {
             .iter()
             .enumerate()
             .map(|(i, a)| {
-                let row = Row::new(i.to_string(), a.label.clone());
+                let row = Row::new(i, a.label.clone());
                 let row = match a.icon {
                     Some(icon) => row.icon(icon, Tone::Normal),
                     None => row,
@@ -125,7 +125,7 @@ impl Detail {
 
     /// Puts the cursor on an action, by its position.
     pub fn focus(&mut self, index: usize) {
-        self.list.focus(&index.to_string());
+        self.list.focus(&index);
     }
 
     pub fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -142,8 +142,8 @@ impl Detail {
             Some(Nav::Bottom) if scroll_only => self.scroll = usize::MAX / 2,
             _ => {
                 return match self.list.key(key) {
-                    Picked::Open(id) => {
-                        let act = &mut self.acts[id.parse::<usize>().unwrap_or(0)];
+                    Picked::Open(i) => {
+                        let act = &mut self.acts[i];
                         if act.unavailable.is_some() {
                             Flow::Stay
                         } else {

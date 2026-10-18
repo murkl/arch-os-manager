@@ -44,7 +44,7 @@ fn is_read(ctx: &Ctx, link: &str) -> bool {
 }
 
 pub struct NewsPage {
-    list: List,
+    list: List<String>,
 }
 
 impl NewsPage {
@@ -102,9 +102,9 @@ impl Page for NewsPage {
     fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)> {
         let mut h = super::list_hints(self.list.typing());
         if !self.list.typing()
-            && let Some(row) = self.list.selected()
+            && let Some(link) = self.list.selected().and_then(|r| r.id.as_deref())
         {
-            let label = if is_read(ctx, &row.id) {
+            let label = if is_read(ctx, link) {
                 t("unread")
             } else {
                 t("read")
@@ -116,7 +116,7 @@ impl Page for NewsPage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         if key == Key::Char(' ') && !self.list.typing() {
-            if let Some(link) = self.list.selected().map(|r| r.id.clone()) {
+            if let Some(link) = self.list.selected().and_then(|r| r.id.clone()) {
                 let read = is_read(ctx, &link);
                 mark(ctx, &link, !read);
             }

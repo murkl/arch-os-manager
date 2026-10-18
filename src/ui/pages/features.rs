@@ -31,7 +31,7 @@ fn group(id: &str) -> (&'static str, &'static str) {
 }
 
 pub struct FeaturesPage {
-    list: List,
+    list: List<String>,
     focus: Option<String>,
 }
 

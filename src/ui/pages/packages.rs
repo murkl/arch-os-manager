@@ -13,7 +13,7 @@ use crate::data::{aur, date};
 use crate::i18n::{t, tf};
 use crate::script::{self, Failure, op, query};
 use crate::ui::detail::{Act, Block, Detail, loaded};
-use crate::ui::fetch::Fetch;
+use crate::ui::fetch::{Fetch, Task};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::{Lead, List, Picked, Row};
@@ -29,9 +29,19 @@ struct Results {
     aur: Option<Result<Vec<aur::Package>, Failure>>,
 }
 
+/// A row of the search: a package installed, found in a repository, or found in the AUR.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Pick {
+    Local(String),
+    Repo(String, String),
+    Aur(String),
+}
+
 pub struct PackagesPage {
     input: Input,
-    list: List,
+    list: List<Pick>,
+    /// The search under way, and what the last one found.
+    search: Option<Task<Results>>,
     results: Option<Results>,
     due: Option<Instant>,
 }
@@ -43,12 +53,13 @@ impl PackagesPage {
         PackagesPage {
             input: Input::new(t("Search packages")),
             list,
+            search: None,
             results: None,
             due: None,
         }
     }
 
-    fn rows(&self, ctx: &Ctx) -> Vec<Row> {
+    fn rows(&self, ctx: &Ctx) -> Vec<Row<Pick>> {
         let Some(installed) = ctx.shared.installed.ready() else {
             return Vec::new();
         };
@@ -60,7 +71,7 @@ impl PackagesPage {
                 p.version.clone()
             };
             let glyph = if p.foreign { icon::ARCH } else { icon::PACKAGE };
-            Row::new(format!("local:{}", p.name), p.name.clone())
+            Row::new(Pick::Local(p.name.clone()), p.name.clone())
                 .icon(glyph, Tone::Ok)
                 .detail(detail, Tone::Muted)
         };
@@ -94,7 +105,7 @@ impl PackagesPage {
                     .filter(|f| !is_installed(&f.name))
                     .take(LIMIT)
                     .map(|f| {
-                        Row::new(format!("repo:{}/{}", f.repo, f.name), f.name.clone())
+                        Row::new(Pick::Repo(f.repo.clone(), f.name.clone()), f.name.clone())
                             .icon(icon::PACKAGE, Tone::Muted)
                             .detail(format!("{}  {}", f.version, f.repo), Tone::Muted)
                     }),
@@ -109,7 +120,7 @@ impl PackagesPage {
                         found.iter().filter(|p| !is_installed(&p.name)).collect();
                     found.sort_by(|a, b| b.popularity.total_cmp(&a.popularity));
                     rows.extend(found.into_iter().take(LIMIT).map(|p| {
-                        Row::new(format!("aur:{}", p.name), p.name.clone())
+                        Row::new(Pick::Aur(p.name.clone()), p.name.clone())
                             .icon(icon::ARCH, Tone::Muted)
                             .detail(p.version.clone(), Tone::Muted)
                     }));
@@ -126,7 +137,7 @@ impl PackagesPage {
             return;
         }
         let with_aur = script::aur().is_some() && q.chars().count() >= 2;
-        ctx.spawn(move || Results {
+        self.search = Some(Task::start(ctx, move || Results {
             repo: query(op::PACKAGES_SEARCH, &[&escape_regex(&q)]).map(|o| parse_search(&o)),
             aur: with_aur.then(|| {
                 query(op::PACKAGES_AUR_SEARCH, &[&q]).and_then(|o| {
@@ -134,20 +145,16 @@ impl PackagesPage {
                 })
             }),
             query: q,
-        });
+        }));
     }
 
-    fn open(&self, id: &str) -> Flow {
+    fn open(&self, pick: Pick) -> Flow {
         if !self.list.marked.is_empty() {
             return Flow::Push(Box::new(MarkedPage::new(self.list.marked.clone())));
         }
-        let (kind, target) = id.split_once(':').unwrap_or(("", id));
-        let page = match kind {
-            "repo" => PackagePage::new(
-                target.rsplit('/').next().unwrap_or(target),
-                Some(target.to_string()),
-            ),
-            _ => PackagePage::new(target, None),
+        let page = match pick {
+            Pick::Repo(repo, name) => PackagePage::new(&name, Some(format!("{repo}/{name}"))),
+            Pick::Local(name) | Pick::Aur(name) => PackagePage::new(&name, None),
         };
         Flow::Push(Box::new(page))
     }
@@ -203,8 +210,8 @@ impl Page for PackagesPage {
             | Key::PageUp
             | Key::PageDown
             | Key::Enter => {
-                if let Picked::Open(id) = self.list.key(key) {
-                    return self.open(&id);
+                if let Picked::Open(pick) = self.list.key(key) {
+                    return self.open(pick);
                 }
             }
             k => {
@@ -216,9 +223,9 @@ impl Page for PackagesPage {
         Flow::Stay
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        if let Ok(r) = data.downcast::<Results>() {
-            self.results = Some(*r);
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        if let Some(r) = self.search.as_mut().and_then(Task::take) {
+            self.results = Some(r);
         }
         Flow::Stay
     }
@@ -258,7 +265,7 @@ impl PackagePage {
     /// `repo` is `repo/name` where the search found it in a repository.
     pub fn new(name: &str, repo: Option<String>) -> PackagePage {
         let n = name.to_string();
-        let fetch = Fetch::new("package", move || {
+        let fetch = Fetch::new(move || {
             let local = query(op::PACKAGES_INFO, &["local", &n])
                 .ok()
                 .map(|o| parse_info(&o));
@@ -483,8 +490,8 @@ impl Page for PackagePage {
         self.detail.key(key, ctx)
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        self.fetch.receive(&mut Some(data));
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        self.fetch.receive();
         Flow::Stay
     }
 
@@ -505,16 +512,15 @@ struct MarkedPage {
 }
 
 impl MarkedPage {
-    fn new(marked: BTreeSet<String>) -> MarkedPage {
+    fn new(marked: BTreeSet<Pick>) -> MarkedPage {
         let mut repo = Vec::new();
         let mut from_aur = Vec::new();
         let mut local = Vec::new();
-        for id in marked {
-            match id.split_once(':') {
-                Some(("repo", target)) => repo.push(target.to_string()),
-                Some(("aur", target)) => from_aur.push(target.to_string()),
-                Some((_, target)) => local.push(target.to_string()),
-                None => {}
+        for pick in marked {
+            match pick {
+                Pick::Repo(r, name) => repo.push(format!("{r}/{name}")),
+                Pick::Aur(name) => from_aur.push(name),
+                Pick::Local(name) => local.push(name),
             }
         }
         let mut body = Vec::new();
@@ -605,15 +611,14 @@ impl Page for MarkedPage {
 pub struct VersionsPage {
     name: String,
     fetch: Fetch<Vec<Version>>,
-    list: List,
+    list: List<String>,
 }
 
 impl VersionsPage {
     pub fn new(name: &str) -> VersionsPage {
         let n = name.to_string();
-        let fetch = Fetch::new("versions", move || {
-            query(op::PACKAGES_VERSIONS, &[&n]).map(|o| parse_versions(&o, &n))
-        });
+        let fetch =
+            Fetch::new(move || query(op::PACKAGES_VERSIONS, &[&n]).map(|o| parse_versions(&o, &n)));
         VersionsPage {
             name: name.to_string(),
             fetch,
@@ -696,8 +701,8 @@ impl Page for VersionsPage {
         }
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        self.fetch.receive(&mut Some(data));
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        self.fetch.receive();
         Flow::Stay
     }
 
@@ -720,7 +725,7 @@ impl PkgbuildPage {
     pub fn new(base: &str) -> PkgbuildPage {
         let b = base.to_string();
         PkgbuildPage {
-            fetch: Fetch::new("pkgbuild", move || query(op::PACKAGES_PKGBUILD, &[&b])),
+            fetch: Fetch::new(move || query(op::PACKAGES_PKGBUILD, &[&b])),
             detail: Detail::default(),
             shown: false,
         }
@@ -758,8 +763,8 @@ impl Page for PkgbuildPage {
         self.detail.key(key, ctx)
     }
 
-    fn data(&mut self, data: Box<dyn std::any::Any + Send>, _: &mut Ctx) -> Flow {
-        self.fetch.receive(&mut Some(data));
+    fn done(&mut self, _: &mut Ctx) -> Flow {
+        self.fetch.receive();
         Flow::Stay
     }
 

@@ -18,7 +18,7 @@ fn hide(message: &str, ctx: &mut Ctx) {
 }
 
 pub struct LogPage {
-    list: List,
+    list: List<usize>,
 }
 
 impl LogPage {
@@ -28,12 +28,8 @@ impl LogPage {
         }
     }
 
-    fn entry(&self, ctx: &Ctx, id: &str) -> Option<Entry> {
-        ctx.shared
-            .journal
-            .ready()?
-            .get(id.parse::<usize>().ok()?)
-            .cloned()
+    fn entry(&self, ctx: &Ctx, i: usize) -> Option<Entry> {
+        ctx.shared.journal.ready()?.get(i).cloned()
     }
 }
 
@@ -46,14 +42,14 @@ impl Page for LogPage {
         let Some(all) = loaded(&ctx.shared.journal, area, buf, ctx) else {
             return;
         };
-        let rows: Vec<Row> = all
+        let rows: Vec<Row<usize>> = all
             .iter()
             .enumerate()
             .rev()
             .filter(|(_, e)| !e.hidden(&ctx.settings.hidden_log))
             .map(|(i, e)| {
                 let first = e.message.lines().next().unwrap_or_default();
-                Row::new(i.to_string(), format!("{}  {first}", e.ident))
+                Row::new(i, format!("{}  {first}", e.ident))
                     .dot(Tone::Warn)
                     .detail(e.clock(), Tone::Muted)
             })
@@ -75,13 +71,18 @@ impl Page for LogPage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         if key == Key::Char('x') && !self.list.typing() {
-            if let Some(e) = self.list.selected().and_then(|r| self.entry(ctx, &r.id)) {
+            if let Some(e) = self
+                .list
+                .selected()
+                .and_then(|r| r.id)
+                .and_then(|i| self.entry(ctx, i))
+            {
                 hide(&e.message, ctx);
             }
             return Flow::Stay;
         }
         match self.list.key(key) {
-            Picked::Open(id) => match self.entry(ctx, &id) {
+            Picked::Open(i) => match self.entry(ctx, i) {
                 Some(e) => Flow::Push(Box::new(EntryPage::new(e))),
                 None => Flow::Stay,
             },
@@ -144,7 +145,7 @@ impl Page for EntryPage {
 
 /// The hidden messages, to show again.
 pub struct HiddenPage {
-    list: List,
+    list: List<String>,
 }
 
 impl HiddenPage {
@@ -161,7 +162,7 @@ impl Page for HiddenPage {
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
-        let rows: Vec<Row> = ctx
+        let rows: Vec<Row<String>> = ctx
             .settings
             .hidden_log
             .iter()
