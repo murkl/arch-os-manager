@@ -2,7 +2,7 @@
 
 <img src="banner.png" alt="System Manager">
 
-<p><b>Update</b>, <b>maintain</b> and <b>repair</b> Arch Linux from one place.</p>
+<p>Simply <b>update</b>, <b>maintain</b> and <b>repair</b> Arch Linux from one place.</p>
 
 **[➜ Reference](REFERENCE.md)** · **[➜ Contributing](CONTRIBUTING.md)**
 

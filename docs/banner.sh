@@ -22,5 +22,5 @@ python3 docs/banner.py \
     --logo scripts/desktop/logo.svg \
     --card docs/screenshots/home.png \
     --card docs/screenshots/update.png \
-    --tagline "Update, maintain and repair Arch Linux<br>from one place." \
+    --tagline "Simply update, maintain and repair<br>Arch Linux from one place." \
     --cell 7
