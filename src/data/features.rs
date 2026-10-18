@@ -98,6 +98,11 @@ impl Features {
             None => AUR_HELPERS.into_iter().find(|x| self.ok(x)),
         }
     }
+
+    /// What of Flatpak scripts handle: the chosen part where it is there, else nothing.
+    pub fn flatpak(&self, chosen: &'static str) -> &'static str {
+        if self.ok("flatpak") { chosen } else { "off" }
+    }
 }
 
 #[cfg(test)]
@@ -167,5 +172,12 @@ mod tests {
         let only_yay = Features::parse("paru\tmissing\nyay\tok\t12\n");
         assert_eq!(only_yay.aur_helper(Some("paru")), None);
         assert_eq!(only_yay.aur_helper(None), Some("yay"));
+        let flatpak = Features::parse("flatpak\tok\t1:1.18.4-1\n");
+        assert_eq!(flatpak.flatpak("cleanup"), "cleanup");
+        assert_eq!(
+            f.flatpak("all"),
+            "off",
+            "without flatpak nothing is handled"
+        );
     }
 }

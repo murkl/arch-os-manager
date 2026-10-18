@@ -1,0 +1,24 @@
+{
+  "names": [
+    "archlinux",
+    "arch-linux",
+    "arch-os",
+    "aur",
+    "pacman",
+    "paru",
+    "yay",
+    "flatpak",
+    "fwupd",
+    "gnome",
+    "wayland",
+    "systemd",
+    "maintenance",
+    "system-update",
+    "updater",
+    "tui",
+    "ratatui",
+    "rust",
+    "linux",
+    "system-manager"
+  ]
+}

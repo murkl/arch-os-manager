@@ -182,6 +182,13 @@ pub fn aur() -> Option<String> {
     (!helper.is_empty()).then_some(helper)
 }
 
+static FLATPAK: Mutex<&str> = Mutex::new("off");
+
+/// What of Flatpak scripts handle, as `$SM_FLATPAK`: one of `settings::FLATPAK`.
+pub fn set_flatpak(handled: &'static str) {
+    *FLATPAK.lock().unwrap() = handled;
+}
+
 static DIR: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
 /// The embedded scripts written out once per process, readable by this user only.
@@ -226,6 +233,7 @@ fn command(op: Op, args: &[String]) -> Result<Command, String> {
         .args(args);
     cmd.env("LC_ALL", "C.UTF-8")
         .env("SM_AUR", AUR.lock().unwrap().as_str())
+        .env("SM_FLATPAK", *FLATPAK.lock().unwrap())
         .env("SUDO_PROMPT", sudo::PROMPT)
         .env_remove("BASH_ENV")
         .env_remove("ENV");

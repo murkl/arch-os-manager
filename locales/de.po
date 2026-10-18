@@ -232,6 +232,9 @@ msgstr "Aktualisiert die Firmware des Geräts"
 msgid "Flatpak apps"
 msgstr "Flatpak-Apps"
 
+msgid "Flatpak"
+msgstr "Flatpak"
+
 msgid "Updates and cleans up Flatpak apps"
 msgstr "Aktualisiert Flatpak-Apps und räumt sie auf"
 
@@ -1151,6 +1154,12 @@ msgstr "stündlich"
 
 msgid "every week"
 msgstr "wöchentlich"
+
+msgid "updates and clean-up"
+msgstr "Updates und Aufräumen"
+
+msgid "clean-up only"
+msgstr "nur Aufräumen"
 
 msgid "{n} package"
 msgstr "{n} Paket"

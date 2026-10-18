@@ -194,6 +194,7 @@ fn setup() -> Result<(Settings, Features), Failure> {
     );
     let features = Features::load()?;
     script::set_aur(features.aur_helper(settings.aur_helper.as_deref()));
+    script::set_flatpak(features.flatpak(settings.flatpak()));
     Ok((settings, features))
 }
 

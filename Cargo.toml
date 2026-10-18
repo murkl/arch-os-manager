@@ -1,7 +1,7 @@
 [package]
 name = "system-manager"
 edition = "2024"
-rust-version = "1.99"
+rust-version = "1.89"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/murkl/arch-os-manager"
 publish = false

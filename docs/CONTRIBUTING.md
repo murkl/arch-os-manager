@@ -89,8 +89,11 @@ make github
 
 | File | Says |
 | --- | --- |
-| `repository.json` | Squash merges only, under the pull request's title alone; auto-merge allowed; a merged branch is deleted; no wiki, no projects |
-| `ruleset.json` | `main` takes only a pull request that has passed `Check` and `Title`. No force push, no deletion |
+| `repository.json` | Description and homepage. Squash merges only, under the pull request's title alone; auto-merge allowed; a merged branch is deleted; no wiki, no projects. Secret scanning with push protection |
+| `ruleset.json` | `main` takes only a squashed pull request that has passed `Check` and `Title`. No force push, no deletion |
 | `actions.json` | A workflow's token can only read unless it says otherwise |
+| `topics.json` | The topics |
 
-Run it again after changing one of them. The script is the same in every project released this way, and `ruleset.json` names each project's checks. No CodeQL: the only language it finds here is the workflows, which zizmor checks in `make check`.
+Run it again after changing one of them. The script also turns on Dependabot alerts and private vulnerability reporting. It is the same in every project released this way, and `ruleset.json` names each project's checks. No CodeQL, which finds Rust and the workflows here: clippy and zizmor check them in `make check`.
+
+**Note:** _The social preview is `docs/banner.png`, uploaded by hand under **Settings › General › Social preview**: GitHub has no API for it._

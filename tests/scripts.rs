@@ -63,6 +63,8 @@ impl Sandbox {
             )
             .env("SM_EVENTS", &events)
             .env("SM_AUR", "")
+            // The machine's own Flatpak stays out of reach, unless a test asks for it.
+            .env("SM_FLATPAK", "off")
             // A session answers, unless a test takes it away.
             .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/sandbox")
             .env_remove("XDG_RUNTIME_DIR")
@@ -89,7 +91,6 @@ fn updates_lists_the_repositories_then_the_aur() {
         "echo 'linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1'",
     );
     s.stub("paru", "echo 'paru-bin 2.0.0-1 -> 2.1.0-1'; exit 1");
-    s.stub("flatpak", "");
     let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
@@ -117,7 +118,7 @@ fn flatpak_updates_name_both_versions_else_both_commits() {
 *) exit 1 ;;
 esac"#,
     );
-    let o = s.run("update", &["list"], &[]);
+    let o = s.run("update", &["list"], &[("SM_FLATPAK", "all")]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
@@ -133,7 +134,11 @@ fn updates_says_nothing_when_nothing_is_pending() {
     s.stub("checkupdates", "exit 2");
     s.stub("paru", "exit 1");
     s.stub("flatpak", "exit 0");
-    let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
+    let o = s.run(
+        "update",
+        &["list"],
+        &[("SM_AUR", "paru"), ("SM_FLATPAK", "all")],
+    );
     assert_eq!((o.code, o.out.as_str()), (0, ""));
 }
 
@@ -148,7 +153,11 @@ fn updates_tells_an_unreachable_server_from_a_failing_helper() {
     );
     s.stub("paru", "echo 'error: could not resolve host' >&2; exit 1");
     s.stub("flatpak", "exit 1");
-    let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
+    let o = s.run(
+        "update",
+        &["list"],
+        &[("SM_AUR", "paru"), ("SM_FLATPAK", "all")],
+    );
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
@@ -171,7 +180,11 @@ list) printf 'org.gnome.Platform\tx86_64\t49\ta1\t\norg.gnome.Platform\tx86_64\t
 remote-ls) printf 'org.gnome.Platform\tx86_64\t49\ta2\t\norg.gnome.Platform\tx86_64\t50\tb2\t\n' ;;
 esac"#,
     );
-    let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
+    let o = s.run(
+        "update",
+        &["list"],
+        &[("SM_AUR", "paru"), ("SM_FLATPAK", "all")],
+    );
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
@@ -211,16 +224,17 @@ fn a_run_holds_shutdown_off_and_a_query_does_not() {
     let s = Sandbox::new("hold");
     s.stub("systemd-inhibit", "exit 0");
     s.stub("pacman", "exit 0");
-    s.stub("flatpak", "exit 0");
     let o = s.run("update", &["run"], &[("SM_RUN", "Updating the system")]);
     assert_eq!(o.code, 0, "{}", o.events);
-    assert!(
-        o.calls.contains(
-            "systemd-inhibit --what=shutdown:sleep --mode=block --who=System Manager --why=Updating the system tail --pid="
-        ),
-        "{}",
-        o.calls
-    );
+    // The lock is taken in the background, so its stand-in may log only after the run.
+    let held = "systemd-inhibit --what=shutdown:sleep --mode=block --who=System Manager --why=Updating the system tail --pid=";
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut calls = o.calls;
+    while !calls.contains(held) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        calls = std::fs::read_to_string(s.dir.join("calls")).unwrap_or_default();
+    }
+    assert!(calls.contains(held), "{calls}");
     let q = Sandbox::new("hold-query");
     q.stub("systemd-inhibit", "exit 0");
     let o = q.run("system", &["nopasswd"], &[]);
@@ -422,7 +436,8 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
     for c in ["pacman", "paru", "flatpak"] {
         s.stub(c, "exit 0");
     }
-    let o = s.run("update", &["run"], &[("SM_AUR", "paru")]);
+    let all = [("SM_AUR", "paru"), ("SM_FLATPAK", "all")];
+    let o = s.run("update", &["run"], &all);
     assert_eq!(o.code, 0, "{}", o.events);
     let order: Vec<&str> = o.calls.lines().filter(|l| !l.starts_with("sudo")).collect();
     assert_eq!(
@@ -436,7 +451,7 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
     assert_eq!(o.events, "step\trepo\nstep\taur\nstep\tflatpak\n");
     // A failing helper leaves Flatpak still to update, then says so.
     s.stub("paru", "exit 1");
-    let o = s.run("update", &["run"], &[("SM_AUR", "paru")]);
+    let o = s.run("update", &["run"], &all);
     assert_eq!(o.code, 11, "{}", o.events);
     assert!(
         o.calls
@@ -444,6 +459,24 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
         "{}",
         o.calls
     );
+}
+
+/// Where another app store updates Flatpak, the check and the update leave it out.
+#[test]
+fn updates_leave_flatpak_out_unless_all_of_it_is_handled() {
+    let s = Sandbox::new("flatpak-out");
+    for c in ["pacman", "flatpak"] {
+        s.stub(c, "exit 0");
+    }
+    s.stub("checkupdates", "exit 2");
+    for handled in ["cleanup", "off"] {
+        let list = s.run("update", &["list"], &[("SM_FLATPAK", handled)]);
+        let run = s.run("update", &["run"], &[("SM_FLATPAK", handled)]);
+        assert_eq!((list.code, run.code), (0, 0), "{}", run.events);
+        assert_eq!(run.events, "step\trepo\n");
+    }
+    let calls = std::fs::read_to_string(s.dir.join("calls")).unwrap_or_default();
+    assert!(!calls.contains("flatpak"), "{calls}");
 }
 
 #[test]
@@ -825,6 +858,52 @@ fn cleanup_keeps_the_kernels_the_snapshots_need() {
     );
 }
 
+/// A snapshot snapper removes while the clean-up reads it needs no kernel kept, and one that
+/// stays unreadable still stops the clean-up. Needs /.snapshots to be created, so it runs as
+/// root, as in the CI container.
+#[test]
+fn cleanup_passes_over_a_snapshot_removed_while_it_is_read() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
+    if !rustix::process::getuid().is_root() || std::path::Path::new("/.snapshots").exists() {
+        eprintln!("skipped: needs root and no /.snapshots");
+        return;
+    }
+    let local = "/.snapshots/1/snapshot/var/lib/pacman/local/linux-zen-7.2.8.zen1-1";
+    let s = Sandbox::new("cleanup-removed");
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
+            s.dir.join("pkg").display()
+        ),
+    );
+    s.stub(
+        "paccache",
+        "echo '==> no candidate packages found for pruning'",
+    );
+    s.stub(
+        "pacman",
+        r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
+    );
+    // grep as snapper racing it: the snapshot goes while its files are read.
+    for (grep, code) in [("rm -rf /.snapshots/1; exit 2", 0), ("exit 2", 10)] {
+        std::fs::create_dir_all(local).unwrap();
+        std::fs::write(
+            format!("{local}/files"),
+            "%FILES%\nusr/lib/modules/7.2.8-zen1-1-zen/vmlinuz\n",
+        )
+        .unwrap();
+        s.stub(
+            "grep",
+            &format!(r#"case "$*" in *"/.snapshots/"*) {grep} ;; esac; exec /usr/bin/grep "$@""#),
+        );
+        let o = s.run("cleanup", &["plan"], &[]);
+        std::fs::remove_dir_all("/.snapshots").unwrap();
+        assert_eq!(o.code, code, "{grep}: {}", o.events);
+        assert!(!o.out.contains("keep\t"), "{}", o.out);
+    }
+}
+
 #[test]
 fn cleanup_removes_a_cached_package_with_its_signature() {
     let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -850,7 +929,6 @@ fn cleanup_removes_a_cached_package_with_its_signature() {
         "pacman",
         r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
     );
-    s.stub("flatpak", "exit 0");
     let o = s.run("cleanup", &["plan"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
@@ -1329,6 +1407,49 @@ fn reflector_ranks_by_speed_in_the_country_of_the_time_zone_where_it_has_mirrors
     assert!(
         o.calls
             .ends_with("systemctl enable --now fwupd-refresh.timer\n"),
+        "{}",
+        o.calls
+    );
+}
+
+/// Unused Flatpak runtimes go unless Flatpak is left alone.
+#[test]
+fn cleanup_drops_unused_runtimes_unless_flatpak_is_left_alone() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
+    let s = Sandbox::new("cleanup-flatpak");
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
+            s.dir.join("pkg").display()
+        ),
+    );
+    s.stub(
+        "paccache",
+        "echo '==> no candidate packages found for pruning'",
+    );
+    s.stub(
+        "pacman",
+        r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
+    );
+    s.stub("flatpak", "exit 0");
+    for handled in ["all", "cleanup", "off", "unknown"] {
+        let o = s.run("cleanup", &["plan"], &[("SM_FLATPAK", handled)]);
+        assert_eq!(o.code, 0, "{}", o.events);
+        let listed = o.out.lines().any(|l| l == "flatpak");
+        assert_eq!(listed, ["all", "cleanup"].contains(&handled), "{handled}");
+    }
+    for handled in ["off", "unknown"] {
+        let o = s.run("cleanup", &["run"], &[("SM_FLATPAK", handled)]);
+        assert_eq!(o.code, 0, "{}", o.events);
+    }
+    let calls = std::fs::read_to_string(s.dir.join("calls")).unwrap_or_default();
+    assert!(!calls.contains("flatpak"), "{calls}");
+    let o = s.run("cleanup", &["run"], &[("SM_FLATPAK", "cleanup")]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls
+            .ends_with("flatpak uninstall --unused --assumeyes --noninteractive\n"),
         "{}",
         o.calls
     );

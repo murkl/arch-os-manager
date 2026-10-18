@@ -20,6 +20,9 @@ pub struct Settings {
     /// How often new updates are announced, one of `NOTIFY`, hourly unless chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notify: Option<String>,
+    /// What of Flatpak this program handles, one of `FLATPAK`, all unless chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flatpak: Option<String>,
     /// Journal messages like one of these, numbers aside, are left out of the log page.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_log: Vec<String>,
@@ -28,6 +31,9 @@ pub struct Settings {
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
 /// How often updates are announced, `off` for never. The first is the default.
 pub const NOTIFY: [&str; 4] = ["hourly", "daily", "weekly", "off"];
+/// What of Flatpak is handled: updates and the clean-up, the clean-up only, or nothing, as where
+/// another app store updates it. The first is the default.
+pub const FLATPAK: [&str; 3] = ["all", "cleanup", "off"];
 
 /// A switch stored only as an exception: absent is on.
 pub fn switch(on: bool) -> Option<bool> {
@@ -56,6 +62,11 @@ impl Settings {
         {
             return Err(format!("notify: {n} is not one of {}", NOTIFY.join(", ")));
         }
+        if let Some(f) = &s.flatpak
+            && !FLATPAK.contains(&f.as_str())
+        {
+            return Err(format!("flatpak: {f} is not one of {}", FLATPAK.join(", ")));
+        }
         Ok(s)
     }
 
@@ -66,6 +77,15 @@ impl Settings {
             .copied()
             .find(|n| Some(*n) == self.notify.as_deref())
             .unwrap_or(NOTIFY[0])
+    }
+
+    /// What of Flatpak is handled, as one of `FLATPAK`.
+    pub fn flatpak(&self) -> &'static str {
+        FLATPAK
+            .iter()
+            .copied()
+            .find(|f| Some(*f) == self.flatpak.as_deref())
+            .unwrap_or(FLATPAK[0])
     }
 
     /// The settings, or the defaults plus why the file was not usable.
@@ -109,6 +129,7 @@ mod tests {
             aur_helper: Some("yay".into()),
             app_menu: Some(false),
             notify: Some("daily".into()),
+            flatpak: Some("cleanup".into()),
             hidden_log: vec!["ACPI Error: with space".into()],
         };
         let yaml = serde_saphyr::to_string(&s).unwrap();
@@ -121,10 +142,13 @@ mod tests {
         assert!(Settings::parse("language: fr").is_err());
         assert!(Settings::parse("aur-helper: pikaur").is_err());
         assert!(Settings::parse("notify: often").is_err());
+        assert!(Settings::parse("flatpak: updates").is_err());
         assert_eq!(
             Settings::parse("notify: weekly").unwrap().notify(),
             "weekly"
         );
         assert_eq!(Settings::default().notify(), "hourly");
+        assert_eq!(Settings::parse("flatpak: off").unwrap().flatpak(), "off");
+        assert_eq!(Settings::default().flatpak(), "all");
     }
 }
