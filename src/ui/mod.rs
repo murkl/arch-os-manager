@@ -372,6 +372,12 @@ impl Ctx {
         self.pending.get() > 0 || self.reload
     }
 
+    /// What a row says while its value is still being read: the spinner, in the accent colour,
+    /// and not dimmed.
+    pub fn loading(&self) -> (String, Tone, bool) {
+        (self.style.spinner().into(), Tone::Accent, false)
+    }
+
     pub fn save_settings(&mut self) {
         match self.settings.save() {
             Ok(()) => self.settings_error = None,

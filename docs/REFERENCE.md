@@ -104,7 +104,7 @@ Under the header, one row shows in percent what the machine uses, read every two
 | RAM | What `MemAvailable` leaves, as `free` counts it | `/proc/meminfo` |
 | Disk | Of `/`, as `df` counts it | `statvfs` |
 
-A share reads in `success` below 75 %, `warning` below 90 % and `error` from there. Short of room the bars go first, then the names where icons say them. `?` stands where a value could not be read. Where the menu would not fit under the row, and during a search, the row does not show.
+A share reads in `success` below 75 %, `warning` below 90 % and `error` from there. Short of room the bars go first, then the names where icons say them. The spinner turns in a value still being read, on every row of the start page and in Settings alike, and `?` stands where a value could not be read. Where the menu would not fit under the row, and during a search, the row does not show.
 
 ## Runs
 

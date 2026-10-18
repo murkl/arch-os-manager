@@ -13,7 +13,7 @@ use crate::ui::draw::put;
 use crate::ui::fetch::Task;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{SETTINGS, Target};
-use crate::ui::{Ctx, Flow, Key, Page, Style, Tone};
+use crate::ui::{Ctx, Flow, Key, Loaded, Page, Style, Tone};
 
 pub struct SettingsPage {
     list: List<Target>,
@@ -74,9 +74,7 @@ impl SettingsPage {
                     (label(every).into(), tone, false)
                 }
             }
-            Target::Desktop if self.applying.is_some() => {
-                (ctx.style.spinner().to_string(), Tone::Accent, false)
-            }
+            Target::Desktop if self.applying.is_some() => ctx.loading(),
             Target::Desktop => {
                 let (text, tone) = on_off(ctx.settings.app_menu.unwrap_or(true));
                 (text.into(), tone, false)
@@ -86,12 +84,13 @@ impl SettingsPage {
                 Tone::Muted,
                 false,
             ),
-            Target::Features => match ctx.features() {
-                Some(f) => {
+            Target::Features => match &ctx.shared.features {
+                Loaded::Ready(f) => {
                     let ok = f.list.iter().filter(|(p, _)| f.ok(p)).count();
                     (format!("{ok}/{}", f.list.len()), Tone::Muted, false)
                 }
-                None => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
+                Loaded::Loading => ctx.loading(),
+                _ => (t("unknown").into(), Tone::Muted, false),
             },
             _ => (String::new(), Tone::Muted, false),
         }
@@ -230,8 +229,8 @@ impl Page for SettingsPage {
         self.list.typing()
     }
 
-    fn animating(&self, _: &Ctx) -> bool {
-        self.applying.is_some()
+    fn animating(&self, ctx: &Ctx) -> bool {
+        self.applying.is_some() || matches!(ctx.shared.features, Loaded::Loading)
     }
 }
 
@@ -489,6 +488,29 @@ impl Page for AboutPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The optional packages show the spinner until they are probed, and the page draws meanwhile.
+    #[test]
+    fn the_optional_packages_show_the_spinner_until_they_are_probed() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, _) = crate::ui::app::tests::app();
+        let page = SettingsPage::new(None);
+        let frames = app.ctx.style.glyphs.spinner;
+        app.ctx.shared.features = Loaded::Loading;
+        let (text, tone, _) = page.value(Target::Features, &app.ctx);
+        assert!(frames.contains(&text.as_str()) && tone == Tone::Accent);
+        assert!(page.animating(&app.ctx));
+        app.ctx.shared.features = Loaded::Failed(Failure::new(op::FEATURES_PROBE, "x"));
+        let (text, ..) = page.value(Target::Features, &app.ctx);
+        assert!(
+            !frames.contains(&text.as_str()) && !page.animating(&app.ctx),
+            "{text}"
+        );
+        crate::ui::app::tests::example(&mut app);
+        let (text, ..) = page.value(Target::Features, &app.ctx);
+        assert!(!frames.contains(&text.as_str()));
+        assert!(!page.animating(&app.ctx));
+    }
 
     #[test]
     fn only_the_app_menu_entry_waits_while_it_is_put_in_place() {
