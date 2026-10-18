@@ -338,13 +338,13 @@ fn render_part(body: &[Block], w: usize, ctx: &Ctx, label_width: usize) -> Vec<L
     out
 }
 
-/// Tabs as spaces to the next stop of four from `column`, which moves along: a cell grid drops
-/// them as control characters.
+/// Tabs as spaces to the next stop of eight from `column`, which moves along, as a terminal sets
+/// them: a cell grid drops them as control characters.
 fn untab(text: &str, column: &mut usize) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if c == '\t' {
-            let n = 4 - *column % 4;
+            let n = 8 - *column % 8;
             out.extend(std::iter::repeat_n(' ', n));
             *column += n;
         } else {
@@ -425,10 +425,10 @@ mod tests {
 
     #[test]
     fn tabs_stand_as_spaces_to_the_next_stop() {
-        assert_eq!(untab("\tpackage() {", &mut 0), "    package() {");
+        assert_eq!(untab("\tpackage() {", &mut 0), "        package() {");
         let mut column = 0;
         assert_eq!(untab("ab", &mut column), "ab");
-        assert_eq!(untab("\tc", &mut column), "  c");
+        assert_eq!(untab("\tc", &mut column), "      c");
     }
 
     #[test]

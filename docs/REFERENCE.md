@@ -209,7 +209,7 @@ colors:
 | `accent` | Cursor, title, progress, pending updates |
 | `success`, `warning`, `error` | States |
 
-The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background and on the selection at WCAG AA: 4.5 for `text`, 3 for `accent` and the states, and a test holds them to it. A file in `~/.arch-os/themes/` with the id of a built-in replaces it. One that does not parse is skipped and named under **Settings › About**.
+The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background at WCAG AA: 4.5 for `text`, 3 for `accent` and the states, and a test holds them to it. A file in `~/.arch-os/themes/` with the id of a built-in replaces it. One that does not parse is skipped and named under **Settings › About**.
 
 The icons are Material Design symbols of the Nerd Fonts. The window carries them, a terminal shows them with a Nerd Font such as `ttf-nerd-fonts-symbols`. The Linux console, told by `TERM=linux`, gets sixteen colours and ASCII in place of every glyph: no icons, `#` for the logo, `>` for the cursor, `*` for a dot, `+` for a mark, the keys named in words in the footer.
 

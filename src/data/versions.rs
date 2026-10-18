@@ -1,5 +1,7 @@
 //! The versions a package can be put back to: in the cache, or in the Arch Linux Archive.
 
+use percent_encoding::percent_decode_str;
+
 use super::vercmp::vercmp;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -16,7 +18,8 @@ pub fn parse(out: &str, name: &str) -> Vec<Version> {
         .lines()
         .filter_map(|l| {
             let (kind, location) = l.split_once('\t')?;
-            let file = unescape(location.rsplit('/').next()?);
+            // The archive's addresses carry `:` as `%3A` and `+` as `%2B`.
+            let file = percent_decode_str(location.rsplit('/').next()?).decode_utf8_lossy();
             Some(Version {
                 version: version_of(&file, name)?,
                 location: location.to_string(),
@@ -27,30 +30,6 @@ pub fn parse(out: &str, name: &str) -> Vec<Version> {
     all.sort_by(|a, b| vercmp(&b.version, &a.version).then(b.cached.cmp(&a.cached)));
     all.dedup_by(|later, kept| later.version == kept.version);
     all
-}
-
-/// An address's `%3A`, `%2B` and kin as the characters they stand for.
-fn unescape(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let code = (bytes[i] == b'%')
-            .then(|| s.get(i + 1..i + 3))
-            .flatten()
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        match code {
-            Some(b) => {
-                out.push(b);
-                i += 3;
-            }
-            None => {
-                out.push(bytes[i]);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// `name-1:2.3-4-x86_64.pkg.tar.zst` as `1:2.3-4`, and nothing for another package's file.
@@ -94,7 +73,6 @@ mod tests {
         assert!(v[0].cached);
         let sigc = "archive\thttps://archive.archlinux.org/packages/l/libsigc++/libsigc%2B%2B-2.12.1-2-x86_64.pkg.tar.zst\n";
         assert_eq!(parse(sigc, "libsigc++")[0].version, "2.12.1-2");
-        assert_eq!(unescape("a%2"), "a%2");
     }
 
     #[test]

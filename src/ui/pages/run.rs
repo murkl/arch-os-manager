@@ -264,12 +264,9 @@ impl Page for PasswordPage {
                 Flow::Stay
             }
             Key::Enter => {
-                let mut password = self.input.take();
+                let password = self.input.take();
                 match self.auth.as_mut() {
-                    Some(run) => {
-                        run.answer(&password);
-                        script::sudo::wipe(&mut password);
-                    }
+                    Some(run) => run.answer(&password),
                     None => {
                         // Held for the prompt, which the run answers as it appears.
                         script::sudo::set(password);
@@ -812,9 +809,8 @@ impl Page for RunPage {
                 } else if prompt == Prompt::Password && self.input.text.is_empty() {
                     self.empty = true;
                 } else {
-                    let mut text = self.input.take();
+                    let text = self.input.text.clone();
                     self.answer(&text);
-                    script::sudo::wipe(&mut text);
                 }
             }
             Some(_) => {

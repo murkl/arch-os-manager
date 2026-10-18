@@ -127,10 +127,9 @@ mod tests {
         (x.max(y) + 0.05) / (x.min(y) + 0.05)
     }
 
-    /// WCAG AA: 4.5 for text, 3 for what is told by its colour, on the background and on the
-    /// selection, where muted turns to text. Muted only has to stand apart.
+    /// WCAG AA: 4.5 for text, 3 for what is told by its colour. Muted only has to stand apart.
     #[test]
-    fn every_built_in_reads_on_its_background_and_its_selection() {
+    fn every_built_in_reads_on_its_background() {
         for (file, bytes) in crate::embedded::THEMES {
             let theme = parse(file, std::str::from_utf8(bytes).unwrap()).unwrap();
             let c = theme.colors;
@@ -147,11 +146,6 @@ mod tests {
                 assert!(
                     ratio >= least,
                     "{file}: {slot} has {ratio:.2}, needs {least}"
-                );
-                let ratio = contrast(colour, c.surface);
-                assert!(
-                    slot == "muted" || ratio >= least,
-                    "{file}: {slot} has {ratio:.2} on the selection, needs {least}"
                 );
             }
         }

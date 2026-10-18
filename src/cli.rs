@@ -139,6 +139,10 @@ pub fn main() -> ExitCode {
             crate::paths::log().display()
         );
     }
+    // Found before an update can replace the file.
+    if let Err(e) = crate::paths::program() {
+        crate::warn!("no path of this program: {e}");
+    }
     crate::info!(
         "start {} {:?}",
         crate::version::version(),

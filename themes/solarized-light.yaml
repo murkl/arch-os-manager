@@ -3,7 +3,7 @@ colors:
   background: "#FDF6E3"
   surface: "#EEE8D5"
   muted: "#93A1A1"
-  text: "#566C73"
+  text: "#586E75"
   accent: "#268BD2"
   # Green and yellow darkened a shade: 2.97 and 2.98 on base3 miss AA by a hair.
   success: "#7A8C00"

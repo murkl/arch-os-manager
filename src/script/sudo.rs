@@ -14,32 +14,21 @@ static PASSWORD: Mutex<Option<String>> = Mutex::new(None);
 #[cfg(test)]
 pub static LOCK: Mutex<()> = Mutex::new(());
 
-/// Hands the password to `f` without a copy, or nothing where none is held.
-pub fn with<R>(f: impl FnOnce(&str) -> R) -> Option<R> {
-    PASSWORD
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .as_deref()
-        .map(f)
+pub fn get() -> Option<String> {
+    PASSWORD.lock().unwrap().clone()
 }
 
 /// Holds the password, an empty one never, since sudo would count it as a failed attempt.
 pub fn set(password: String) {
     forget();
     if !password.is_empty() {
-        *PASSWORD.lock().unwrap_or_else(|e| e.into_inner()) = Some(password);
+        *PASSWORD.lock().unwrap() = Some(password);
     }
 }
 
 pub fn forget() {
-    if let Some(mut old) = PASSWORD.lock().unwrap_or_else(|e| e.into_inner()).take() {
-        wipe(&mut old);
+    if let Some(mut old) = PASSWORD.lock().unwrap().take() {
+        // SAFETY: zero bytes are valid UTF-8.
+        unsafe { old.as_bytes_mut().fill(0) };
     }
-}
-
-/// Overwrites a copy of the password before it is freed.
-pub fn wipe(text: &mut String) {
-    // SAFETY: zero bytes are valid UTF-8.
-    unsafe { text.as_bytes_mut().fill(0) };
-    text.clear();
 }

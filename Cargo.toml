@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 fontdue = "0.9.4"
 jiff = "0.2"
+percent-encoding = "2.3.2"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 roxmltree = "0.21"
 rustix = { version = "1.1.5", features = ["fs", "process", "pty", "stdio", "termios"] }

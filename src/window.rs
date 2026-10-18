@@ -20,7 +20,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key as Named, ModifiersState, NamedKey, PhysicalKey};
+use winit::keyboard::{Key as Named, ModifiersState, NamedKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowAttributes, WindowId};
 
 use crate::ui::{App, FRAME, Key, Msg, Target, beats, next_beat};
@@ -417,7 +417,7 @@ impl Win {
         })
     }
 
-    fn key(&self, key: &Named, physical: PhysicalKey, text: Option<&str>) -> Vec<Key> {
+    fn key(&self, key: &Named, text: Option<&str>) -> Vec<Key> {
         let ctrl = self.modifiers.control_key();
         let shift = self.modifiers.shift_key();
         let named = match key {
@@ -439,10 +439,9 @@ impl Win {
                 NamedKey::Space => Key::Char(' '),
                 _ => return Vec::new(),
             }),
-            // By the key's place, as a terminal does, so ctrl+c holds on any layout.
-            Named::Character(s) if ctrl => latin(physical)
-                .or_else(|| s.chars().next())
-                .map(|c| Key::Ctrl(c.to_ascii_lowercase())),
+            Named::Character(s) if ctrl => {
+                s.chars().next().map(|c| Key::Ctrl(c.to_ascii_lowercase()))
+            }
             Named::Character(_) => None,
             _ => return Vec::new(),
         };
@@ -539,11 +538,7 @@ impl ApplicationHandler<()> for Win {
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                for key in self.key(
-                    &event.logical_key,
-                    event.physical_key,
-                    event.text.as_deref(),
-                ) {
+                for key in self.key(&event.logical_key, event.text.as_deref()) {
                     let msg = if event.repeat {
                         Msg::Held(key)
                     } else {
@@ -629,22 +624,6 @@ impl ApplicationHandler<()> for Win {
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.wake));
     }
-}
-
-/// The letter a key bears on a US layout, for ctrl and a letter.
-fn latin(key: PhysicalKey) -> Option<char> {
-    use winit::keyboard::KeyCode::*;
-    let PhysicalKey::Code(code) = key else {
-        return None;
-    };
-    let letters = [
-        KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO,
-        KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
-    ];
-    letters
-        .iter()
-        .position(|&k| k == code)
-        .map(|i| (b'a' + i as u8) as char)
 }
 
 /// Whether the cursor is in the shown half of its beat.
@@ -1081,14 +1060,6 @@ pub mod tests {
                 .collect::<Vec<_>>(),
             [(50, 60), (190, 20)]
         );
-    }
-
-    #[test]
-    fn ctrl_and_a_letter_go_by_the_key_on_any_layout() {
-        use winit::keyboard::KeyCode;
-        assert_eq!(latin(PhysicalKey::Code(KeyCode::KeyC)), Some('c'));
-        assert_eq!(latin(PhysicalKey::Code(KeyCode::KeyZ)), Some('z'));
-        assert_eq!(latin(PhysicalKey::Code(KeyCode::Digit1)), None);
     }
 
     #[test]

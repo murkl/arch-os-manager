@@ -136,11 +136,10 @@ impl Run {
                 self.rejected = true;
             }
             Some(Prompt::Password) => {
-                let session = &self.session;
-                if !session.echoes()
-                    && sudo::with(|password| session.write(password.as_bytes())).is_some()
+                if let Some(password) = sudo::get()
+                    && !self.session.echoes()
                 {
-                    self.send("", current);
+                    self.send(&password, current);
                 }
             }
             Some(p) => {
@@ -324,7 +323,7 @@ mod tests {
     fn never_hands_an_empty_password_to_sudo() {
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         sudo::set(String::new());
-        assert_eq!(sudo::with(|_| ()), None);
+        assert_eq!(sudo::get(), None);
         let (tx, rx) = mpsc::channel();
         let mut cmd = std::process::Command::new("bash");
         cmd.arg("-c")

@@ -32,17 +32,15 @@ pub fn news_cache() -> PathBuf {
     home().join("cache").join("news.xml")
 }
 
-/// This program where it lies. An update replaces it while it runs, and the kernel then names
-/// the running file with ` (deleted)` appended, while the new one lies at the old path.
-pub fn program() -> std::io::Result<PathBuf> {
-    std::env::current_exe().map(undeleted)
-}
+static PROGRAM: OnceLock<Result<PathBuf, String>> = OnceLock::new();
 
-fn undeleted(exe: PathBuf) -> PathBuf {
-    match exe.to_str().and_then(|s| s.strip_suffix(" (deleted)")) {
-        Some(path) => PathBuf::from(path),
-        None => exe,
-    }
+/// This program where it lay at the start. An update replaces the file while it runs, and the
+/// kernel then names the running one as deleted, while the new one lies at the old path.
+pub fn program() -> std::io::Result<PathBuf> {
+    PROGRAM
+        .get_or_init(|| std::env::current_exe().map_err(|e| e.to_string()))
+        .clone()
+        .map_err(std::io::Error::other)
 }
 
 /// Writes beside the target and renames over it, so a crash never leaves half a file. The copy
@@ -69,15 +67,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_program_replaced_while_running_is_named_where_the_new_one_lies() {
-        assert_eq!(
-            undeleted(PathBuf::from("/usr/bin/system-manager (deleted)")),
-            PathBuf::from("/usr/bin/system-manager")
-        );
-        assert_eq!(
-            undeleted(PathBuf::from("/opt/a (deleted) b")),
-            PathBuf::from("/opt/a (deleted) b")
-        );
+    fn the_program_is_where_it_lay_at_the_start() {
+        assert_eq!(program().unwrap(), std::env::current_exe().unwrap());
     }
 
     #[test]
