@@ -273,6 +273,7 @@ impl App {
     /// The rest waits for the optional packages: which are there decides what runs.
     fn after_features(&mut self, features: &Features) {
         script::set_aur(features.aur_helper(self.ctx.settings.aur_helper.as_deref()));
+        script::set_flatpak(features.flatpak(self.ctx.settings.flatpak()));
         let ctx = &mut self.ctx;
         let missing = |op| script::missing(op, features).map(str::to_string);
         macro_rules! gated {

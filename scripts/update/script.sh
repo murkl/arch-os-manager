@@ -35,7 +35,7 @@ op_list() {
     # A version is often missing or unchanged, a commit never, and read collapses empty
     # fields between tabs, so the version comes last. A name pending in two branches,
     # as a runtime may be, carries its branch.
-    if command -v flatpak >/dev/null; then
+    if [ "$SM_FLATPAK" = all ]; then
         local installed app arch branch commit version ref old new name
         local -A versions commits pending_in
         if ! installed="$(flatpak list --columns=application,arch,branch,active,version)" ||
@@ -74,7 +74,7 @@ op_run() {
         step aur
         aur_sync -Sua || aur=$?
     fi
-    if command -v flatpak >/dev/null; then
+    if [ "$SM_FLATPAK" = all ]; then
         step flatpak
         flatpak update --assumeyes --noninteractive
     fi

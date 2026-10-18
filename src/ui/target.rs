@@ -24,6 +24,7 @@ pub enum Target {
     Theme,
     Usage,
     AurHelper,
+    Flatpak,
     Notifications,
     Desktop,
     Hidden,
@@ -50,6 +51,7 @@ pub const SETTINGS: &[Target] = &[
     Target::Theme,
     Target::Usage,
     Target::AurHelper,
+    Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
     Target::Hidden,
@@ -74,6 +76,7 @@ pub const ALL: &[Target] = &[
     Target::Theme,
     Target::Usage,
     Target::AurHelper,
+    Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
     Target::Hidden,
@@ -101,6 +104,7 @@ impl Target {
             Target::Theme => "theme",
             Target::Usage => "usage",
             Target::AurHelper => "aur-helper",
+            Target::Flatpak => "flatpak",
             Target::Notifications => "notifications",
             Target::Desktop => "desktop",
             Target::Hidden => "hidden",
@@ -131,6 +135,7 @@ impl Target {
             Target::Theme => t("Theme"),
             Target::Usage => t("System usage"),
             Target::AurHelper => t("AUR helper"),
+            Target::Flatpak => t("Flatpak"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
             Target::Hidden => t("Hidden messages"),
@@ -158,6 +163,7 @@ impl Target {
             Target::Theme => icon::THEME,
             Target::Usage => icon::USAGE,
             Target::AurHelper => icon::ARCH,
+            Target::Flatpak => icon::APP,
             Target::Notifications => icon::NOTIFICATION,
             Target::Desktop => icon::APP_MENU,
             Target::Hidden => icon::HIDDEN,
@@ -181,19 +187,20 @@ impl Target {
         }
     }
 
+    /// The optional package this needs that is not there, once the packages are known.
+    pub fn missing(self, ctx: &Ctx) -> Option<&'static str> {
+        let features = ctx.features()?;
+        match self {
+            Target::Flatpak => (!features.ok("flatpak")).then_some("flatpak"),
+            _ => crate::script::missing(self.script()?, features),
+        }
+    }
+
     /// The pages to push, the settings page first for its own rows.
     pub fn open(self, ctx: &mut Ctx) -> Vec<Box<dyn Page>> {
-        if let Some(script) = self.script()
-            && ctx.features().is_some()
-            && !ctx.available(script)
-        {
-            let missing = script
-                .meta()
-                .needs
-                .iter()
-                .find(|p| !ctx.features().is_some_and(|f| f.ok(p)))
-                .cloned();
-            return vec![Box::new(pages::features::FeaturesPage::new(missing))];
+        if let Some(missing) = self.missing(ctx) {
+            let page = pages::features::FeaturesPage::new(Some(missing.into()));
+            return vec![Box::new(page)];
         }
         let page: Box<dyn Page> = match self {
             Target::Upgrade => Box::new(pages::upgrade::UpgradePage::new()),
@@ -214,7 +221,11 @@ impl Target {
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
             Target::Hidden => Box::new(pages::log::HiddenPage::new()),
-            Target::Language | Target::Theme | Target::AurHelper | Target::Notifications => {
+            Target::Language
+            | Target::Theme
+            | Target::AurHelper
+            | Target::Flatpak
+            | Target::Notifications => {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),

@@ -103,8 +103,9 @@ fn mouse(capture: bool) {
     }
 }
 
-/// Faster than a hand presses a key twice, slower than a keyboard repeats it.
-const REPEAT: Duration = Duration::from_millis(150);
+/// Faster than a hand presses a key twice, slower than a keyboard repeats it: GNOME every 30 ms
+/// and the Linux console every 33 ms by default.
+const REPEAT: Duration = Duration::from_millis(80);
 
 /// Whether a key is held: a terminal sends its repeats as presses, so the same key again within
 /// `REPEAT` of its last one counts as held.
@@ -164,5 +165,10 @@ mod tests {
         assert!(held(&mut last, Key::Char('r'), at(60)));
         assert!(!held(&mut last, Key::Char('j'), at(90)), "another key");
         assert!(!held(&mut last, Key::Char('j'), at(400)), "pressed again");
+        assert!(!held(&mut last, Key::Esc, at(500)));
+        assert!(
+            !held(&mut last, Key::Esc, at(600)),
+            "pressed twice in quick succession"
+        );
     }
 }

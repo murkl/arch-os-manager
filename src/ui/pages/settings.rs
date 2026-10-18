@@ -7,7 +7,7 @@ use super::features::FeaturesPage;
 use super::log::HiddenPage;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
-use crate::settings::{AUR_HELPERS, NOTIFY};
+use crate::settings::{AUR_HELPERS, FLATPAK, NOTIFY};
 use crate::ui::detail::{Block, Detail};
 use crate::ui::draw::put;
 use crate::ui::fetch::Task;
@@ -44,6 +44,11 @@ impl SettingsPage {
     }
 
     fn value(&self, target: Target, ctx: &Ctx) -> (String, Tone, bool) {
+        if matches!(target, Target::Notifications | Target::Desktop)
+            && let Some(why) = ctx.features().and_then(|f| f.lacks(fact(target)))
+        {
+            return (t(why).to_string(), Tone::Muted, true);
+        }
         match target {
             Target::Language => (i18n::current().name().into(), Tone::Muted, false),
             Target::Theme => (ctx.theme().name.clone(), Tone::Muted, false),
@@ -60,10 +65,14 @@ impl SettingsPage {
                 };
                 (text, Tone::Muted, false)
             }
-            Target::Notifications | Target::Desktop
-                if let Some(why) = ctx.features().and_then(|f| f.lacks(fact(target))) =>
-            {
-                (t(why).to_string(), Tone::Muted, true)
+            Target::Flatpak => {
+                let handled = ctx.settings.flatpak();
+                let tone = if handled == "off" {
+                    Tone::Muted
+                } else {
+                    Tone::Ok
+                };
+                (handled_label(handled).into(), tone, false)
             }
             Target::Notifications => {
                 let missing = ctx.features().is_some() && !ctx.available(op::DESKTOP_NOTIFY);
@@ -131,6 +140,15 @@ fn on_off(on: bool) -> (&'static str, Tone) {
     }
 }
 
+/// What a value of `FLATPAK` says in a sentence.
+fn handled_label(handled: &str) -> &'static str {
+    match handled {
+        "all" => t("updates and clean-up"),
+        "cleanup" => t("clean-up only"),
+        _ => t("off"),
+    }
+}
+
 /// What an interval of `NOTIFY` says in a sentence.
 fn label(every: &str) -> &'static str {
     match every {
@@ -147,8 +165,10 @@ impl Page for SettingsPage {
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
-        let rows = SETTINGS
+        // Flatpak's row only once Flatpak is known to be installed.
+        let rows: Vec<Row<Target>> = SETTINGS
             .iter()
+            .filter(|t| **t != Target::Flatpak || ctx.features().is_some_and(|f| f.ok("flatpak")))
             .map(|&target| {
                 let (detail, tone, dim) = self.value(target, ctx);
                 Row::new(target, target.label())
@@ -157,11 +177,14 @@ impl Page for SettingsPage {
                     .dim(dim)
             })
             .collect();
+        let height = rows.len() as u16;
+        // A row still to come keeps the focus waiting.
+        let focus = self.focus.filter(|t| rows.iter().any(|r| r.id == Some(*t)));
         self.list.set(rows);
-        if let Some(target) = self.focus.take() {
+        if let Some(target) = focus {
+            self.focus = None;
             self.list.focus(&target);
         }
-        let height = SETTINGS.len() as u16;
         self.list.draw(
             Rect {
                 height: area.height.min(height),
@@ -193,7 +216,7 @@ impl Page for SettingsPage {
             Picked::Ignored => return Flow::Ignored,
         };
         match target {
-            t @ (Target::Language | Target::Theme | Target::AurHelper) => {
+            t @ (Target::Language | Target::Theme | Target::AurHelper | Target::Flatpak) => {
                 Flow::Push(choice(t, ctx))
             }
             Target::Notifications | Target::Desktop
@@ -276,6 +299,13 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
                 .collect(),
             ctx.settings.notify().into(),
         ),
+        Target::Flatpak => (
+            FLATPAK
+                .iter()
+                .map(|handled| Row::new(handled.to_string(), handled_label(handled)))
+                .collect(),
+            ctx.settings.flatpak().into(),
+        ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
             let mut rows = vec![
@@ -334,6 +364,14 @@ impl ChoicePage {
             // The timer follows at the reading, which puts it in place after the packages.
             Target::Notifications => {
                 ctx.settings.notify = (id != NOTIFY[0]).then(|| id.to_string());
+                ctx.reload();
+            }
+            // The check, the update and the clean-up follow at once.
+            Target::Flatpak => {
+                ctx.settings.flatpak = (id != FLATPAK[0]).then(|| id.to_string());
+                if let Some(features) = ctx.features() {
+                    script::set_flatpak(features.flatpak(ctx.settings.flatpak()));
+                }
                 ctx.reload();
             }
             _ => {
@@ -534,6 +572,42 @@ mod tests {
         };
         assert!(spinning(Target::Desktop));
         assert!(!spinning(Target::Notifications));
+    }
+
+    /// Flatpak's row shows only where Flatpak is there. Its choice is stored and read anew.
+    #[test]
+    fn flatpak_is_chosen_only_where_it_is_there() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        for page in Target::Settings.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Flatpak"), "not before the probe: {shown}");
+        example(&mut app);
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("Flatpak"));
+        assert!(
+            row.is_some_and(|r| r.ends_with("updates and clean-up")),
+            "{shown}"
+        );
+        for page in Target::Flatpak.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        press(&mut app, &[Key::Down, Key::Enter]);
+        assert_eq!(app.ctx.settings.flatpak.as_deref(), Some("cleanup"));
+        assert!(app.ctx.busy(), "the updates are read anew");
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("Flatpak"));
+        assert!(row.is_some_and(|r| r.ends_with("clean-up only")), "{shown}");
+        app.ctx.shared.features =
+            Loaded::Ready(crate::data::features::Features::parse("flatpak\tmissing\n"));
+        assert!(!screen(&mut app, &mut term).contains("Flatpak"));
+        let pages = Target::Flatpak.open(&mut app.ctx);
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].title(), "Optional packages");
     }
 
     #[test]

@@ -71,6 +71,7 @@ Every sentence is English and translated in `locales/de.po`.
 |---|---|
 | `LC_ALL` | `C.UTF-8`: output and questions in one known wording |
 | `SM_AUR` | The AUR helper of the settings, empty for none |
+| `SM_FLATPAK` | The `flatpak` setting, `off` without Flatpak |
 | `SM_RUN` | The title of a run, unset in a query |
 | `SUDO_PROMPT` | A fixed prompt the runtime recognises |
 | `TERM` | `xterm-256color` in a run |
@@ -126,7 +127,7 @@ pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want
 
 A run holds shutdown and sleep off while it lasts, and a closed terminal does not stop it.
 
-An update takes the repositories, then the AUR, then Flatpak. A failing AUR helper leaves Flatpak still to update and is then named. The list of updates names a source it could not ask, as the AUR during an outage, and shows what the others have.
+An update takes the repositories, then the AUR, then Flatpak where `flatpak` is `all`. A failing AUR helper leaves Flatpak still to update and is then named. The list of updates names a source it could not ask, as the AUR during an outage, and shows what the others have.
 
 **esc**, **q** and **ctrl+c** ask whether to stop, and yes sends ctrl+c to the program. A failure shows the declared error or a recognised cause, the source line, the last output and the log, and offers the page the cause names, another try and the way back.
 
@@ -177,11 +178,14 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `aur-helper` | `paru`, `yay`, `none` | paru, else yay |
 | `app-menu` | `true`, `false` | `true` |
 | `notify` | `hourly`, `daily`, `weekly`, `off` | `hourly` |
+| `flatpak` | `all`, `cleanup`, `off` | `all` |
 | `hidden-log` | messages hidden from the system log | none |
 
 A file that does not parse is left alone and named under **Settings › About**, and the defaults apply until a setting is changed. The first start or `init` takes the settings of the `arch-os` script before 2.0 over once, where none are chosen, and removes what it left. `scripts/migrate/script.sh` says how to remove this.
 
 Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now, and point the update indicator at it where installed. An installer calls `init` from its chroot as the user, through a private bus of `dbus-run-session` where none answers. The entry needs a Wayland session, as the window does, the notification a desktop and libnotify. The timer announces two minutes after login and then as often as chosen.
+
+`flatpak` leaves Flatpak to another app store, such as GNOME Software: `cleanup` only removes unused runtimes, `off` leaves Flatpak alone. The check, the notification and the update indicator follow it. The setting appears only where Flatpak is installed.
 
 A hidden message is stored with its numbers, hex values and hashes as `#`, so it stays hidden when only those change.
 
@@ -231,7 +235,7 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | **space** | On the news, read or unread | typed |
 | **r** | On the start page, read every value anew | typed |
 
-Actions stay under what they are about, so ↑↓ always reaches them. What does not fit above them scrolls with **⇞⇟** and the wheel, while a page's head stays. Held down, a key repeats only to move or to type. Pasted text is typed into a text box and does nothing elsewhere.
+Actions stay under what they are about, so ↑↓ always reaches them. What does not fit above them scrolls with **⇞⇟** and the wheel, while a page's head stays. Held down, a key repeats only to move or to type. A terminal tells a held key only by its pace: the same key again within 80 ms. Pasted text is typed into a text box and does nothing elsewhere.
 
 The footer names what each key does, in the same words on every page. **esc** reads main menu where the start page lies below, back further down. The start screen stands three seconds while the first values load, and any other key skips it.
 
@@ -281,7 +285,7 @@ A package counts when its command answers, as `probe` in `scripts/features/scrip
 
 ## Clean-Up and the Recovery
 
-The cache keeps three versions of every installed package and none of what is gone, as `paccache -r` and `paccache -ruk0` choose. On top, every kernel package a snapshot in `/.snapshots` has installed stays: the Recovery of Arch OS rebuilds a rolled back snapshot's boot files from it. A cache it cannot judge, because `/.snapshots` is unreadable, is not trimmed. Unneeded packages go with `pacman -Rns`, AUR build folders of packages no longer installed are removed, and Flatpak drops unused runtimes.
+The cache keeps three versions of every installed package and none of what is gone, as `paccache -r` and `paccache -ruk0` choose. On top, every kernel package a snapshot in `/.snapshots` has installed stays: the Recovery of Arch OS rebuilds a rolled back snapshot's boot files from it. A cache it cannot judge, because `/.snapshots` is unreadable, is not trimmed. Unneeded packages go with `pacman -Rns`, AUR build folders of packages no longer installed are removed, and Flatpak drops unused runtimes unless `flatpak` is `off`.
 
 ## Building
 

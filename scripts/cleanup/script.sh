@@ -21,7 +21,8 @@ op_plan() {
             case "$status" in
             0) protect+=("$(basename "$dir")") ;;
             1) ;;
-            *) exit 10 ;;
+            # A snapshot snapper removed meanwhile needs no kernel kept.
+            *) if [ -e "$dir" ]; then exit 10; fi ;;
             esac
         done
     fi
@@ -62,7 +63,7 @@ op_plan() {
     done
 
     # flatpak lists unused runtimes only while removing them.
-    if command -v flatpak >/dev/null; then printf 'flatpak\n'; fi
+    case "$SM_FLATPAK" in all | cleanup) printf 'flatpak\n' ;; esac
 }
 
 candidates() {
@@ -105,10 +106,12 @@ op_run() {
         rm -rf -- "${builds[@]}"
     fi
 
-    if command -v flatpak >/dev/null; then
+    case "$SM_FLATPAK" in
+    all | cleanup)
         step flatpak
         flatpak uninstall --unused --assumeyes --noninteractive
-    fi
+        ;;
+    esac
 }
 
 # The second column of the plan's lines of one kind.

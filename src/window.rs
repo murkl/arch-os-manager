@@ -271,6 +271,7 @@ struct Win {
 }
 
 /// A frame as painted, with what decides its pixels besides the cells.
+#[derive(Clone)]
 struct Shown {
     grid: Buffer,
     cursor: Option<Position>,
@@ -351,17 +352,14 @@ impl Win {
         self.blinked = cursor.is_some();
         let scale = window.scale_factor();
         let key = (size.width, size.height, scale.to_bits());
-        let grid = &self.terminal.backend().buffer;
-        let before = match pixels.age() {
-            1 => self.shown[0].as_ref(),
-            2 => self.shown[1].as_ref(),
-            _ => None,
+        let shown = Shown {
+            grid: self.terminal.backend().buffer.clone(),
+            cursor,
+            size: key,
         };
-        let rows = before
-            .filter(|b| b.size == key)
-            .and_then(|b| changed_rows(&b.grid, b.cursor, grid, cursor));
+        let rows = repaint(&self.shown, pixels.age(), &shown);
         paint(
-            grid,
+            &shown.grid,
             cursor,
             &mut self.fonts,
             &self.app.ctx.style,
@@ -374,11 +372,6 @@ impl Win {
             let (_, oy, _) = layout(size.width, size.height, &self.fonts, scale);
             damage(rows, oy, self.fonts.cell.1, size.width)
         });
-        let shown = Shown {
-            grid: grid.clone(),
-            cursor,
-            size: key,
-        };
         self.shown = [Some(shown), self.shown[0].take()];
         self.terminal.backend_mut().changed = false;
         // Lets winit hold the next redraw for the compositor's frame on Wayland.
@@ -648,6 +641,33 @@ fn layout(width: u32, height: u32, fonts: &Fonts, scale: f64) -> (u32, u32, Rect
         (height.saturating_sub(rows * ch)) / 2,
         Rect::new(0, 0, cols as u16, rows as u16),
     )
+}
+
+/// The rows to paint over a buffer that showed the frame `age` frames back, and to name to the
+/// compositor: what differs from the buffer and from the last frame. The compositor takes over
+/// only these from the buffer, so a row the buffer already has must still be named where the
+/// screen shows another. None where all of it is painted.
+fn repaint(shown: &[Option<Shown>; 2], age: u8, now: &Shown) -> Option<Vec<u16>> {
+    let buffer = match age {
+        1 => shown[0].as_ref(),
+        2 => shown[1].as_ref(),
+        _ => None,
+    }?;
+    let mut rows = Vec::new();
+    for before in [buffer, shown[0].as_ref()?] {
+        if before.size != now.size {
+            return None;
+        }
+        rows.extend(changed_rows(
+            &before.grid,
+            before.cursor,
+            &now.grid,
+            now.cursor,
+        )?);
+    }
+    rows.sort_unstable();
+    rows.dedup();
+    Some(rows)
 }
 
 /// The rows of `grid` that differ from `before`, each with the rows beside it, which a glyph
@@ -1060,6 +1080,83 @@ pub mod tests {
                 .collect::<Vec<_>>(),
             [(50, 60), (190, 20)]
         );
+    }
+
+    /// The compositor takes over only the damage, from two buffers in turn as softbuffer swaps
+    /// them on Wayland. It shows every frame whole: a page left and opened again, a blinking cursor.
+    #[test]
+    fn the_compositor_shows_every_frame_whole() {
+        use crate::ui::Key;
+        use crate::ui::Target;
+        use crate::ui::app_tests::{app, example, open, press};
+        let (mut app, _) = app();
+        example(&mut app);
+        let area = Rect::new(0, 0, 60, 20);
+        let frame = |app: &mut App| {
+            let mut term = Terminal::new(Grid {
+                cursor: None,
+                buffer: Buffer::empty(area),
+                changed: true,
+            })
+            .unwrap();
+            term.draw(|f| app.draw(f)).unwrap();
+            Shown {
+                grid: term.backend().buffer.clone(),
+                cursor: term.backend().cursor,
+                size: (1, 1, 0),
+            }
+        };
+        let home = frame(&mut app);
+        for page in Target::Settings.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let settings = frame(&mut app);
+        press(&mut app, &[Key::Esc, Key::Char('f')]);
+        let typing = frame(&mut app);
+        assert!(typing.cursor.is_some());
+        let blinked = Shown {
+            cursor: None,
+            ..typing.clone()
+        };
+        let frames = [
+            &home, &settings, &home, &settings, &home, &typing, &blinked, &typing, &blinked,
+            &settings,
+        ];
+        let picture = |s: &Shown| -> Vec<(Vec<Cell>, Option<u16>)> {
+            let w = usize::from(area.width);
+            (0..area.height)
+                .map(|y| {
+                    let at = usize::from(y) * w;
+                    let cursor = s.cursor.filter(|c| c.y == y).map(|c| c.x);
+                    (s.grid.content[at..at + w].to_vec(), cursor)
+                })
+                .collect()
+        };
+        let blank = picture(&Shown {
+            grid: Buffer::empty(area),
+            cursor: None,
+            size: (1, 1, 0),
+        });
+        let (mut front, mut back) = ((blank.clone(), 0u8), (blank.clone(), 0u8));
+        let mut screen = blank;
+        let mut shown: [Option<Shown>; 2] = [None, None];
+        for (i, now) in frames.into_iter().enumerate() {
+            let rows = repaint(&shown, back.1, now).unwrap_or_else(|| (0..area.height).collect());
+            let whole = picture(now);
+            for &y in &rows {
+                back.0[usize::from(y)] = whole[usize::from(y)].clone();
+            }
+            for &y in &rows {
+                screen[usize::from(y)] = back.0[usize::from(y)].clone();
+            }
+            assert!(screen == whole, "frame {i} shows rows of another");
+            std::mem::swap(&mut front, &mut back);
+            front.1 = 1;
+            if back.1 != 0 {
+                back.1 += 1;
+            }
+            shown = [Some(now.clone()), shown[0].take()];
+        }
     }
 
     #[test]
