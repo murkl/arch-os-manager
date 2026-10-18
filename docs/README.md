@@ -16,22 +16,23 @@
 
 ## Features
 
-- Updates of the repositories, the AUR and Flatpak in one run
-- Arch Linux news, read in place
-- Packages installed, in the repositories and in the AUR, older versions from the cache or the archive
-- Services of the system and of the user
-- Errors of this boot, the harmless ones hidden
-- CPU, memory and disk in use, live
-- Clean-up that keeps what a recovery needs
-- Config updates compared, merged or taken over
-- Mirrors ranked, firmware updated, a broken keyring repaired
-- Next steps after every run, a restart hint after a kernel update
+- Updates of the repositories, the AUR and Flatpak in one run, the Arch Linux news first
 - Notification of new updates, or their count in the GNOME top bar
-- Terminal or a window of its own
+- Next steps after every run, a restart hint after a kernel update
+- Common failures explained, with their fix
+- Packages installed and removed, the AUR included, older versions from the cache or the archive
+- Services of the system and the user, started, stopped or enabled
+- Errors of this boot, harmless ones hidden with one key
+- CPU, memory and disk in use, live
+- [Clean-up](REFERENCE.md#clean-up-and-the-recovery) that keeps what a recovery needs
+- Config updates compared, merged or taken over
+- Mirrors ranked, firmware updated
+- A broken keyring renewed, damaged package files restored
+- Terminal, Linux console or a window of its own
 - English and German
-- Themes such as Nord, Catppuccin, Tokyo Night and Gruvbox, or your own
+- [Themes](REFERENCE.md#themes) such as Nord, Catppuccin, Tokyo Night and Gruvbox, or your own
 
-Optional packages add features, installed under **Settings › Optional packages**.
+[Optional packages](REFERENCE.md#optional-packages) add features, installed under **Settings › Optional packages**.
 
 ## Installation
 
