@@ -226,13 +226,15 @@ fn a_run_holds_shutdown_off_and_a_query_does_not() {
     s.stub("pacman", "exit 0");
     let o = s.run("update", &["run"], &[("SM_RUN", "Updating the system")]);
     assert_eq!(o.code, 0, "{}", o.events);
-    assert!(
-        o.calls.contains(
-            "systemd-inhibit --what=shutdown:sleep --mode=block --who=System Manager --why=Updating the system tail --pid="
-        ),
-        "{}",
-        o.calls
-    );
+    // The lock is taken in the background, so its stand-in may log only after the run.
+    let held = "systemd-inhibit --what=shutdown:sleep --mode=block --who=System Manager --why=Updating the system tail --pid=";
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut calls = o.calls;
+    while !calls.contains(held) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        calls = std::fs::read_to_string(s.dir.join("calls")).unwrap_or_default();
+    }
+    assert!(calls.contains(held), "{calls}");
     let q = Sandbox::new("hold-query");
     q.stub("systemd-inhibit", "exit 0");
     let o = q.run("system", &["nopasswd"], &[]);
