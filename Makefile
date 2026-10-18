@@ -22,7 +22,7 @@ fmt-check:
 
 lint:
 	cargo clippy --all-targets --locked -- -D warnings
-	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/*.sh .github/settings.sh
+	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/*.sh .github/settings.sh .github/release-token.sh
 	yamllint -s .
 	actionlint
 	zizmor --offline --quiet .github/workflows

@@ -54,6 +54,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: release
     outputs:
       version: ${{ steps.please.outputs.version }}
       tag: ${{ steps.please.outputs.tag_name }}
