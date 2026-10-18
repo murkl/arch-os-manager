@@ -36,10 +36,12 @@ aur-check:
 	tools/aur.sh 0.0.0 LICENSE target/aur-check
 
 # Against a throwaway configuration, the menu entry and the timer included; what
-# it runs still runs on this machine.
+# it runs still runs on this machine. GSettings goes to a file there: on the
+# session's dconf it would write the real database and read the throwaway one.
 run:
 	SM_HOME="$(CURDIR)/target/home" XDG_DATA_HOME="$(CURDIR)/target/home/data" \
-		XDG_CONFIG_HOME="$(CURDIR)/target/home/config" cargo run -- $(ARGS)
+		XDG_CONFIG_HOME="$(CURDIR)/target/home/config" GSETTINGS_BACKEND=keyfile \
+		cargo run -- $(ARGS)
 
 install: build
 	install -Dm755 $(BIN) "$(HOME)/.local/bin/system-manager"
