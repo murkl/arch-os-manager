@@ -7,5 +7,5 @@ rules:
   truthy:
     check-keys: false
 
-ignore: |
-  /target/
+# What git leaves out is no source either.
+ignore-from-file: .gitignore
