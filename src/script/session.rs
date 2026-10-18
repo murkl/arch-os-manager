@@ -32,7 +32,9 @@ impl Session {
         size: (u16, u16),
         sink: impl Fn(Event) + Send + Sync + 'static,
     ) -> Result<Session, String> {
-        Session::spawn(command(op, args)?, size, sink)
+        let mut cmd = command(op, args)?;
+        cmd.env("SM_RUN", op.title());
+        Session::spawn(cmd, size, sink)
     }
 
     /// Runs `cmd` on a new pseudo terminal, with fd 3 for lib.sh's events.
@@ -81,8 +83,13 @@ impl Session {
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
             // Ends with EIO once no process holds the terminal any more.
-            while let Ok(n @ 1..) = rustix::io::read(&*reader, &mut buf) {
-                out(Event::Output(buf[..n].to_vec()));
+            loop {
+                match rustix::io::read(&*reader, &mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => out(Event::Output(buf[..n].to_vec())),
+                    Err(rustix::io::Errno::INTR) => {}
+                    Err(_) => break,
+                }
             }
         });
         let script = sink.clone();

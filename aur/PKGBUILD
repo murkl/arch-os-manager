@@ -9,10 +9,11 @@ arch=('x86_64')
 url='https://github.com/murkl/arch-os-manager'
 # The program, then Fira Code and the Nerd Fonts symbols it carries.
 license=('GPL-3.0-or-later' 'OFL-1.1' 'MIT')
-depends=('gcc-libs' 'glibc')
+depends=('glibc' 'libgcc' 'sudo')
 makedepends=('cargo')
 optdepends=(
     'pacman-contrib: lists updates, trims the cache and finds configuration updates'
+    'fakeroot: lets pacman-contrib list updates without root'
     'paru: builds and updates packages from the AUR'
     'yay: builds and updates packages from the AUR'
     'flatpak: updates and cleans up Flatpak apps'

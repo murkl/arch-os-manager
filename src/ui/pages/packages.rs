@@ -8,6 +8,7 @@ use ratatui::layout::Rect;
 
 use super::run::{Job, start};
 use crate::data::packages::{Found, escape_regex, field, parse_info, parse_search};
+use crate::data::vercmp::vercmp;
 use crate::data::versions::{Version, parse as parse_versions};
 use crate::data::{aur, date};
 use crate::i18n::{t, tf};
@@ -17,7 +18,7 @@ use crate::ui::fetch::{Fetch, Task};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::{Lead, List, Picked, Row};
-use crate::ui::{Ctx, Flow, Key, Loaded, Nav, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Nav, Page, Tone};
 
 /// Typing waits this long before it searches, so a word is searched once.
 const PAUSE: Duration = Duration::from_millis(300);
@@ -181,17 +182,20 @@ impl Page for PackagesPage {
         self.list.draw(rest, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
-        let open = if self.list.marked.is_empty() {
-            t("open").to_string()
-        } else {
-            tf("{n} marked", &[("n", &self.list.marked.len())])
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
+        let open = match self.list.marked.len() {
+            0 => Does::Open,
+            n => Does::OpenMarked(n),
+        };
+        let esc = match self.input.text.is_empty() {
+            true => Does::Back,
+            false => Does::ClearSearch,
         };
         vec![
-            ("↑↓", t("choose").into()),
+            ("↑↓", Does::Choose),
             ("⏎", open),
-            ("tab", t("mark").into()),
-            ("esc", t("back").into()),
+            ("tab", Does::Mark),
+            ("esc", esc),
         ]
     }
 
@@ -482,7 +486,7 @@ impl Page for PackagePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 
@@ -599,7 +603,7 @@ impl Page for MarkedPage {
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         self.detail.draw(area, buf, ctx);
     }
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -612,6 +616,7 @@ pub struct VersionsPage {
     name: String,
     fetch: Fetch<Vec<Version>>,
     list: List<String>,
+    focused: bool,
 }
 
 impl VersionsPage {
@@ -622,7 +627,8 @@ impl VersionsPage {
         VersionsPage {
             name: name.to_string(),
             fetch,
-            list: List::default(),
+            list: List::filterable(),
+            focused: false,
         }
     }
 }
@@ -674,10 +680,21 @@ impl Page for VersionsPage {
             })
             .collect();
         self.list.set(rows);
+        // The one meant is the newest older than the installed one.
+        if !self.focused {
+            self.focused = true;
+            if let Some(older) = versions.iter().find(|v| {
+                current
+                    .as_deref()
+                    .is_some_and(|c| vercmp(&v.version, c).is_lt())
+            }) {
+                self.list.focus(&older.location);
+            }
+        }
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         super::list_hints(self.list.typing())
     }
 
@@ -752,7 +769,7 @@ impl Page for PkgbuildPage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 
@@ -770,5 +787,89 @@ impl Page for PkgbuildPage {
 
     fn animating(&self, _: &Ctx) -> bool {
         matches!(self.fetch.value, Loaded::Loading)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::packages::parse_installed;
+
+    #[test]
+    fn a_search_lists_the_installed_then_the_repositories_then_the_aur() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        app.ctx.shared.installed = Loaded::Ready(parse_installed(
+            "pkg\tfirefox\t1-1\npkg\tbash\t5-1\nexplicit\tfirefox\n",
+        ));
+        let mut page = PackagesPage::new();
+        for c in "fire".chars() {
+            page.key(Key::Char(c), &mut app.ctx);
+        }
+        let found = |name: &str, installed| Found {
+            repo: "extra".into(),
+            name: name.into(),
+            version: "1-1".into(),
+            description: String::new(),
+            installed,
+        };
+        page.results = Some(Results {
+            query: "fire".into(),
+            repo: Ok(vec![found("firefox", true), found("firejail", false)]),
+            aur: Some(
+                aur::parse(r#"{"resultcount":1,"results":[{"Name":"fire-bin","PackageBase":"fire-bin","Version":"3-1","Popularity":0.5}],"type":"search","version":5}"#)
+                    .map_err(|e| Failure::new(op::PACKAGES_AUR_SEARCH, e)),
+            ),
+        });
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        let at = |text: &str| {
+            shown
+                .find(text)
+                .unwrap_or_else(|| panic!("{text}: {shown}"))
+        };
+        assert!(at("Installed") < at("firefox") && at("firefox") < at("Repositories"));
+        assert!(at("Repositories") < at("firejail") && at("firejail") < at("AUR"));
+        assert!(at("AUR") < at("fire-bin"));
+        assert_eq!(
+            shown.matches("firefox").count(),
+            1,
+            "installed is listed once"
+        );
+        assert!(!shown.contains("bash"));
+        press(&mut app, &[Key::Tab, Key::Down, Key::Tab]);
+        assert!(screen(&mut app, &mut term).contains("⏎ open 2"));
+        press(&mut app, &[Key::Enter]);
+        let marked = screen(&mut app, &mut term);
+        assert!(
+            marked.contains("firejail") && marked.contains("firefox"),
+            "{marked}"
+        );
+    }
+
+    #[test]
+    fn older_versions_open_on_the_newest_before_the_installed() {
+        let (mut app, _) = crate::ui::app::tests::app();
+        app.ctx.shared.installed = Loaded::Ready(parse_installed("pkg\tfoo\t2.0-1\n"));
+        let mut page = VersionsPage::new("foo");
+        let version = |v: &str, cached| Version {
+            version: v.into(),
+            location: format!("/cache/foo-{v}"),
+            cached,
+        };
+        page.fetch.value = Loaded::Ready(vec![
+            version("3.0-1", false),
+            version("2.0-1", true),
+            version("1.5-1", true),
+            version("1.0-1", false),
+        ]);
+        let area = Rect::new(0, 0, 60, 10);
+        page.draw(area, &mut Buffer::empty(area), &mut app.ctx);
+        assert_eq!(
+            page.list.selected().map(|r| r.label.as_str()),
+            Some("1.5-1")
+        );
     }
 }

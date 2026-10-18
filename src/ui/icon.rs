@@ -88,3 +88,20 @@ pub const ALL: &[&str] = &[
     DISK,
     USAGE,
 ];
+
+#[cfg(test)]
+mod tests {
+    /// tools/icons.sh cuts the font to what this file names, and the font test checks `ALL`.
+    #[test]
+    fn all_names_every_icon() {
+        let named: Vec<&str> = include_str!("icon.rs")
+            .lines()
+            .filter_map(|l| {
+                l.strip_prefix("pub const ")?
+                    .split_once(": &str = ")
+                    .map(|(n, _)| n)
+            })
+            .collect();
+        assert_eq!(named.len(), super::ALL.len(), "{named:?}");
+    }
+}

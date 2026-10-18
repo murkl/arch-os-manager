@@ -88,9 +88,13 @@ pub fn blocks(html: &str) -> Vec<Block> {
                 .collect::<String>()
                 .to_ascii_lowercase();
             match (name.as_str(), closing) {
-                ("p" | "div" | "ul" | "ol" | "h1" | "h2" | "h3" | "h4" | "blockquote", _) => {
+                ("ul" | "ol", _) => {
                     flush(&mut out, &mut text, item, pre);
                     item = false;
+                }
+                // A paragraph inside an item, as a loose list has, stays the item.
+                ("p" | "div" | "h1" | "h2" | "h3" | "h4" | "blockquote", _) => {
+                    flush(&mut out, &mut text, item, pre);
                 }
                 ("li", false) => {
                     flush(&mut out, &mut text, item, pre);
@@ -196,6 +200,46 @@ mod tests {
         assert_eq!(
             blocks(&items[0].html),
             [Block::Para("Run pacman -Syu.".into())]
+        );
+    }
+
+    /// An item as the feed carried it, with its namespaced creator and a list.
+    #[test]
+    fn reads_an_item_of_the_real_feed() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Arch Linux: Recent news updates</title><link>https://archlinux.org/news/</link><atom:link href="https://archlinux.org/feeds/news/" rel="self"/><language>en-us</language><item><title>iptables now defaults to the nft backend</title><link>https://archlinux.org/news/iptables-now-defaults-to-the-nft-backend/</link><description>&lt;p&gt;The old iptables-nft package name is replaced by iptables, and the
+legacy backend is available as iptables-legacy.&lt;/p&gt;
+&lt;p&gt;When switching packages (among iptables-nft, iptables, iptables-legacy),
+check for .pacsave files in /etc/iptables/ and restore your rules if needed:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;/etc/iptables/iptables.rules.pacsave&lt;/li&gt;
+&lt;li&gt;/etc/iptables/ip6tables.rules.pacsave&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Most setups should work unchanged, but users relying on uncommon xtables
+extensions or legacy-only behavior should test carefully and use
+iptables-legacy if required.&lt;/p&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Felix Yan 🦊</dc:creator><pubDate>Sun, 05 Apr 2026 18:28:33 +0000</pubDate><guid isPermaLink="false">tag:archlinux.org,2026-04-05:/news/iptables-now-defaults-to-the-nft-backend/</guid></item></channel></rss>"#;
+        let items = parse(xml).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "iptables now defaults to the nft backend");
+        assert!(items[0].date.starts_with("2026-04-0"));
+        let b = blocks(&items[0].html);
+        assert_eq!(b.len(), 5, "{b:?}");
+        assert_eq!(
+            b[2],
+            Block::Item("/etc/iptables/iptables.rules.pacsave".into())
+        );
+        assert!(matches!(&b[4], Block::Para(p) if p.ends_with("iptables-legacy if required.")));
+    }
+
+    #[test]
+    fn a_paragraph_inside_an_item_stays_the_item() {
+        assert_eq!(
+            blocks("<ul><li><p>one</p></li><li><p>two</p></li></ul><p>after</p>"),
+            [
+                Block::Item("one".into()),
+                Block::Item("two".into()),
+                Block::Para("after".into()),
+            ]
         );
     }
 

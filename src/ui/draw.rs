@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style as Cell;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-use super::{Ctx, Tone};
+use super::{Ctx, Does, Tone};
 
 pub fn width(s: &str) -> usize {
     s.width()
@@ -27,6 +27,10 @@ pub fn cut(s: &str, max: usize, mark: &str) -> String {
         used += w;
         out.push(c);
     }
+    // A sequence, as an emoji with its variation selector, is wider than its characters.
+    while out.width() > room {
+        out.pop();
+    }
     out + if max >= mark.width() { mark } else { "" }
 }
 
@@ -46,7 +50,11 @@ pub fn cut_front(s: &str, max: usize, mark: &str) -> String {
         used += w;
         kept.push(c);
     }
-    mark.to_string() + &kept.into_iter().rev().collect::<String>()
+    let mut kept: String = kept.into_iter().rev().collect();
+    while kept.width() > room {
+        kept.remove(0);
+    }
+    mark.to_string() + &kept
 }
 
 /// As many whole `pieces` as fit in `max` columns, joined by `sep`, those left out as `mark`.
@@ -263,7 +271,7 @@ pub fn frame(area: Rect, buf: &mut Buffer, ctx: &Ctx, path: &[String]) -> Rect {
 
 /// The keys of the page, dimmed under it, with the version on the right. Drawn after the page,
 /// which knows its keys only once it has drawn.
-pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, String)]) {
+pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, Does)]) {
     let s = &ctx.style;
     let Some((x, width, _, bottom)) = geometry(area) else {
         return;
@@ -272,14 +280,14 @@ pub fn footer(area: Rect, buf: &mut Buffer, ctx: &Ctx, hints: &[(&'static str, S
     // The pages name their keys in the glyphs of the window. The console gets them as words.
     let keys: Vec<String> = hints
         .iter()
-        .map(|(k, label)| {
+        .map(|(k, does)| {
             let key = match *k {
                 "↑↓" => s.glyphs.up_down,
                 "⏎" => s.glyphs.enter,
                 "⇞⇟" => s.glyphs.page_keys,
                 other => other,
             };
-            format!("{key} {label}")
+            format!("{key} {}", does.label())
         })
         .collect();
     let sep = format!(" {} ", s.glyphs.separator);
@@ -450,6 +458,15 @@ mod tests {
             "…e › firefox"
         );
         assert_eq!(cut("kurz", 8, "…"), "kurz");
+        for s in ["⚠️ Warnung ⚠️ Warnung", "\x1b[1m\tFehler"] {
+            for max in 0..12 {
+                assert!(cut(s, max, "…").width() <= max, "{s:?} at {max}");
+                assert!(
+                    cut_front(s, max, "…").width() <= max.max(1),
+                    "{s:?} at {max}"
+                );
+            }
+        }
     }
 
     #[test]

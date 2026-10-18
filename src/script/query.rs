@@ -44,10 +44,16 @@ fn run(op: Op, args: &[&str], limit: Duration) -> Result<String, Failure> {
     let raw = events_w.as_raw_fd();
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .process_group(0);
-    // SAFETY: attach_fd3 only calls async-signal-safe dup2/fcntl.
-    unsafe { cmd.pre_exec(move || attach_fd3(raw)) };
+        .stderr(Stdio::piped());
+    // A session of its own, as in the window: no terminal to stop at or write into, and one
+    // group the limit stops whole.
+    // SAFETY: setsid, dup2 and fcntl are async-signal-safe.
+    unsafe {
+        cmd.pre_exec(move || {
+            rustix::process::setsid()?;
+            attach_fd3(raw)
+        })
+    };
     let mut child = cmd
         .spawn()
         .map_err(|e| Failure::new(op, format!("bash: {e}")))?;

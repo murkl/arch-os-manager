@@ -15,7 +15,7 @@ use crate::ui::input::Input;
 use crate::ui::list::Lead;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::Target;
-use crate::ui::{Ctx, Flow, Key, Nav, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Nav, Page, Tone};
 
 /// The pause before a result takes keys: what was typed while waiting must not dismiss it.
 const SETTLE: Duration = Duration::from_millis(618);
@@ -124,11 +124,11 @@ impl Page for ConfirmPage {
         );
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         vec![
-            ("↑↓", t("choose").into()),
-            ("⏎", t("confirm").into()),
-            ("esc", t("back").into()),
+            ("↑↓", Does::Choose),
+            ("⏎", Does::Answer),
+            ("esc", Does::Back),
         ]
     }
 
@@ -243,8 +243,8 @@ impl Page for PasswordPage {
         }
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
-        vec![("⏎", t("confirm").into()), ("esc", t("back").into())]
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
+        vec![("⏎", Does::Answer), ("esc", Does::Back)]
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -285,7 +285,11 @@ impl Page for PasswordPage {
                 for run in self.probe.iter().chain(&self.auth) {
                     run.interrupt();
                 }
-                Flow::Pop
+                if key == Key::Esc {
+                    Flow::Pop
+                } else {
+                    Flow::Quit
+                }
             }
             k => {
                 if self.input.key(k) {
@@ -498,15 +502,23 @@ impl RunPage {
             _ => 1,
         };
         let inner = card(area, buf, w, question.len() as u16 + answers + 5, ctx);
+        // Short of room the question keeps a line for the answers, which scroll.
+        let room = inner.height.saturating_sub(3);
+        let asked = (question.len() as u16).min(room.saturating_sub(answers.min(room / 2).max(1)));
         let mut y = inner.y + 1;
-        for line in &question {
+        for line in question.iter().take(asked as usize) {
             put(buf, inner.x, y, line, inner.width, s.bold(Tone::Normal));
             y += 1;
         }
         y += 1;
         match &prompt {
             Prompt::YesNo { .. } | Prompt::Choice { .. } => self.choices.draw(
-                Rect::new(inner.x + 2, y, inner.width.saturating_sub(2), answers),
+                Rect::new(
+                    inner.x + 2,
+                    y,
+                    inner.width.saturating_sub(2),
+                    answers.min(inner.bottom().saturating_sub(y)),
+                ),
                 buf,
                 ctx,
             ),
@@ -713,42 +725,34 @@ impl Page for RunPage {
         }
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         let details = if self.details {
-            t("overview")
+            Does::Overview
         } else {
-            t("details")
+            Does::Details
         };
         if self.cancel.is_some() {
-            return vec![("↑↓", t("choose").into()), ("⏎", t("confirm").into())];
+            return vec![("↑↓", Does::Choose), ("⏎", Does::Answer)];
         }
         if self.outcome.is_some() {
+            // The keys of what is offered, none while the system is read again.
             return if self.settled() {
-                vec![
-                    ("↑↓", t("choose").into()),
-                    ("⏎", t("run").into()),
-                    ("tab", details.into()),
-                    ("esc", t("back").into()),
-                ]
+                let mut h = self.result.hints();
+                h.insert(h.len() - 1, ("tab", details));
+                h
             } else {
                 Vec::new()
             };
         }
         if self.details {
-            return vec![("tab", details.into()), ("ctrl+c", t("stop").into())];
+            return vec![("tab", details), ("ctrl+c", Does::Stop)];
         }
         match self.prompt() {
-            Some(Prompt::Password | Prompt::Text { .. }) => vec![
-                ("⏎", t("answer").into()),
-                ("tab", details.into()),
-                ("esc", t("stop").into()),
-            ],
-            Some(_) => vec![
-                ("↑↓", t("choose").into()),
-                ("⏎", t("answer").into()),
-                ("tab", details.into()),
-            ],
-            None => vec![("tab", details.into()), ("esc", t("stop").into())],
+            Some(Prompt::Password | Prompt::Text { .. }) => {
+                vec![("⏎", Does::Answer), ("tab", details), ("esc", Does::Stop)]
+            }
+            Some(_) => vec![("↑↓", Does::Choose), ("⏎", Does::Answer), ("tab", details)],
+            None => vec![("tab", details), ("esc", Does::Stop)],
         }
     }
 
@@ -775,7 +779,8 @@ impl Page for RunPage {
                 return Flow::Stay;
             }
             return match self.result.key(key, ctx) {
-                Flow::Ignored if matches!(key.nav(false), Some(Nav::Back | Nav::Quit)) => Flow::Pop,
+                Flow::Ignored if key.nav(false) == Some(Nav::Back) => Flow::Pop,
+                Flow::Ignored if key.nav(false) == Some(Nav::Quit) => Flow::Quit,
                 flow => flow,
             };
         }
@@ -915,7 +920,11 @@ fn next_steps(done: Op, ctx: &Ctx) -> Vec<Act> {
         );
     }
     if done != op::UPDATE_RUN
-        && let Some(list) = s.updates.ready().filter(|u| !u.is_empty())
+        && let Some(list) = s
+            .updates
+            .ready()
+            .map(|p| &p.updates)
+            .filter(|u| !u.is_empty())
     {
         step(
             Target::Upgrade,
@@ -950,6 +959,78 @@ mod tests {
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);
         assert!(shown.contains("The password cannot be empty."), "{shown}");
+    }
+
+    #[test]
+    fn ctrl_c_and_q_quit_once_nothing_runs() {
+        let (mut after, _) = app();
+        open(
+            &mut after,
+            Box::new(RunPage::finished(
+                Job::new(op::UPDATE_RUN, Vec::new()),
+                Ok(()),
+            )),
+        );
+        press(&mut after, &[Key::Char('q')]);
+        assert!(after.done(), "q after a run");
+        let (mut asking, _) = app();
+        let ask = || Box::new(PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new())));
+        open(&mut asking, ask());
+        press(&mut asking, &[Key::Esc]);
+        assert!(!asking.done(), "esc goes back");
+        open(&mut asking, ask());
+        press(&mut asking, &[Key::Ctrl('c')]);
+        assert!(asking.done(), "ctrl+c on the password");
+        let (mut starting, _) = app();
+        open(
+            &mut starting,
+            Box::new(crate::ui::pages::splash::SplashPage::new()),
+        );
+        press(&mut starting, &[Key::Ctrl('c')]);
+        assert!(starting.done(), "ctrl+c on the start screen");
+    }
+
+    #[test]
+    fn while_the_system_is_read_again_the_keys_offer_nothing_to_choose() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        app.ctx.pending.set(1);
+        open(
+            &mut app,
+            Box::new(RunPage::finished(
+                Job::new(op::UPDATE_RUN, Vec::new()),
+                Ok(()),
+            )),
+        );
+        let shown = screen(&mut app, &mut term);
+        let footer = shown.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert!(
+            footer.contains("tab details") && !footer.contains("choose"),
+            "{footer}"
+        );
+    }
+
+    #[test]
+    fn many_answers_scroll_inside_the_card() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, _) = app();
+        let providers: String = (1..=14).map(|n| format!("{n}) provider-{n}  ")).collect();
+        let asked = format!(
+            ":: There are 14 providers available for x:\r\n:: Repository extra\r\n   {providers}\r\n\r\nEnter a number (default=1): "
+        );
+        let run = Run::fed(op::UPDATE_RUN, "repo", &asked);
+        let mut page = RunPage::running(Job::new(op::UPDATE_RUN, Vec::new()), run);
+        page.prepare();
+        open(&mut app, Box::new(page));
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 20)).unwrap();
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Down; 13]);
+        let shown = screen(&mut app, &mut term);
+        let footer = shown.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert!(footer.contains("choose"), "{shown}");
+        assert!(shown.contains("provider-14"), "{shown}");
     }
 
     #[test]

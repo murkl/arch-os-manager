@@ -58,7 +58,8 @@ impl Lines {
                 }
                 State::Text => {}
             }
-            if self.carriage && b != b'\n' {
+            // A program that ends its line with \r\n itself reaches the terminal as \r\r\n.
+            if self.carriage && b != b'\n' && b != b'\r' {
                 self.current.clear();
             }
             self.carriage = false;
@@ -97,6 +98,15 @@ mod tests {
         let done = l.feed(b"\x1b[1;32m:: \x1b[0mSynchronizing\r\n( 1/2) 50%\r( 2/2) 100%\r\nnext");
         assert_eq!(done, [":: Synchronizing", "( 2/2) 100%"]);
         assert_eq!(l.current(), "next");
+    }
+
+    #[test]
+    fn keeps_a_line_ended_with_a_carriage_return_of_its_own() {
+        let mut l = Lines::default();
+        assert_eq!(
+            l.feed(b"one\r\r\ntwo\r\n( 1/2) 50%\r( 2/2)\r\r\n"),
+            ["one", "two", "( 2/2)"]
+        );
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use crate::data::features::Features;
-use crate::data::updates::{self, Update};
+use crate::data::updates::{self, Pending, Source};
 use crate::i18n::{self, Lang, t, tn};
 use crate::script::{self, Failure, op, query};
 use crate::settings::Settings;
@@ -62,39 +62,75 @@ fn help() -> String {
     help
 }
 
-pub fn main() -> ExitCode {
-    let mut window = false;
-    let mut target = None;
-    let mut command = None;
-    let mut only_new = false;
-    for arg in std::env::args().skip(1) {
+/// What the command line asks for.
+#[derive(Debug, PartialEq)]
+enum Ask {
+    Help,
+    Version,
+    Start {
+        window: bool,
+        target: Option<Target>,
+        command: Option<&'static str>,
+        only_new: bool,
+    },
+}
+
+/// The arguments after the program's name, or why they ask for nothing it does.
+fn parse(args: impl IntoIterator<Item = String>) -> Result<Ask, String> {
+    let (mut window, mut target, mut command, mut only_new) = (false, None, None, false);
+    for arg in args {
         match arg.as_str() {
-            "-h" | "--help" => {
-                print!("{}", help());
-                return ExitCode::SUCCESS;
-            }
-            "-V" | "--version" => {
-                println!("system-manager {}", crate::version::version());
-                return ExitCode::SUCCESS;
-            }
+            "-h" | "--help" => return Ok(Ask::Help),
+            "-V" | "--version" => return Ok(Ask::Version),
             "-w" | "--window" => window = true,
             "--new" => only_new = true,
-            "init" | "check" | "notify" => command = Some(arg),
+            "init" => command = Some("init"),
+            "check" => command = Some("check"),
+            "notify" => command = Some("notify"),
             page => match Target::from_id(page) {
                 Some(t) => target = Some(t),
-                None => {
-                    eprint!("system-manager: unknown argument {page}\n\n{}", help());
-                    return ExitCode::from(64);
-                }
+                None => return Err(format!("unknown argument {page}")),
             },
         }
     }
-    if only_new && command.as_deref() != Some("notify") {
-        eprint!("system-manager: --new goes with notify\n\n{}", help());
-        return ExitCode::from(64);
+    if only_new && command != Some("notify") {
+        return Err("--new goes with notify".into());
     }
-    if rustix::process::geteuid().is_root() && refuses_root(command.as_deref()) {
+    Ok(Ask::Start {
+        window,
+        target,
+        command,
+        only_new,
+    })
+}
+
+pub fn main() -> ExitCode {
+    let (window, target, command, only_new) = match parse(std::env::args().skip(1)) {
+        Ok(Ask::Help) => {
+            print!("{}", help());
+            return ExitCode::SUCCESS;
+        }
+        Ok(Ask::Version) => {
+            println!("system-manager {}", crate::version::version());
+            return ExitCode::SUCCESS;
+        }
+        Ok(Ask::Start {
+            window,
+            target,
+            command,
+            only_new,
+        }) => (window, target, command, only_new),
+        Err(why) => {
+            eprint!("system-manager: {why}\n\n{}", help());
+            return ExitCode::from(64);
+        }
+    };
+    if rustix::process::geteuid().is_root() && refuses_root(command) {
         eprintln!("system-manager: runs as the user it serves and asks for the password itself");
+        return ExitCode::FAILURE;
+    }
+    if !crate::paths::home().is_absolute() {
+        eprintln!("system-manager: HOME names no folder for its files");
         return ExitCode::FAILURE;
     }
     if let Err(e) = crate::log::init(&crate::paths::log()) {
@@ -103,12 +139,16 @@ pub fn main() -> ExitCode {
             crate::paths::log().display()
         );
     }
+    // Found before an update can replace the file.
+    if let Err(e) = crate::paths::program() {
+        crate::warn!("no path of this program: {e}");
+    }
     crate::info!(
         "start {} {:?}",
         crate::version::version(),
         std::env::args().skip(1).collect::<Vec<_>>()
     );
-    let code = match command.as_deref() {
+    let code = match command {
         Some("init") => {
             crate::migrate::run();
             init()
@@ -179,14 +219,9 @@ fn init() -> ExitCode {
 }
 
 /// The pending updates, with the AUR helper the settings choose.
-fn pending() -> Result<Vec<Update>, Failure> {
+fn pending() -> Result<Pending, Failure> {
     let (_, features) = setup()?;
-    if let Some(p) = op::UPDATE_LIST
-        .meta()
-        .needs
-        .iter()
-        .find(|p| !features.ok(p))
-    {
+    if let Some(p) = script::missing(op::UPDATE_LIST, &features) {
         return Err(Failure::new(op::UPDATE_LIST, format!("needs {p}")));
     }
     Ok(updates::parse(&query(op::UPDATE_LIST, &[])?))
@@ -194,10 +229,21 @@ fn pending() -> Result<Vec<Update>, Failure> {
 
 fn check() -> ExitCode {
     match pending() {
-        Ok(list) if list.is_empty() => ExitCode::from(2),
-        Ok(list) => {
-            print!("{}", updates::checkupdates_format(&list));
-            ExitCode::SUCCESS
+        Ok(p) => {
+            print!("{}", updates::checkupdates_format(&p.updates));
+            for source in &p.failed {
+                let name = match source {
+                    Source::Repo => "the repositories",
+                    Source::Aur => "the AUR",
+                    Source::Flatpak => "Flatpak",
+                };
+                eprintln!("system-manager: {name} could not be asked");
+            }
+            match (p.updates.is_empty(), p.failed.is_empty()) {
+                (false, _) => ExitCode::SUCCESS,
+                (true, true) => ExitCode::from(2),
+                (true, false) => ExitCode::FAILURE,
+            }
         }
         Err(f) => {
             eprintln!("system-manager: {}: {}", f.headline(), f.detail);
@@ -221,23 +267,23 @@ fn quiet(pending: usize, fresh: bool, only_new: bool) -> Option<String> {
 }
 
 fn notify(only_new: bool) -> ExitCode {
-    let list = match pending() {
-        Ok(list) => list,
+    let (list, complete) = match pending() {
+        Ok(p) => (p.updates, p.failed.is_empty()),
         Err(f) => {
             crate::warn!("notify: {}", f.detail);
             return ExitCode::FAILURE;
         }
     };
-    let mut state = State::load();
     let now: Vec<String> = list
         .iter()
         .map(|u| format!("{} {}", u.name, u.new))
         .collect();
-    let fresh = now.iter().any(|u| !state.notified.contains(u));
+    let notified = State::load().notified;
+    let fresh = now.iter().any(|u| !notified.contains(u));
     if let Some(status) = quiet(list.len(), fresh, only_new) {
-        if list.is_empty() {
-            state.notified = now;
-            state.save();
+        // Nothing pending forgets what was announced, unless a source could not tell.
+        if list.is_empty() && complete {
+            State::update(|s| s.notified = now);
         }
         crate::info!("notify: {status}");
         println!("{status}");
@@ -262,12 +308,11 @@ fn notify(only_new: bool) -> ExitCode {
     );
     // Remembered only once shown, so one the desktop missed comes again.
     if shown.is_ok() {
-        state.notified = now;
-        state.save();
+        State::update(|s| s.notified = now);
     }
     match shown {
         Ok(action) if action.trim() == "open" => {
-            let exe = std::env::current_exe()
+            let exe = crate::paths::program()
                 .unwrap_or_default()
                 .display()
                 .to_string();
@@ -299,6 +344,39 @@ mod tests {
         }
         assert!(help.starts_with("Interface\n  system-manager   [--window] [<page>]\n"));
         assert!(!help.contains("--version"));
+    }
+
+    #[test]
+    fn reads_what_the_command_line_asks() {
+        let ask = |args: &[&str]| parse(args.iter().map(|a| a.to_string()));
+        assert_eq!(ask(&["--version", "nonsense"]), Ok(Ask::Version));
+        assert_eq!(ask(&["-h"]), Ok(Ask::Help));
+        assert_eq!(
+            ask(&["--window", "news"]),
+            Ok(Ask::Start {
+                window: true,
+                target: Target::from_id("news"),
+                command: None,
+                only_new: false
+            })
+        );
+        assert_eq!(
+            ask(&["notify", "--new"]),
+            Ok(Ask::Start {
+                window: false,
+                target: None,
+                command: Some("notify"),
+                only_new: true
+            })
+        );
+        assert_eq!(
+            ask(&["check", "--new"]),
+            Err("--new goes with notify".into())
+        );
+        assert_eq!(ask(&["neews"]), Err("unknown argument neews".into()));
+        for page in PAGES {
+            assert!(Target::from_id(page).is_some(), "{page}");
+        }
     }
 
     #[test]

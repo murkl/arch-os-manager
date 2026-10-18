@@ -11,9 +11,16 @@ errors:
   10: |
     The AUR could not be reached
     Check the internet connection.
+hints:
+  "The requested URL returned error: 404":
+    text: |
+      A package is no longer on the server
+      The list of packages is older than the server's. Update the system, then try again.
+    offer: upgrade
 # What a package may need of the system, and why it is not offered without.
 facts:
   desktop: needs a desktop
+  wayland: needs a Wayland session
   gnome: needs GNOME
 # Each optional package under its group, the call whose answer proves it works,
 # and what it adds. An extension is set up by the desktop script, from
@@ -29,6 +36,9 @@ probe:
     pacman-contrib:
       command: [checkupdates, --version]
       adds: Lists updates, trims the cache and finds configuration updates
+    fakeroot:
+      command: [fakeroot, --version]
+      adds: Lets pacman-contrib list updates without root
     reflector:
       command: [reflector, --help]
       adds: Ranks the mirrors by speed

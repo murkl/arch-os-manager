@@ -132,7 +132,7 @@ pub fn draw_row(
         let mut out = Vec::new();
         for (text, style) in pieces {
             let piece = cut(text, left, s.glyphs.ellipsis);
-            left -= width(&piece);
+            left = left.saturating_sub(width(&piece));
             let whole = piece == *text;
             out.push((piece, *style));
             if !whole {
@@ -204,6 +204,8 @@ pub struct List<I> {
     pub marked: BTreeSet<I>,
     /// The page marks rows, so the column for the mark stays, marked or not.
     pub markable: bool,
+    /// The page names f in its keys. Elsewhere, as under a question, f is no filter.
+    filterable: bool,
     height: usize,
 }
 
@@ -216,6 +218,7 @@ impl<I> Default for List<I> {
             filter: None,
             marked: BTreeSet::new(),
             markable: false,
+            filterable: false,
             height: 0,
         }
     }
@@ -226,6 +229,14 @@ impl<I: Clone + Ord> List<I> {
         let mut l = List::default();
         l.set(rows);
         l
+    }
+
+    /// A list of a page that offers its filter on f.
+    pub fn filterable() -> List<I> {
+        List {
+            filterable: true,
+            ..List::default()
+        }
     }
 
     /// Replaces the rows. The cursor stays on its row, or where its row was when it is gone,
@@ -327,7 +338,7 @@ impl<I: Clone + Ord> List<I> {
                     .and_then(|r| r.id.clone())
                     .map_or(Picked::Used, Picked::Open);
             }
-            Some(Nav::Filter) => self.open_filter(),
+            Some(Nav::Filter) if self.filterable => self.open_filter(),
             Some(Nav::Back) if typing => self.filter = None,
             _ => {
                 let Some(filter) = self.filter.as_mut() else {
@@ -514,13 +525,23 @@ mod tests {
     }
 
     fn list() -> List<&'static str> {
-        List::new(vec![
+        let mut l = List::filterable();
+        l.set(vec![
             Row::heading("A"),
             Row::new("1", "Updates"),
             Row::new("2", "Pakete"),
             Row::heading("B"),
             Row::new("3", "Dienste"),
-        ])
+        ]);
+        l
+    }
+
+    #[test]
+    fn f_opens_no_filter_where_the_page_offers_none() {
+        let mut l = List::new(vec![Row::new(false, "No"), Row::new(true, "Yes")]);
+        assert!(matches!(l.key(Key::Char('f')), Picked::Ignored));
+        assert!(matches!(l.key(Key::Char('/')), Picked::Ignored));
+        assert!(!l.typing());
     }
 
     #[test]

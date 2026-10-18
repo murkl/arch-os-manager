@@ -33,8 +33,8 @@ op_keep() {
 }
 
 # Meld runs as the user on copies, so it opens on Wayland and never edits as
-# root. What is saved on the left is copied into the configuration, which keeps
-# its owner and mode.
+# root, in the person's language. What is saved on the left goes into the
+# configuration, which keeps its owner and mode.
 op_merge() {
     local file="$1" target
     update "$file"
@@ -43,14 +43,21 @@ op_merge() {
         step snapshot
         sudo snapper --no-dbus -c root create --cleanup-algorithm number --description "system-manager: $target"
     fi
-    work="$(mktemp -d)"
-    trap 'rm -rf "$work"' EXIT
+    scratch
     sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" -- "$target" "${work}/current"
     sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" -- "$file" "${work}/new"
     cp "${work}/current" "${work}/before"
-    meld "${work}/current" "${work}/new"
+    env -u LC_ALL meld "${work}/current" "${work}/new"
     if cmp -s "${work}/current" "${work}/before"; then exit 12; fi
-    sudo cp -- "${work}/current" "$target"
+    # sudo refuses to start with a sudoers that does not parse.
+    case "$target" in
+    */sudoers | */sudoers.d/*) sudo visudo --check --file "${work}/current" >/dev/null || exit 13 ;;
+    esac
+    # Written beside it with its owner and mode, then renamed over it, so nothing
+    # reads half a configuration.
+    sudo install -m "$(stat -c %a -- "$target")" -o "$(stat -c %u -- "$target")" \
+        -g "$(stat -c %g -- "$target")" -- "${work}/current" "${target}.sm-new"
+    sudo mv -f -- "${target}.sm-new" "$target"
     sudo rm -f -- "$file"
 }
 
@@ -60,10 +67,10 @@ snapshots() {
     command -v snapper >/dev/null && [ -e /etc/snapper/configs/root ]
 }
 
-# Nothing but a configuration update is ever moved or removed.
+# Nothing but what pacdiff lists is ever moved or removed.
 update() {
     case "$1" in
-    *.pacnew | *.pacsave) ;;
+    *.pacnew | *.pacsave | *.pacsave.[0-9]* | *.pacorig) ;;
     *) exit 11 ;;
     esac
 }

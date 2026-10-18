@@ -6,7 +6,9 @@ use std::sync::mpsc::Sender;
 use ratatui::Frame;
 
 use super::target::Target;
-use super::{Ctx, Flow, Fresh, Loaded, Msg, Nav, Page, PageId, Shared, Style, draw, pages};
+use super::{
+    Ctx, Does, Flow, Fresh, Key, Loaded, Msg, Nav, Page, PageId, Shared, Style, draw, pages,
+};
 use crate::data::{self, features::Features};
 use crate::i18n::{self, Lang};
 use crate::script::{self, Failure, op, query};
@@ -150,6 +152,13 @@ impl App {
             Msg::Fresh(fresh) => self.fresh(fresh),
             Msg::Usage(usage) => self.ctx.usage = Some(usage),
             Msg::Legacy(legacy) => self.legacy(legacy),
+            // Elsewhere its letters would be commands, a q among them.
+            Msg::Paste(text) if typing => {
+                for c in text.chars().filter(|c| !c.is_control()) {
+                    self.handle(Msg::Key(Key::Char(c)));
+                }
+            }
+            Msg::Paste(_) => {}
         }
         if self.ctx.reload && self.ctx.pending.get() == 0 {
             self.ctx.reload = false;
@@ -184,9 +193,8 @@ impl App {
             Flow::Pop => {
                 if self.pages.len() > 1 {
                     self.pages.pop();
-                    if let Some((id, page)) = self.pages.last_mut() {
+                    if let Some((id, _)) = self.pages.last() {
                         self.ctx.page = *id;
-                        page.resumed(&mut self.ctx);
                     }
                 }
             }
@@ -197,6 +205,7 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
         let area = frame.area();
         let path: Vec<String> = self.pages.iter().skip(1).map(|(_, p)| p.title()).collect();
+        let over_home = self.pages.len() == 2;
         let (id, page) = self.pages.last_mut().expect("the start page stays");
         self.ctx.page = *id;
         self.ctx.cursor.set(None);
@@ -206,7 +215,15 @@ impl App {
         } else {
             let content = draw::frame(area, frame.buffer_mut(), &self.ctx, &path);
             page.draw(content, frame.buffer_mut(), &mut self.ctx);
-            let hints = page.hints(&self.ctx);
+            let mut hints = page.hints(&self.ctx);
+            // Closing a page right above the start page leads to the menu, and says so.
+            if over_home {
+                for (_, does) in &mut hints {
+                    if *does == Does::Back {
+                        *does = Does::Menu;
+                    }
+                }
+            }
             draw::footer(area, frame.buffer_mut(), &self.ctx, &hints);
         }
         // The terminal's own cursor where a text box was drawn, hidden everywhere else.
@@ -257,8 +274,7 @@ impl App {
     fn after_features(&mut self, features: &Features) {
         script::set_aur(features.aur_helper(self.ctx.settings.aur_helper.as_deref()));
         let ctx = &mut self.ctx;
-        let missing =
-            |op: crate::script::Op| op.meta().needs.iter().find(|p| !features.ok(p)).cloned();
+        let missing = |op| script::missing(op, features).map(str::to_string);
         macro_rules! gated {
             ($field:ident, $script:expr, $variant:ident, $load:expr) => {
                 match missing($script) {
@@ -307,6 +323,12 @@ impl App {
                         }
                     });
                     self.after_features(&features);
+                } else if let Loaded::Failed(f) = &s.features {
+                    // What waits for the probe would wait for ever.
+                    s.updates.give_up(f);
+                    s.pacnew.give_up(f);
+                    s.cleanup.give_up(f);
+                    s.firmware.give_up(f);
                 }
             }
             Fresh::System(r) => s.system = Loaded::from(r),
@@ -317,9 +339,11 @@ impl App {
                     && self.ctx.state.news_read.is_none()
                 {
                     // First start: only the newest counts as unread, not the whole feed.
-                    self.ctx.state.news_read =
-                        Some(items.iter().skip(1).map(|i| i.link.clone()).collect());
-                    self.ctx.state.save();
+                    self.ctx.state = State::update(|state| {
+                        state.news_read.get_or_insert_with(|| {
+                            items.iter().skip(1).map(|i| i.link.clone()).collect()
+                        });
+                    });
                 }
             }
             Fresh::Installed(r) => s.installed = Loaded::from(r),
@@ -368,9 +392,13 @@ fn sample(tx: Sender<Msg>, wake: Arc<dyn Fn() + Send + Sync>) {
 /// The feed, or the copy from the last time it was reached.
 fn load_news() -> Result<(Vec<data::news::Item>, bool), Failure> {
     let cache = crate::paths::news_cache();
-    match query(op::NEWS_FETCH, &[]) {
-        Ok(xml) => {
-            let items = data::news::parse(&xml).map_err(|e| Failure::new(op::NEWS_FETCH, e))?;
+    // An answer that is no feed, as a captive portal gives, counts as none.
+    let fetched = query(op::NEWS_FETCH, &[]).and_then(|xml| {
+        let items = data::news::parse(&xml).map_err(|e| Failure::new(op::NEWS_FETCH, e))?;
+        Ok((xml, items))
+    });
+    match fetched {
+        Ok((xml, items)) => {
             if let Err(e) = crate::paths::write_atomic(&cache, xml.as_bytes()) {
                 crate::warn!("news cache not written: {e}");
             }
@@ -391,10 +419,14 @@ fn load_services() -> Result<Vec<data::services::Service>, Failure> {
     let system = query(op::SERVICES_LIST, &["system"])?;
     let mut all =
         data::services::parse(&system, false).map_err(|e| Failure::new(op::SERVICES_LIST, e))?;
-    let user = user
-        .join()
-        .unwrap_or_else(|_| Err(Failure::new(op::SERVICES_LIST, "panicked")))?;
-    all.extend(data::services::parse(&user, true).map_err(|e| Failure::new(op::SERVICES_LIST, e))?);
+    // Without a service manager of the user's own, as over ssh, the system's still count.
+    match user.join() {
+        Ok(Ok(user)) => all.extend(
+            data::services::parse(&user, true).map_err(|e| Failure::new(op::SERVICES_LIST, e))?,
+        ),
+        Ok(Err(f)) => crate::warn!("services of the user: {}", f.detail),
+        Err(_) => crate::warn!("services of the user: panicked"),
+    }
     Ok(all)
 }
 
@@ -506,7 +538,7 @@ pub mod tests {
         use crate::data::{packages::Installed, services::Service, system::System, updates};
         let s = &mut app.ctx.shared;
         s.features = Loaded::Ready(Features::parse(
-            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\npacman-contrib\tok\t1.13.1-1\nreflector\tok\t2023-2\n@desktop\tok\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\npacman-contrib\tok\t1.13.1-1\nfakeroot\tok\t1.37.1.2-1\nreflector\tok\t2023-2\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {
@@ -555,7 +587,6 @@ pub mod tests {
             unit: unit.into(),
             description: String::new(),
             active: active.into(),
-            sub: String::new(),
             enabled: "enabled".into(),
         };
         s.services = Loaded::Ready(vec![
@@ -564,11 +595,7 @@ pub mod tests {
         ]);
         s.journal = Loaded::Ready(
             (0..3)
-                .map(|i| Entry {
-                    time: i,
-                    ident: "kernel".into(),
-                    message: format!("example {i}"),
-                })
+                .map(|i| Entry::new(i, "kernel", &format!("example {i}")))
                 .collect(),
         );
         s.pacnew = Loaded::Ready(vec!["/etc/pacman.conf.pacnew".into()]);
@@ -888,6 +915,9 @@ pub mod tests {
         app.handle(Msg::Held(Key::Char('x')));
         app.handle(Msg::Held(Key::Char('x')));
         assert!(screen(&mut app, &mut term).contains("xx"));
+        assert!(!Key::Enter.repeats(true) && !Key::Esc.repeats(true) && !Key::Tab.repeats(true));
+        assert!(Key::Backspace.repeats(true) && Key::Down.repeats(true));
+        assert!(Key::WheelUp.bytes().is_empty(), "the wheel types nothing");
     }
 
     #[test]
@@ -898,6 +928,131 @@ pub mod tests {
         assert!(screen(&mut app, &mut term).contains("q"));
         press(&mut app, &[Key::Esc, Key::Char('q')]);
         assert!(app.done());
+    }
+
+    #[test]
+    fn esc_names_the_main_menu_right_above_it_and_back_deeper() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        for page in Target::Settings.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("esc main menu"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("esc back") && !shown.contains("main menu"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Esc]);
+        assert!(screen(&mut app, &mut term).contains("esc main menu"));
+        press(&mut app, &[Key::Esc]);
+        assert_eq!(app.pages.len(), 1);
+    }
+
+    #[test]
+    fn esc_in_a_search_names_what_it_closes_or_clears() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        press(&mut app, &[Key::Char('f')]);
+        assert!(screen(&mut app, &mut term).contains("esc close search"));
+        press(&mut app, &[Key::Esc]);
+        for page in Target::Packages.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        press(&mut app, &[Key::Char('x')]);
+        assert!(screen(&mut app, &mut term).contains("esc clear search"));
+        press(&mut app, &[Key::Esc]);
+        assert!(screen(&mut app, &mut term).contains("esc main menu"));
+        assert_eq!(app.pages.len(), 2);
+    }
+
+    #[test]
+    fn a_source_not_asked_is_named_and_up_to_date_is_not_claimed() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        app.ctx.shared.updates = Loaded::Ready(data::updates::parse("failed\taur\n"));
+        let home = screen(&mut app, &mut term);
+        let row = home
+            .lines()
+            .find(|l| l.contains("Update"))
+            .unwrap_or_default();
+        assert!(row.ends_with("unknown"), "{home}");
+        for page in Target::Upgrade.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("The AUR could not be reached"), "{shown}");
+        assert!(
+            shown.contains("Install now") && !shown.contains("up to date"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn a_failed_probe_leaves_nothing_waiting_for_it() {
+        let (mut app, mut term) = app();
+        let failure = crate::script::Failure::new(op::FEATURES_PROBE, "no answer within 120 s");
+        app.handle(Msg::Fresh(Fresh::Features(Err(failure))));
+        for page in Target::Upgrade.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        assert!(matches!(app.ctx.shared.firmware, Loaded::Failed(_)));
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Looking for updates"), "{shown}");
+        assert!(!app.pages.last().unwrap().1.animating(&app.ctx));
+    }
+
+    #[test]
+    fn a_message_with_an_emoji_sequence_draws_at_any_width() {
+        let (mut app, _) = app();
+        example(&mut app);
+        app.ctx.shared.journal = Loaded::Ready(vec![data::journal::Entry::new(
+            0,
+            "kernel",
+            "⚠️ Warnung: ⚠️ Lüfter ⚠️ dreht nicht ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️ ⚠️",
+        )]);
+        for page in Target::Log.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        for w in [40, 47, 80] {
+            let mut term = Terminal::new(TestBackend::new(w, 12)).unwrap();
+            assert!(screen(&mut app, &mut term).contains("Warnung"));
+        }
+    }
+
+    #[test]
+    fn f_on_an_article_hides_nothing_and_q_still_quits() {
+        let (mut app, mut term) = app();
+        example(&mut app);
+        for page in Target::News.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter]);
+        let article = screen(&mut app, &mut term);
+        assert_eq!(app.pages.len(), 3, "{article}");
+        press(&mut app, &[Key::Char('f')]);
+        assert_eq!(screen(&mut app, &mut term), article);
+        press(&mut app, &[Key::Char('q')]);
+        assert!(app.done());
+    }
+
+    #[test]
+    fn pasted_text_is_typed_into_a_box_and_commands_nothing_elsewhere() {
+        let (mut app, mut term) = app();
+        app.handle(Msg::Paste("quit\n".into()));
+        assert!(!app.done() && !app.pages.last().unwrap().1.typing());
+        press(&mut app, &[Key::Char('f')]);
+        app.handle(Msg::Paste("upd\nate".into()));
+        assert!(screen(&mut app, &mut term).contains("update"));
     }
 
     #[test]

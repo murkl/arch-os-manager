@@ -11,7 +11,7 @@ use crate::settings::AUR_HELPERS;
 use crate::ui::detail::{Act, Block, Detail, loaded};
 use crate::ui::icon;
 use crate::ui::list::{List, Picked, Row};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 fn status(s: &Status) -> (String, Tone) {
     match s {
@@ -38,7 +38,7 @@ pub struct FeaturesPage {
 impl FeaturesPage {
     pub fn new(focus: Option<String>) -> FeaturesPage {
         FeaturesPage {
-            list: List::default(),
+            list: List::filterable(),
             focus,
         }
     }
@@ -83,7 +83,7 @@ impl Page for FeaturesPage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         super::list_hints(self.list.typing())
     }
 
@@ -206,7 +206,7 @@ impl Page for FeaturePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 

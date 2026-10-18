@@ -60,3 +60,8 @@ hints:
     text: |
       The password was wrong three times
       sudo gave up. Try again with the password of this user.
+  "error while loading shared libraries: libalpm":
+    text: |
+      The AUR helper is built for an older pacman
+      Build it again: remove and install it under Optional packages.
+    offer: features

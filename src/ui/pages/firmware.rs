@@ -9,7 +9,7 @@ use crate::script::op;
 use crate::ui::detail::{Act, Block, Detail, done, loaded};
 use crate::ui::icon;
 use crate::ui::list::{Lead, changes};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct FirmwarePage {
     detail: Detail,
@@ -65,7 +65,7 @@ impl Page for FirmwarePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 

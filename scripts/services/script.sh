@@ -10,12 +10,13 @@ op_list() {
     printf 'units\t%s\nfiles\t%s\n' "$units" "$files"
 }
 
-# system or user, then the unit: its latest journal entries.
+# system or user, then the unit: its latest journal entries. Without --all a
+# message over 4 KiB, such as a core dump's stack trace, comes as null.
 op_log() {
     if [ "$1" = user ]; then
-        journalctl --user-unit "$2" -n 30 --output=json --no-pager
+        journalctl --user-unit "$2" -n 30 --output=json --all --no-pager
     else
-        journalctl --unit "$2" -n 30 --output=json --no-pager
+        journalctl --unit "$2" -n 30 --output=json --all --no-pager
     fi
 }
 

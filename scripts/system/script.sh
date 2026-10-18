@@ -2,7 +2,7 @@
 . "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
 
 op_state() {
-    local hostname last version
+    local hostname version
     hostname="$(</proc/sys/kernel/hostname)"
     printf 'hostname\t%s\n' "$hostname"
     printf 'kernel\t%s\n' "$(uname -r)"
@@ -25,12 +25,6 @@ op_state() {
         printf 'reboot\tno\n'
     else
         printf 'reboot\tyes\n'
-    fi
-    # The last full upgrade, from pacman's own log, whichever front end started it.
-    last="$(grep -F '[PACMAN] starting full system upgrade' /var/log/pacman.log | tail -n 1)" || true
-    if [ -n "$last" ]; then
-        last="${last#[}"
-        printf 'last-upgrade\t%s\n' "${last%%]*}"
     fi
 }
 

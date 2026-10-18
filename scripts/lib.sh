@@ -10,9 +10,15 @@ export LC_ALL=C.UTF-8
 # shells report from the inside out, so the runtime reads the first line.
 trap 'sm_failed $? "$LINENO" "$BASH_COMMAND"' ERR
 sm_failed() {
-    local file="${BASH_SOURCE[1]}" dir
+    local frame=1 line="$2" file dir
+    # Within a helper of this file, the line is the script's that called it.
+    while [[ ${BASH_SOURCE[frame]} == */lib.sh && -n ${BASH_SOURCE[frame + 1]:-} ]]; do
+        line="${BASH_LINENO[frame]}"
+        frame=$((frame + 1))
+    done
+    file="${BASH_SOURCE[frame]}"
     dir="${file%/*}"
-    printf 'fail\t%s\t%s\t%s\t%s\n' "$1" "${dir##*/}/${file##*/}" "$2" "$3" >&3
+    printf 'fail\t%s\t%s\t%s\t%s\n' "$1" "${dir##*/}/${file##*/}" "$line" "$3" >&3
     exit 1
 }
 
@@ -25,12 +31,39 @@ operation() {
         exit 2
     fi
     shift
+    sm_hold
     "op_${name//-/_}" "$@"
+}
+
+# A closed terminal stops no run: sudo, on a terminal of its own by default,
+# passes pacman no hangup. A run, which $SM_RUN names, holds shutdown and sleep
+# off where logind answers, through a lock that ends with the script.
+sm_hold() {
+    trap '' HUP
+    if [ -z "${SM_RUN:-}" ] || ! systemd-inhibit --list >/dev/null 2>&1; then return 0; fi
+    systemd-inhibit --what=shutdown:sleep --mode=block --who="System Manager" --why="$SM_RUN" \
+        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
 }
 
 # The phase a run is in. The sentence for it is in the operation's steps.
 step() {
     printf 'step\t%s\n' "$1" >&3
+}
+
+# The status of the command before, unless it is one of the codes named, by
+# which that command says nothing went wrong: `cmd || allow 1`.
+allow() {
+    local status=$?
+    for code; do
+        if [ "$status" -eq "$code" ]; then return 0; fi
+    done
+    return "$status"
+}
+
+# A folder of the operation's own as $work, removed when it ends.
+scratch() {
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
 }
 
 # Every request leaving the machine, bound to https, redirects included.

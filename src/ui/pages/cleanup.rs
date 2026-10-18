@@ -12,7 +12,7 @@ use crate::ui::detail::{Act, Block, Detail, done, loaded};
 use crate::ui::draw::width;
 use crate::ui::icon;
 use crate::ui::list::Lead;
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct CleanupPage {
     detail: Detail,
@@ -140,7 +140,7 @@ impl Page for CleanupPage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 

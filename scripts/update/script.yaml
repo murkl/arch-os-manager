@@ -1,7 +1,7 @@
 ops:
   list:
     title: Checking for updates
-    needs: [pacman-contrib]
+    needs: [pacman-contrib, fakeroot]
   run:
     title: Updating the system
     root: true
@@ -14,8 +14,5 @@ errors:
     The update check failed
     The package servers could not be reached. Check the internet connection.
   11: |
-    The AUR check failed
-    The AUR helper could not ask the AUR for updates. Check the internet connection.
-  12: |
-    The Flatpak check failed
-    The Flatpak remotes could not be reached. Check the internet connection.
+    The AUR packages could not be updated
+    Everything else is up to date. The details show what the AUR helper reported.

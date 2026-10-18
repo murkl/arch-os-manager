@@ -12,7 +12,7 @@ use crate::ui::detail::{Act, Block, Detail, done};
 use crate::ui::draw::waiting;
 use crate::ui::icon;
 use crate::ui::list::{Lead, changes};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct UpgradePage {
     detail: Detail,
@@ -54,11 +54,23 @@ impl UpgradePage {
                 body.push(Block::Text(f.headline(), Tone::Warn));
                 body.push(Block::Text(f.explanation(), Tone::Muted));
             }
-            Loaded::Ready(list) if list.is_empty() => {
-                known_current = true;
-                body.push(done(t("The system is up to date.")));
-            }
-            Loaded::Ready(list) => {
+            Loaded::Ready(pending) => {
+                for source in &pending.failed {
+                    body.push(Block::Text(
+                        match source {
+                            Source::Aur => t("The AUR could not be reached. Its updates are missing here."),
+                            _ => t("The Flatpak remotes could not be reached. Their updates are missing here."),
+                        }
+                        .to_string(),
+                        Tone::Warn,
+                    ));
+                    body.push(Block::Blank);
+                }
+                let list = &pending.updates;
+                if list.is_empty() && pending.failed.is_empty() {
+                    known_current = true;
+                    body.push(done(t("The system is up to date.")));
+                }
                 let pairs: Vec<_> = list.iter().map(|u| (&*u.old, &*u.new)).collect();
                 let change = changes(&pairs, ctx.style.glyphs.arrow);
                 for (source, heading, glyph) in [
@@ -136,9 +148,9 @@ impl Page for UpgradePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
         if self.animating(ctx) {
-            return vec![("esc", t("back").into())];
+            return vec![("esc", Does::Back)];
         }
         self.detail.hints()
     }

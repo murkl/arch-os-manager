@@ -5,7 +5,7 @@
 op_plan() {
     local orphans names protect=() dir status key caches list file size cache base
     # Packages installed as a dependency that nothing needs any more, with their size.
-    orphans="$(pacman -Qdtq)" || [ $? -eq 1 ]
+    orphans="$(pacman -Qdtq)" || allow 1
     if [ -n "$orphans" ]; then
         mapfile -t names <<<"$orphans"
         pacman -Qi -- "${names[@]}" | awk -F' *: ' '/^Name /{name=$2} /^Installed Size /{print "orphan\t" name "\t" $2}'
@@ -31,11 +31,12 @@ op_plan() {
     done
 
     # paccache's own choice, as arch-os trims by hand: three versions of what is
-    # installed, none of what is not.
+    # installed, none of what is not. It lists each signature too, which goes
+    # with its package.
     mapfile -t caches < <(pacman-conf CacheDir)
     list="$(candidates --keep 3 && candidates --uninstalled --keep 0)"
     while read -r file; do
-        if [ -z "$file" ]; then continue; fi
+        if [ -z "$file" ] || [[ $file == *.sig ]]; then continue; fi
         for key in "${protect[@]}"; do
             if [ -n "$key" ] && [[ $file == "$key"-* ]]; then continue 2; fi
         done
@@ -68,10 +69,11 @@ candidates() {
     paccache --dryrun --verbose --nocolor "$@" | sed -n '/^==> Candidate packages:/,/^$/{/^==>/d;/^$/d;p}'
 }
 
-# Found again right before removing, never taken from an earlier look.
+# Found again right before removing, never taken from an earlier look, in a
+# shell of its own: a substitution tested by || would run the plan without errexit.
 op_run() {
     local plan caches files builds file dir inside cache orphans
-    plan="$(op_plan)" || exit $?
+    plan="$(bash "${BASH_SOURCE[0]}" plan)" || exit $?
     mapfile -t orphans < <(field orphan "$plan")
     if [ -n "${orphans[*]}" ]; then
         step orphans

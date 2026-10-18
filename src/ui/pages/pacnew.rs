@@ -9,7 +9,7 @@ use crate::script::{op, query};
 use crate::ui::detail::{Act, Block, Detail, done, failure, loaded, show};
 use crate::ui::fetch::Fetch;
 use crate::ui::list::{List, Picked, Row};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct PacnewPage {
     list: List<String>,
@@ -18,7 +18,7 @@ pub struct PacnewPage {
 impl PacnewPage {
     pub fn new() -> PacnewPage {
         PacnewPage {
-            list: List::default(),
+            list: List::filterable(),
         }
     }
 }
@@ -49,7 +49,7 @@ impl Page for PacnewPage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         super::list_hints(self.list.typing())
     }
 
@@ -179,7 +179,7 @@ impl Page for FilePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 

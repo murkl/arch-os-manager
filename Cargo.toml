@@ -9,7 +9,8 @@ publish = false
 [dependencies]
 fontdue = "0.9.4"
 jiff = "0.2"
-ratatui = "0.30.2"
+percent-encoding = "2.3.2"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 roxmltree = "0.21"
 rustix = { version = "1.1.5", features = ["fs", "process", "pty", "stdio", "termios"] }
 serde = { version = "1", features = ["derive"] }
@@ -18,7 +19,7 @@ serde_json = "1"
 softbuffer = { version = "0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
 unicode-width = "0.2"
 vt100 = "0.16.2"
-winit = { version = "0.30", default-features = false, features = ["wayland", "wayland-dlopen", "wayland-csd-adwaita", "rwh_06"] }
+winit = { version = "0.30", default-features = false, features = ["wayland", "wayland-dlopen", "rwh_06"] }
 
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -13,7 +13,16 @@ use crate::ui::draw::put;
 use crate::ui::fetch::Task;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{SETTINGS, Target};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Style, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Nav, Page, Style, Tone};
+
+/// What the system has to offer for a setting to apply: the entry opens the window, which
+/// speaks Wayland only.
+fn fact(target: Target) -> &'static str {
+    match target {
+        Target::Desktop => "wayland",
+        _ => "desktop",
+    }
+}
 
 pub struct SettingsPage {
     list: List<Target>,
@@ -27,7 +36,7 @@ pub struct SettingsPage {
 impl SettingsPage {
     pub fn new(focus: Option<Target>) -> SettingsPage {
         SettingsPage {
-            list: List::default(),
+            list: List::filterable(),
             focus,
             applying: None,
             failed: None,
@@ -52,7 +61,7 @@ impl SettingsPage {
                 (text, Tone::Muted, false)
             }
             Target::Notifications | Target::Desktop
-                if let Some(why) = ctx.features().and_then(|f| f.lacks("desktop")) =>
+                if let Some(why) = ctx.features().and_then(|f| f.lacks(fact(target))) =>
             {
                 (t(why).to_string(), Tone::Muted, true)
             }
@@ -173,7 +182,7 @@ impl Page for SettingsPage {
         }
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         super::list_hints(self.list.typing())
     }
 
@@ -188,7 +197,9 @@ impl Page for SettingsPage {
                 Flow::Push(choice(t, ctx))
             }
             Target::Notifications | Target::Desktop
-                if ctx.features().is_some_and(|f| f.lacks("desktop").is_some()) =>
+                if ctx
+                    .features()
+                    .is_some_and(|f| f.lacks(fact(target)).is_some()) =>
             {
                 Flow::Stay
             }
@@ -356,12 +367,8 @@ impl Page for ChoicePage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
-        vec![
-            ("↑↓", t("choose").into()),
-            ("⏎", t("use").into()),
-            ("esc", t("back").into()),
-        ]
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
+        vec![("↑↓", Does::Choose), ("⏎", Does::Use), ("esc", Does::Back)]
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -374,8 +381,11 @@ impl Page for ChoicePage {
                 self.preview(ctx);
                 Flow::Stay
             }
+            // Leaving without a choice takes the preview back. Another key changes nothing.
             Picked::Ignored => {
-                if let Some(style) = self.before {
+                if matches!(key.nav(false), Some(Nav::Back | Nav::Quit))
+                    && let Some(style) = self.before
+                {
                     ctx.style = style;
                 }
                 Flow::Ignored
@@ -476,7 +486,7 @@ impl Page for AboutPage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 
@@ -551,6 +561,27 @@ mod tests {
         screen(&mut app, &mut term);
         press(&mut app, &[Key::Up, Key::Enter]);
         assert_eq!(app.ctx.settings.notify, None);
+    }
+
+    #[test]
+    fn a_theme_stays_in_preview_until_the_page_is_left() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let (mut app, mut term) = app();
+        let before = app.ctx.style;
+        for page in Target::Theme.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Down]);
+        let preview = app.ctx.style;
+        assert_ne!(preview.background, before.background);
+        press(&mut app, &[Key::Char('x')]);
+        assert_eq!(
+            app.ctx.style.background, preview.background,
+            "x is no way out"
+        );
+        press(&mut app, &[Key::Esc]);
+        assert_eq!(app.ctx.style.background, before.background);
     }
 
     #[test]

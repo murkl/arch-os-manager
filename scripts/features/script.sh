@@ -32,6 +32,12 @@ fact_desktop() {
     [ "${#sessions[@]}" -gt 0 ]
 }
 
+# The window speaks Wayland only.
+fact_wayland() {
+    local sessions=(/usr/share/wayland-sessions/*.desktop)
+    [ "${#sessions[@]}" -gt 0 ]
+}
+
 fact_gnome() {
     command -v gnome-shell >/dev/null
 }
@@ -44,8 +50,7 @@ op_install() {
     case "$package" in
     paru | yay)
         sudo pacman -S --needed git base-devel
-        work="$(mktemp -d)"
-        trap 'rm -rf "$work"' EXIT
+        scratch
         fetch "https://aur.archlinux.org/cgit/aur.git/snapshot/${package}.tar.gz" >"${work}/snapshot.tar.gz" || exit 10
         tar -xzf "${work}/snapshot.tar.gz" -C "$work"
         (cd "${work}/${package}" && makepkg --syncdeps --install --rmdeps --noconfirm)
@@ -54,16 +59,23 @@ op_install() {
     esac
 
     # reflector's own configuration ranks by age, this one by speed, within the
-    # country of the time zone where it names one, and weekly.
+    # country of the time zone, as Arch OS reads it from zone.tab, where Arch has
+    # a mirror there, and weekly.
     if [ "$package" = reflector ]; then
         zone="$(readlink /etc/localtime)" || zone=""
-        country="$(awk -v zone="${zone#*zoneinfo/}" '!/^#/ && $3 == zone { split($1, codes, ","); print codes[1] }' /usr/share/zoneinfo/zone1970.tab)"
+        country="$(awk -v zone="${zone#*zoneinfo/}" '!/^#/ && $3 == zone { print $1 }' /usr/share/zoneinfo/zone.tab)"
+        if [ -n "$country" ] && ! reflector --list-countries 2>/dev/null |
+            awk -v code="$country" '$(NF - 1) == code { found = 1 } END { exit !found }'; then
+            country=""
+        fi
         {
             printf '%s\n' '--save /etc/pacman.d/mirrorlist' '--protocol https' '--age 12' '--latest 10' '--sort rate'
             if [ -n "$country" ]; then printf -- '--country %s\n' "$country"; fi
         } | sudo install -m 644 /dev/stdin /etc/xdg/reflector/reflector.conf
         sudo systemctl enable --now reflector.timer
     fi
+    # Without its timer, fwupd knows only the firmware of its last look.
+    if [ "$package" = fwupd ]; then sudo systemctl enable --now fwupd-refresh.timer; fi
 }
 
 # What a package started goes with it. An AUR helper may be its -bin or -git
@@ -71,8 +83,9 @@ op_install() {
 op_remove() {
     local package="$1"
     case "$package" in
-    paru | yay) package="$(pacman -Qqo "$package")" ;;
+    paru | yay) package="$(pacman -Qqo -- "$(command -v "$package")")" ;;
     reflector) sudo systemctl disable --now reflector.timer ;;
+    fwupd) sudo systemctl disable --now fwupd-refresh.timer ;;
     esac
     sudo pacman -Rns -- "$package"
 }

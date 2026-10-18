@@ -24,7 +24,10 @@ errors:
     One of them can only be read as root, or the original no longer exists. Take over or keep the new version without comparing, or merge it in Meld.
   11: |
     This is no configuration update
-    Only .pacnew and .pacsave files are taken over, removed or merged.
+    Only the files pacman leaves beside a configuration, such as .pacnew and .pacsave, are taken over, removed or merged.
   12: |
     Nothing was merged
     The configuration was not changed in Meld, so the new version stays for later.
+  13: |
+    The merged configuration does not parse
+    visudo found an error in it, so the configuration stays as it was. Merge again.

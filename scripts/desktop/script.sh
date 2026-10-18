@@ -36,12 +36,16 @@ known() {
 }
 
 # Points the update indicator at the program and reads each command back, as
-# GSettings prints a string.
+# GSettings prints a string: in double quotes where it holds a single one.
 indicator() {
     local dir key value
     dir="$(arch_update_dir)"
     while IFS=$'\t' read -r key value; do
-        value="'${value//\'/\\\'}'"
+        if [[ $value == *\'* ]]; then
+            value="\"${value//\"/\\\"}\""
+        else
+            value="'${value}'"
+        fi
         on_bus gsettings --schemadir "${dir}/schemas" set org.gnome.shell.extensions.arch-update "$key" "$value"
         if [ "$(on_bus gsettings --schemadir "${dir}/schemas" get org.gnome.shell.extensions.arch-update "$key")" != "$value" ]; then
             exit 13
@@ -66,7 +70,7 @@ op_apply() {
     daily) every=1d ;;
     weekly) every=1w ;;
     off) every="" ;;
-    *) exit 2 ;;
+    *) false ;;
     esac
 
     if [ "$2" = on ]; then
@@ -132,7 +136,7 @@ UNIT
 # action if it was chosen. Unanswered, it ends as if dismissed.
 op_notify() {
     timeout "$4" notify-send --app-name="System Manager" --icon=system-manager \
-        --action="open=$3" -- "$1" "$2" || [ $? -eq 124 ]
+        --action="open=$3" -- "$1" "$2" || allow 124
 }
 
 # Started as its own unit, so it outlives the timer's service that asks for it.
@@ -149,8 +153,7 @@ op_extension_install() {
     info="$(fetch "https://extensions.gnome.org/extension-info/?uuid=${ARCH_UPDATE}&shell_version=${shell%%.*}")" || exit 11
     url="$(sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p' <<<"$info")"
     if [ -z "$url" ]; then exit 11; fi
-    work="$(mktemp -d)"
-    trap 'rm -rf "$work"' EXIT
+    scratch
     fetch "https://extensions.gnome.org${url}" >"${work}/extension.zip" || exit 11
     gnome-extensions install --force "${work}/extension.zip"
     on_bus gnome-extensions enable "$ARCH_UPDATE"

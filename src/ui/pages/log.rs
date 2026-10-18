@@ -7,7 +7,7 @@ use crate::data::journal::Entry;
 use crate::i18n::t;
 use crate::ui::detail::{Act, Block, Detail, done, loaded, show};
 use crate::ui::list::{List, Picked, Row};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 fn hide(message: &str, ctx: &mut Ctx) {
     let pattern = crate::data::journal::pattern(message);
@@ -24,7 +24,7 @@ pub struct LogPage {
 impl LogPage {
     pub fn new() -> LogPage {
         LogPage {
-            list: List::default(),
+            list: List::filterable(),
         }
     }
 
@@ -42,11 +42,12 @@ impl Page for LogPage {
         let Some(all) = loaded(&ctx.shared.journal, area, buf, ctx) else {
             return;
         };
+        let kinds = crate::data::journal::kinds(&ctx.settings.hidden_log);
         let rows: Vec<Row<usize>> = all
             .iter()
             .enumerate()
             .rev()
-            .filter(|(_, e)| !e.hidden(&ctx.settings.hidden_log))
+            .filter(|(_, e)| !e.hidden(&kinds))
             .map(|(i, e)| {
                 let first = e.message.lines().next().unwrap_or_default();
                 Row::new(i, format!("{}  {first}", e.ident))
@@ -61,10 +62,10 @@ impl Page for LogPage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         let mut h = super::list_hints(self.list.typing());
         if !self.list.typing() {
-            h.insert(2, ("x", t("hide").into()));
+            h.insert(2, ("x", Does::Hide));
         }
         h
     }
@@ -135,7 +136,7 @@ impl Page for EntryPage {
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         self.detail.draw(area, buf, ctx);
     }
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -183,15 +184,11 @@ impl Page for HiddenPage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
         if ctx.settings.hidden_log.is_empty() {
-            return vec![("esc", t("back").into())];
+            return vec![("esc", Does::Back)];
         }
-        vec![
-            ("↑↓", t("choose").into()),
-            ("⏎", t("show again").into()),
-            ("esc", t("back").into()),
-        ]
+        vec![("↑↓", Does::Choose), ("⏎", Does::Show), ("esc", Does::Back)]
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {

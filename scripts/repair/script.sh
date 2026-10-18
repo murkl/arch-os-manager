@@ -37,14 +37,21 @@ op_run() {
 
 # Every file of every package against what the package brought, as pacman -Qkk
 # checks them. A configuration changed by hand is a backup file, which pacman
-# lists apart and never counts. A package with an altered or missing file comes
-# back from its repository, one from the AUR has none and is only named.
+# lists apart and never counts. A package counts by what a reinstall restores:
+# content, type or a missing file, never the owner, mode or time, which a
+# filesystem such as the vfat of /boot keeps its own way. One with such a file
+# comes back from its repository, one from the AUR has none and is only named.
 op_files() {
     local report altered native foreign
     step check
     report="$(sudo pacman -Qkk 2>&1)" || true
+    if ! grep -q ': [0-9]* total files\?, ' <<<"$report"; then
+        printf '%s\n' "$report" >&2
+        exit 12
+    fi
     grep '^warning:' <<<"$report" || true
-    altered="$(sed -n 's/^\([^:]*\): [0-9]* total files, [1-9][0-9]* altered files$/\1/p' <<<"$report" | sort -u)"
+    altered="$(sed -n -e 's/^warning: \([^:]*\): .* (\(File type\|Size\|Symlink path\|[A-Z0-9]* checksum\) mismatch)$/\1/p' \
+        -e 's/^warning: \([^:]*\): .* (No such file or directory)$/\1/p' <<<"$report" | sort -u)"
     if [ -z "$altered" ]; then return 0; fi
     mapfile -t native < <(comm -12 <(printf '%s\n' "$altered") <(pacman -Qqn | sort))
     mapfile -t foreign < <(comm -23 <(printf '%s\n' "$altered") <(pacman -Qqn | sort))

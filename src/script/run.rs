@@ -76,7 +76,12 @@ impl Run {
         match event {
             Event::Output(bytes) => {
                 self.screen.process(&bytes);
-                for line in self.lines.feed(&bytes) {
+                let done = self.lines.feed(&bytes);
+                // A finished line closes the question answered: the same may come again.
+                if !done.is_empty() {
+                    self.answered = None;
+                }
+                for line in done {
                     if line.contains(sudo::REJECTED) {
                         sudo::forget();
                         self.rejected = true;
@@ -118,6 +123,18 @@ impl Run {
         let recent: Vec<String> = self.recent.iter().rev().take(12).rev().cloned().collect();
         self.prompt = Prompt::detect(&current, &recent);
         match &self.prompt {
+            // Asked again right after an answer, sudo refused it, also where its words for
+            // that are its own. The password goes to the person, never twice unasked.
+            Some(Prompt::Password)
+                if recent
+                    .iter()
+                    .rev()
+                    .take(3)
+                    .any(|l| l.ends_with(sudo::PROMPT)) =>
+            {
+                sudo::forget();
+                self.rejected = true;
+            }
             Some(Prompt::Password) => {
                 if let Some(password) = sudo::get()
                     && !self.session.echoes()
@@ -234,6 +251,57 @@ mod tests {
             drive(r#"read -r -p ":: Proceed with installation? [Y/n] " a; echo "answer=$a""#);
         assert!(out.contains("answer=y"), "{out}");
         assert_eq!(run.result(), Some(Ok(())));
+    }
+
+    #[test]
+    fn answers_the_same_confirmation_each_time_it_comes() {
+        let (_, out) = drive(
+            r#"for i in 1 2; do read -r -p ":: Proceed with installation? [Y/n] " a; echo "answer$i=$a"; done"#,
+        );
+        assert!(
+            out.contains("answer1=y") && out.contains("answer2=y"),
+            "{out}"
+        );
+    }
+
+    /// A refusal in other words than sudo's own, as `Defaults insults` gives, is told by the
+    /// question coming again: the held password is not tried twice.
+    #[test]
+    fn asks_the_person_after_a_refused_password_however_sudo_words_it() {
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for refusal in [
+            sudo::REJECTED,
+            "Have you considered trying to match wits with a rutabaga?",
+        ] {
+            sudo::set("wrong".into());
+            let (tx, rx) = mpsc::channel();
+            let mut cmd = std::process::Command::new("bash");
+            cmd.arg("-c")
+                .arg(r#"for i in 1 2 3; do stty -echo; printf '%s' "$SUDO_PROMPT"; read -r -t 4 pw || exit 3; stty echo; echo; [ "$pw" = right ] && { echo "ok after $i"; exit 0; }; echo "$REFUSAL"; done; exit 1"#)
+                .env("SUDO_PROMPT", sudo::PROMPT)
+                .env("REFUSAL", refusal);
+            let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
+            let mut run = Run::with(crate::script::op::SYSTEM_AUTH, session, (24, 80));
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let mut asked = false;
+            while run.result().is_none() && Instant::now() < deadline {
+                if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
+                    run.on_event(e);
+                }
+                run.check_prompt();
+                if run.rejected && run.prompt == Some(Prompt::Password) && !asked {
+                    asked = true;
+                    run.answer("right");
+                }
+            }
+            sudo::forget();
+            assert!(asked, "never asked again: {:?}", run.recent);
+            assert!(
+                run.recent.iter().any(|l| l == "ok after 2"),
+                "{refusal}: {:?}",
+                run.recent
+            );
+        }
     }
 
     #[test]
