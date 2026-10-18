@@ -11,6 +11,11 @@ on:
 
 permissions: {}
 
+# Every step in bash with pipefail, as the Makefile runs its recipes.
+defaults:
+  run:
+    shell: bash
+
 # A new push replaces a pull request's run; main queues, so no release is cut
 # short.
 concurrency:
