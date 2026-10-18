@@ -67,7 +67,13 @@ impl Prompt {
             let question = recent
                 .iter()
                 .rev()
-                .find(|l| l.starts_with(":: ") || l.starts_with("==> "))
+                .find(|l| l.starts_with(":: There are"))
+                .or_else(|| {
+                    recent
+                        .iter()
+                        .rev()
+                        .find(|l| l.starts_with(":: ") || l.starts_with("==> "))
+                })
                 .map(|l| clean(l))
                 .unwrap_or_default();
             return Some(Prompt::Text { question });
@@ -216,6 +222,18 @@ mod tests {
             Prompt::detect("==> ", &recent),
             Some(Prompt::Text {
                 question: "[N]one [A]ll [Ab]ort".into()
+            })
+        );
+        let group = [
+            ":: There are 3 members in group gnome:".to_string(),
+            ":: Repository extra".into(),
+            "   1) baobab  2) eog  3) evince".into(),
+            String::new(),
+        ];
+        assert_eq!(
+            Prompt::detect("Enter a selection (default=all): ", &group),
+            Some(Prompt::Text {
+                question: "There are 3 members in group gnome:".into()
             })
         );
         assert_eq!(

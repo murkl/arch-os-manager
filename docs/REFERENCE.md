@@ -71,15 +71,18 @@ Every sentence is English and translated in `locales/de.po`.
 |---|---|
 | `LC_ALL` | `C.UTF-8`: output and questions in one known wording |
 | `SM_AUR` | The AUR helper of the settings, empty for none |
+| `SM_RUN` | The title of a run, unset in a query |
 | `SUDO_PROMPT` | A fixed prompt the runtime recognises |
 | `TERM` | `xterm-256color` in a run |
 
-`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob`, and offers:
+`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob`, and ignores a hangup, so a closed terminal stops no run. A run holds shutdown and sleep off through logind while it lasts. It offers:
 
 | Function | Does |
 |---|---|
 | `operation` | Runs `op_<name>`, as the last line of every script |
 | `step` | Names the phase of a run |
+| `allow` | Lets a command end with the codes named, as `grep` ends with 1 on nothing |
+| `scratch` | A folder of the operation's own as `$work`, removed when it ends |
 | `fetch` | curl bound to https, redirects too, with time limits |
 | `aur` | The helper of `$SM_AUR` |
 | `aur_sync` | The helper without the review and menus a run cannot answer |
@@ -121,6 +124,10 @@ A run is named in the header after the action chosen, and shows its step and pac
 
 pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are answered yes: the person confirmed before the run. Conflicts, replacements and keys are always asked.
 
+A run holds shutdown and sleep off while it lasts, and a closed terminal does not stop it.
+
+An update takes the repositories, then the AUR, then Flatpak. A failing AUR helper leaves Flatpak still to update and is then named. The list of updates names a source it could not ask, as the AUR during an outage, and shows what the others have.
+
 **esc**, **q** and **ctrl+c** ask whether to stop, and yes sends ctrl+c to the program. A failure shows the declared error or a recognised cause, the source line, the last output and the log, and offers the page the cause names, another try and the way back.
 
 After a run, the manager reads the system again and offers what may follow, none of it a must:
@@ -142,7 +149,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 
 ### Repair and Configuration
 
-**Renew the keyring** removes a database lock no process holds, builds the keyring anew beside the old one and updates. **Check the files** runs `pacman -Qkk` as root and installs every native package with an altered or missing file again. A configuration changed by hand is a backup file pacman lists apart, and a package of the AUR is only named. Taking over or merging a configuration update first takes a snapshot where snapper keeps the root.
+**Renew the keyring** removes a database lock no process holds, builds the keyring anew beside the old one and updates. **Check the files** runs `pacman -Qkk` as root and installs every native package again whose file lost its content, type or link, or is missing. Owner, mode and time do not count, as a filesystem such as the vfat of `/boot` keeps them its own way. A configuration changed by hand is a backup file pacman lists apart, and a package of the AUR is only named. Taking over or merging a configuration update first takes a snapshot where snapper keeps the root. A merge is written beside the configuration and renamed over it, and a sudoers file must pass `visudo` first.
 
 ## Files
 
@@ -174,7 +181,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 
 A file that does not parse is left alone and named under **Settings › About**, and the defaults apply until a setting is changed. The first start or `init` takes the settings of the `arch-os` script before 2.0 over once, where none are chosen, and removes what it left. `scripts/migrate/script.sh` says how to remove this.
 
-Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now, and point the update indicator at it where installed. An installer calls `init` from its chroot as the user, through a private bus of `dbus-run-session` where none answers. Both need a desktop, the notification also libnotify. The timer announces two minutes after login and then as often as chosen.
+Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now, and point the update indicator at it where installed. An installer calls `init` from its chroot as the user, through a private bus of `dbus-run-session` where none answers. The entry needs a Wayland session, as the window does, the notification a desktop and libnotify. The timer announces two minutes after login and then as often as chosen.
 
 A hidden message is stored with its numbers, hex values and hashes as `#`, so it stays hidden when only those change.
 
@@ -202,7 +209,7 @@ colors:
 | `accent` | Cursor, title, progress, pending updates |
 | `success`, `warning`, `error` | States |
 
-The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background at WCAG AA: 4.5 for `text`, 3 for `accent` and the states, and a test holds them to it. A file in `~/.arch-os/themes/` with the id of a built-in replaces it. One that does not parse is skipped and named under **Settings › About**.
+The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background and on the selection at WCAG AA: 4.5 for `text`, 3 for `accent` and the states, and a test holds them to it. A file in `~/.arch-os/themes/` with the id of a built-in replaces it. One that does not parse is skipped and named under **Settings › About**.
 
 The icons are Material Design symbols of the Nerd Fonts. The window carries them, a terminal shows them with a Nerd Font such as `ttf-nerd-fonts-symbols`. The Linux console, told by `TERM=linux`, gets sixteen colours and ASCII in place of every glyph: no icons, `#` for the logo, `>` for the cursor, `*` for a dot, `+` for a mark, the keys named in words in the footer.
 
@@ -224,7 +231,9 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | **space** | On the news, read or unread | typed |
 | **r** | On the start page, read every value anew | typed |
 
-Actions stay under what they are about, so ↑↓ always reaches them. What does not fit above them scrolls with **⇞⇟** and the wheel, while a page's head stays. Held down, a key repeats only to move or to type. The start screen stands three seconds while the first values load, and any other key skips it.
+Actions stay under what they are about, so ↑↓ always reaches them. What does not fit above them scrolls with **⇞⇟** and the wheel, while a page's head stays. Held down, a key repeats only to move or to type. Pasted text is typed into a text box and does nothing elsewhere.
+
+The footer names what each key does, in the same words on every page. **esc** reads main menu where the start page lies below, back further down. The start screen stands three seconds while the first values load, and any other key skips it.
 
 ## Command Line
 
@@ -234,7 +243,7 @@ Actions stay under what they are about, so ↑↓ always reaches them. What does
 | `system-manager --window` | In a window |
 | `system-manager <page>` | Opens on `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `settings`, `features` |
 | `system-manager init` | Puts the app menu entry, the update notification and the update indicator in place |
-| `system-manager check` | Pending updates as checkupdates prints them: an AUR package as `aur/name`, a Flatpak with its commits where the versions do not tell the change, an unknown version as `?`, and exit 2 without any |
+| `system-manager check` | Pending updates as checkupdates prints them: an AUR package as `aur/name`, a Flatpak with its commits where the versions do not tell the change, an unknown version as `?`, exit 2 without any, and 1 where a source could not be asked and none had updates |
 | `system-manager notify` | Announces pending updates, with `--new` only those not announced before, as the timer runs it |
 
 It runs as the user and asks for the sudo password itself. As root it only answers `check`.
@@ -245,6 +254,7 @@ It runs as the user and asks for the sudo password itself. As root it only answe
 |---|---|---|
 | `packages` | `paru` or `yay` | Builds and updates packages from the AUR |
 | `packages` | `pacman-contrib` | Lists updates, trims the cache and finds configuration updates |
+| `packages` | `fakeroot` | Lets pacman-contrib list updates without root |
 | `packages` | `reflector` | Ranks the mirrors by speed |
 | `packages` | `flatpak` | Updates and cleans up Flatpak apps |
 | `packages` | `fwupd` | Updates the firmware of the device |
@@ -256,7 +266,8 @@ A package counts when its command answers, as `probe` in `scripts/features/scrip
 
 | Fact | Holds when | Needed by |
 |---|---|---|
-| `desktop` | A session lies in `/usr/share/wayland-sessions` or `/usr/share/xsessions` | flatpak, meld, libnotify, the app menu entry, the notification |
+| `desktop` | A session lies in `/usr/share/wayland-sessions` or `/usr/share/xsessions` | flatpak, meld, libnotify, the notification |
+| `wayland` | A session lies in `/usr/share/wayland-sessions` | the app menu entry, which opens the window |
 | `gnome` | `gnome-shell` is installed | gnome-arch-update |
 
 **Settings › Optional packages** installs and removes each, removal being `pacman -Rns`:
@@ -264,7 +275,8 @@ A package counts when its command answers, as `probe` in `scripts/features/scrip
 | Package | Beyond pacman |
 |---|---|
 | `paru`, `yay` | Built from source with makepkg, as Arch OS does, after `git` and `base-devel`, and the build dependencies go again. Removed is whichever package owns the command, such as `paru-bin` |
-| `reflector` | `/etc/xdg/reflector/reflector.conf`: https, synced within 12 hours, the 10 latest, by speed, the country of the time zone. `reflector.timer` enabled, and disabled on removal. **Refresh now** starts `reflector.service` with the same configuration |
+| `reflector` | `/etc/xdg/reflector/reflector.conf`: https, synced within 12 hours, the 10 latest, by speed, the country of the time zone where Arch has a mirror there. `reflector.timer` enabled, and disabled on removal. **Refresh now** starts `reflector.service` with the same configuration |
+| `fwupd` | `fwupd-refresh.timer` enabled, so the firmware list stays current, and disabled on removal |
 | `gnome-arch-update` | The Arch Linux Updates Indicator from extensions.gnome.org in the version for this GNOME Shell, enabled for the user and loaded at the next login. Its `check-cmd`, `update-cmd` and `package-manager` run this binary. Removed with its settings, one from a package with that package |
 
 ## Clean-Up and the Recovery

@@ -9,7 +9,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Color;
 
 use crate::ui::draw::put;
-use crate::ui::{Ctx, Flow, Key, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Nav, Page, Tone};
 
 const NAME: &str = "System Manager";
 
@@ -119,15 +119,15 @@ impl Page for SplashPage {
         }
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         Vec::new()
     }
 
     fn key(&mut self, key: Key, _: &mut Ctx) -> Flow {
-        if key == Key::Char('r') {
-            Flow::Stay
-        } else {
-            Flow::Pop
+        match key.nav(false) {
+            Some(Nav::Quit) => Flow::Quit,
+            _ if key == Key::Char('r') => Flow::Stay,
+            _ => Flow::Pop,
         }
     }
 

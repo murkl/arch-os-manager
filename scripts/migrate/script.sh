@@ -56,7 +56,7 @@ op_clean() {
 dock() {
     local favorites
     if ! command -v gsettings >/dev/null; then return 0; fi
-    favorites="$(gsettings get org.gnome.shell favorite-apps 2>/dev/null)" || return 0
+    favorites="$(on_bus gsettings get org.gnome.shell favorite-apps 2>/dev/null)" || return 0
     if [[ "$favorites" != *"'arch-os.desktop'"* ]]; then return 0; fi
     if [[ "$favorites" == *"'system-manager.desktop'"* ]]; then
         favorites="${favorites//"'arch-os.desktop', "/}"
@@ -65,8 +65,8 @@ dock() {
     else
         favorites="${favorites//"'arch-os.desktop'"/"'system-manager.desktop'"}"
     fi
-    gsettings set org.gnome.shell favorite-apps "$favorites"
-    if [[ "$(gsettings get org.gnome.shell favorite-apps)" == *"'arch-os.desktop'"* ]]; then exit 10; fi
+    on_bus gsettings set org.gnome.shell favorite-apps "$favorites"
+    if [[ "$(on_bus gsettings get org.gnome.shell favorite-apps)" == *"'arch-os.desktop'"* ]]; then exit 10; fi
 }
 
 operation "$@"

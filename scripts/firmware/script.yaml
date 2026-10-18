@@ -5,6 +5,9 @@ ops:
   update:
     title: Updating the firmware
     root: true
+    confirm: |
+      Update the firmware?
+      The device writes the new firmware now or during the next restart. Keep it plugged in until it is done.
     needs: [fwupd]
     steps:
       refresh: Loading the firmware catalogue

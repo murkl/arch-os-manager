@@ -158,7 +158,16 @@ impl Op {
 
 /// Whether the optional packages an operation needs are all there.
 pub fn available(op: Op, features: &crate::data::features::Features) -> bool {
-    op.meta().needs.iter().all(|p| features.ok(p))
+    missing(op, features).is_none()
+}
+
+/// The first optional package an operation needs that is not there.
+pub fn missing(op: Op, features: &crate::data::features::Features) -> Option<&'static str> {
+    op.meta()
+        .needs
+        .iter()
+        .find(|p| !features.ok(p))
+        .map(String::as_str)
 }
 
 static AUR: Mutex<String> = Mutex::new(String::new());

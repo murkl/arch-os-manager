@@ -10,7 +10,7 @@ use crate::script::op;
 use crate::ui::detail::{Act, Block, Detail};
 use crate::ui::icon;
 use crate::ui::list::Lead;
-use crate::ui::{Ctx, Flow, Key, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Page, Tone};
 
 pub struct RepairPage {
     detail: Detail,
@@ -66,7 +66,7 @@ impl Page for RepairPage {
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         self.detail.draw(area, buf, ctx);
     }
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {

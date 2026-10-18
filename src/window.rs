@@ -17,10 +17,10 @@ use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::style::{Color, Modifier};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalPosition};
+use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key as Named, ModifiersState, NamedKey};
+use winit::keyboard::{Key as Named, ModifiersState, NamedKey, PhysicalKey};
 use winit::window::{CursorIcon, ResizeDirection, Window, WindowAttributes, WindowId};
 
 use crate::ui::{App, FRAME, Key, Msg, Target, beats, next_beat};
@@ -261,6 +261,21 @@ struct Win {
     error: Option<io::Error>,
     /// The first frame is on the screen and the reading has begun.
     started: bool,
+    /// What the last two frames showed: a buffer the compositor hands back shows one of them,
+    /// so only the rows that changed since are painted.
+    shown: [Option<Shown>; 2],
+    /// A touchpad scrolls a little at a time: what is short of a line waits for more.
+    wheel: f64,
+    /// A message arrived since the grid was last composed.
+    dirty: bool,
+}
+
+/// A frame as painted, with what decides its pixels besides the cells.
+struct Shown {
+    grid: Buffer,
+    cursor: Option<Position>,
+    /// Window width and height, and the scale as bits.
+    size: (u32, u32, u64),
 }
 
 impl Win {
@@ -284,10 +299,14 @@ impl Win {
             blinked: false,
             error: None,
             started: false,
+            shown: [None, None],
+            wheel: 0.0,
+            dirty: true,
         }
     }
 
     fn handle(&mut self, msg: Msg, event_loop: &ActiveEventLoop) {
+        self.dirty = true;
         self.app.handle(msg);
         if self.app.done() {
             event_loop.exit();
@@ -330,19 +349,45 @@ impl Win {
             .cursor
             .filter(|_| blink_on(Instant::now()));
         self.blinked = cursor.is_some();
+        let scale = window.scale_factor();
+        let key = (size.width, size.height, scale.to_bits());
+        let grid = &self.terminal.backend().buffer;
+        let before = match pixels.age() {
+            1 => self.shown[0].as_ref(),
+            2 => self.shown[1].as_ref(),
+            _ => None,
+        };
+        let rows = before
+            .filter(|b| b.size == key)
+            .and_then(|b| changed_rows(&b.grid, b.cursor, grid, cursor));
         paint(
-            &self.terminal.backend().buffer,
+            grid,
             cursor,
             &mut self.fonts,
             &self.app.ctx.style,
             (size.width, size.height),
-            window.scale_factor(),
+            scale,
             &mut pixels,
+            rows.as_deref(),
         );
+        let damage = rows.as_deref().map(|rows| {
+            let (_, oy, _) = layout(size.width, size.height, &self.fonts, scale);
+            damage(rows, oy, self.fonts.cell.1, size.width)
+        });
+        let shown = Shown {
+            grid: grid.clone(),
+            cursor,
+            size: key,
+        };
+        self.shown = [Some(shown), self.shown[0].take()];
         self.terminal.backend_mut().changed = false;
         // Lets winit hold the next redraw for the compositor's frame on Wayland.
         window.pre_present_notify();
-        pixels.present().map_err(|e| e.to_string())?;
+        match damage {
+            Some(damage) => pixels.present_with_damage(&damage),
+            None => pixels.present(),
+        }
+        .map_err(|e| e.to_string())?;
         if !self.started {
             self.app.start();
             self.fonts.faces.start();
@@ -372,7 +417,7 @@ impl Win {
         })
     }
 
-    fn key(&self, key: &Named, text: Option<&str>) -> Vec<Key> {
+    fn key(&self, key: &Named, physical: PhysicalKey, text: Option<&str>) -> Vec<Key> {
         let ctrl = self.modifiers.control_key();
         let shift = self.modifiers.shift_key();
         let named = match key {
@@ -394,9 +439,10 @@ impl Win {
                 NamedKey::Space => Key::Char(' '),
                 _ => return Vec::new(),
             }),
-            Named::Character(s) if ctrl => {
-                s.chars().next().map(|c| Key::Ctrl(c.to_ascii_lowercase()))
-            }
+            // By the key's place, as a terminal does, so ctrl+c holds on any layout.
+            Named::Character(s) if ctrl => latin(physical)
+                .or_else(|| s.chars().next())
+                .map(|c| Key::Ctrl(c.to_ascii_lowercase())),
             Named::Character(_) => None,
             _ => return Vec::new(),
         };
@@ -420,8 +466,7 @@ impl ApplicationHandler<()> for Win {
         let attributes = WindowAttributes::default()
             .with_title("System Manager")
             .with_decorations(false)
-            .with_inner_size(LogicalSize::new(1080.0, 720.0))
-            .with_min_inner_size(LogicalSize::new(400.0, 280.0));
+            .with_inner_size(LogicalSize::new(1080.0, 720.0));
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
             attributes,
             "system-manager",
@@ -440,6 +485,7 @@ impl ApplicationHandler<()> for Win {
         match created {
             Ok((w, surface)) => {
                 self.fonts.rescale(w.scale_factor());
+                w.set_min_inner_size(Some(least(&self.fonts, w.scale_factor())));
                 self.window = Some(w);
                 self.surface = Some(surface);
             }
@@ -487,12 +533,17 @@ impl ApplicationHandler<()> for Win {
                 self.fonts.rescale(scale_factor);
                 self.handle(Msg::Resize, event_loop);
                 if let Some(w) = &self.window {
+                    w.set_min_inner_size(Some(least(&self.fonts, scale_factor)));
                     w.request_redraw();
                 }
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                for key in self.key(&event.logical_key, event.text.as_deref()) {
+                for key in self.key(
+                    &event.logical_key,
+                    event.physical_key,
+                    event.text.as_deref(),
+                ) {
                     let msg = if event.repeat {
                         Msg::Held(key)
                     } else {
@@ -531,18 +582,18 @@ impl ApplicationHandler<()> for Win {
                 };
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                let lines = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => y.round() as i32,
-                    MouseScrollDelta::PixelDelta(p) => {
-                        (p.y / self.fonts.cell.1 as f64).round() as i32
-                    }
+                self.wheel += match delta {
+                    MouseScrollDelta::LineDelta(_, y) => f64::from(y),
+                    MouseScrollDelta::PixelDelta(p) => p.y / f64::from(self.fonts.cell.1),
                 };
-                let key = if lines > 0 {
+                let lines = self.wheel.trunc();
+                self.wheel -= lines;
+                let key = if lines > 0.0 {
                     Key::WheelUp
                 } else {
                     Key::WheelDown
                 };
-                for _ in 0..lines.unsigned_abs() {
+                for _ in 0..lines.abs() as u32 {
                     self.handle(Msg::Key(key), event_loop);
                 }
             }
@@ -553,7 +604,15 @@ impl ApplicationHandler<()> for Win {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         let cursor = self.terminal.backend().cursor.is_some();
-        match self.compose() {
+        // The pointer moving changes nothing drawn.
+        let composed = match self.dirty && self.window.is_some() {
+            true => {
+                self.dirty = false;
+                self.compose()
+            }
+            false => Ok(false),
+        };
+        match composed {
             // A cursor that is shown blinks: its beat redraws without a cell changing.
             Ok(changed) => {
                 if (changed || (cursor && blink_on(now) != self.blinked))
@@ -572,9 +631,31 @@ impl ApplicationHandler<()> for Win {
     }
 }
 
+/// The letter a key bears on a US layout, for ctrl and a letter.
+fn latin(key: PhysicalKey) -> Option<char> {
+    use winit::keyboard::KeyCode::*;
+    let PhysicalKey::Code(code) = key else {
+        return None;
+    };
+    let letters = [
+        KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO,
+        KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+    ];
+    letters
+        .iter()
+        .position(|&k| k == code)
+        .map(|i| (b'a' + i as u8) as char)
+}
+
 /// Whether the cursor is in the shown half of its beat.
 fn blink_on(now: Instant) -> bool {
     beats(now, BLINK).is_multiple_of(2)
+}
+
+/// The smallest window: the 40 columns and 12 rows every page fits, inside the margin.
+fn least(fonts: &Fonts, scale: f64) -> PhysicalSize<u32> {
+    let margin = 2 * (MARGIN * scale) as u32;
+    PhysicalSize::new(40 * fonts.cell.0 + margin, 12 * fonts.cell.1 + margin)
 }
 
 /// Where the grid starts inside the margin, centred, and how many cells fit.
@@ -590,7 +671,59 @@ fn layout(width: u32, height: u32, fonts: &Fonts, scale: f64) -> (u32, u32, Rect
     )
 }
 
-/// The grid as pixels, 0RGB.
+/// The rows of `grid` that differ from `before`, each with the rows beside it, which a glyph
+/// may reach into. None where the grid has another size and all of it is painted.
+fn changed_rows(
+    before: &Buffer,
+    was: Option<Position>,
+    grid: &Buffer,
+    cursor: Option<Position>,
+) -> Option<Vec<u16>> {
+    if before.area != grid.area {
+        return None;
+    }
+    let (w, h) = (grid.area.width as usize, grid.area.height);
+    let mut changed: Vec<bool> = (0..h as usize)
+        .map(|y| before.content[y * w..(y + 1) * w] != grid.content[y * w..(y + 1) * w])
+        .collect();
+    if was != cursor {
+        for at in [was, cursor].into_iter().flatten() {
+            if let Some(row) = changed.get_mut(at.y as usize) {
+                *row = true;
+            }
+        }
+    }
+    Some(
+        (0..h)
+            .filter(|&y| (y.saturating_sub(1)..=(y + 1).min(h - 1)).any(|n| changed[n as usize]))
+            .collect(),
+    )
+}
+
+/// The rows as bands across the window, neighbours joined, for the compositor.
+fn damage(rows: &[u16], oy: u32, ch: u32, width: u32) -> Vec<softbuffer::Rect> {
+    let mut bands: Vec<(u32, u32)> = Vec::new();
+    for &row in rows {
+        match bands.last_mut() {
+            Some((first, count)) if *first + *count == u32::from(row) => *count += 1,
+            _ => bands.push((u32::from(row), 1)),
+        }
+    }
+    bands
+        .into_iter()
+        .filter_map(|(first, count)| {
+            Some(softbuffer::Rect {
+                x: 0,
+                y: oy + first * ch,
+                width: NonZeroU32::new(width)?,
+                height: NonZeroU32::new(count * ch)?,
+            })
+        })
+        .collect()
+}
+
+/// The grid as pixels, 0RGB: all of it, or only the rows named, over what the pixels showed.
+#[allow(clippy::too_many_arguments)]
 fn paint(
     grid: &Buffer,
     cursor: Option<Position>,
@@ -599,15 +732,29 @@ fn paint(
     (width, height): (u32, u32),
     scale: f64,
     pixels: &mut [u32],
+    rows: Option<&[u16]>,
 ) {
     let (ox, oy, _) = layout(width, height, fonts, scale);
     let (cw, ch) = fonts.cell;
     let (background, text) = (rgb(style.background, 0x2e3440), rgb(style.text, 0xd8dee9));
-    pixels.fill(background);
     let mut canvas = Canvas {
         pixels,
         width,
         height,
+    };
+    let all: Vec<u16>;
+    let rows = match rows {
+        Some(rows) => {
+            for &y in rows {
+                canvas.fill(0, oy + u32::from(y) * ch, width, ch, background);
+            }
+            rows
+        }
+        None => {
+            canvas.pixels.fill(background);
+            all = (0..grid.area.height).collect();
+            &all
+        }
     };
     let colors = |cell: &ratatui::buffer::Cell| {
         let (fg, bg) = (rgb(cell.fg, text), rgb(cell.bg, background));
@@ -617,7 +764,7 @@ fn paint(
         }
     };
     // Every background first: an icon reaches into the cell after it, which must not cover it.
-    for y in 0..grid.area.height {
+    for &y in rows {
         for x in 0..grid.area.width {
             let (_, bg) = colors(&grid[(x, y)]);
             if bg != background {
@@ -625,7 +772,7 @@ fn paint(
             }
         }
     }
-    for y in 0..grid.area.height {
+    for &y in rows {
         for x in 0..grid.area.width {
             let cell = &grid[(x, y)];
             let (fg, bg) = colors(cell);
@@ -644,7 +791,7 @@ fn paint(
         }
     }
     // The cursor of a text box: a bar at the start of its cell, in the cell's text colour.
-    if let Some(at) = cursor.filter(|at| grid.area.contains(*at)) {
+    if let Some(at) = cursor.filter(|at| grid.area.contains(*at) && rows.contains(&at.y)) {
         let (fg, _) = colors(&grid[(at.x, at.y)]);
         let thin = (scale.round() as u32).max(1);
         canvas.fill(
@@ -725,34 +872,6 @@ impl Canvas<'_> {
             '│' => self.fill(cx - thin / 2, y, thin, h, fg),
             '┃' => self.fill(cx - thin, y, thin * 2, h, fg),
             '█' => self.fill(x, y, w, h, fg),
-            '\u{2800}'..='\u{28ff}' => {
-                // Round points, two across and four down.
-                let bits = c as u32 - 0x2800;
-                let r = w as f32 * 0.3;
-                let points = [
-                    (0, 0),
-                    (0, 1),
-                    (0, 2),
-                    (1, 0),
-                    (1, 1),
-                    (1, 2),
-                    (0, 3),
-                    (1, 3),
-                ];
-                for (bit, (col, row)) in points.into_iter().enumerate() {
-                    if bits & (1 << bit) == 0 {
-                        continue;
-                    }
-                    let cx = x as f32 + w as f32 * (0.25 + 0.5 * col as f32);
-                    let cy = y as f32 + h as f32 * (0.125 + 0.25 * row as f32);
-                    for yy in (cy - r - 1.0) as i32..=(cy + r + 1.0) as i32 {
-                        for xx in (cx - r - 1.0) as i32..=(cx + r + 1.0) as i32 {
-                            let d = (xx as f32 + 0.5 - cx).hypot(yy as f32 + 0.5 - cy);
-                            self.mix(xx, yy, r + 0.5 - d, fg, bg);
-                        }
-                    }
-                }
-            }
             '▀' => self.fill(x, y, w, h / 2, fg),
             '▄' => self.fill(x, y + h / 2, w, h - h / 2, fg),
             '╭' | '╮' | '╰' | '╯' => {
@@ -845,8 +964,7 @@ pub mod tests {
             for c in s.chars() {
                 let drawn = matches!(
                     c,
-                    '─' | '━' | '│' | '┃' | '╭' | '╮' | '╰' | '╯' | '█' | '▀' | '▄' | '\u{2800}'
-                        ..='\u{28ff}'
+                    '─' | '━' | '│' | '┃' | '╭' | '╮' | '╰' | '╯' | '█' | '▀' | '▄'
                 );
                 assert!(
                     font.lookup_glyph_index(c) != 0 || drawn,
@@ -885,6 +1003,7 @@ pub mod tests {
             (width, height),
             scale,
             &mut pixels,
+            None,
         );
         let rgb: Vec<u8> = pixels
             .iter()
@@ -901,10 +1020,87 @@ pub mod tests {
             .unwrap();
     }
 
+    /// Painted over the frame before, the rows that changed give what painting all of it does.
+    #[test]
+    fn painting_the_changed_rows_gives_the_whole_picture() {
+        use crate::ui::Key;
+        use crate::ui::app_tests::{app, example, press};
+        let (mut app, _) = app();
+        example(&mut app);
+        let mut fonts = Fonts::new(Faces::new());
+        fonts.rescale(1.0);
+        let (w, h) = (900, 560);
+        let (_, _, area) = layout(w, h, &fonts, 1.0);
+        let frame = |app: &mut App| {
+            let mut term = Terminal::new(Grid {
+                cursor: None,
+                buffer: Buffer::empty(area),
+                changed: true,
+            })
+            .unwrap();
+            term.draw(|f| app.draw(f)).unwrap();
+            (term.backend().buffer.clone(), term.backend().cursor)
+        };
+        let style = app.ctx.style;
+        let mut steps = vec![frame(&mut app)];
+        for keys in [
+            vec![Key::Down],
+            vec![Key::Down, Key::Down],
+            vec![Key::Char('f'), Key::Char('u')],
+            vec![Key::Esc, Key::Enter],
+        ] {
+            press(&mut app, &keys);
+            steps.push(frame(&mut app));
+        }
+        for pair in steps.windows(2) {
+            let [(a, at), (b, bt)] = pair else {
+                unreachable!()
+            };
+            let mut whole = vec![0u32; (w * h) as usize];
+            paint(b, *bt, &mut fonts, &style, (w, h), 1.0, &mut whole, None);
+            let mut over = vec![0u32; (w * h) as usize];
+            paint(a, *at, &mut fonts, &style, (w, h), 1.0, &mut over, None);
+            let rows = changed_rows(a, *at, b, *bt).unwrap();
+            assert!(!rows.is_empty());
+            paint(
+                b,
+                *bt,
+                &mut fonts,
+                &style,
+                (w, h),
+                1.0,
+                &mut over,
+                Some(&rows),
+            );
+            assert!(whole == over, "rows {rows:?}");
+        }
+        assert_eq!(
+            damage(&[2, 3, 4, 9], 10, 20, 900)
+                .iter()
+                .map(|r| (r.y, r.height.get()))
+                .collect::<Vec<_>>(),
+            [(50, 60), (190, 20)]
+        );
+    }
+
+    #[test]
+    fn ctrl_and_a_letter_go_by_the_key_on_any_layout() {
+        use winit::keyboard::KeyCode;
+        assert_eq!(latin(PhysicalKey::Code(KeyCode::KeyC)), Some('c'));
+        assert_eq!(latin(PhysicalKey::Code(KeyCode::KeyZ)), Some('z'));
+        assert_eq!(latin(PhysicalKey::Code(KeyCode::Digit1)), None);
+    }
+
     #[test]
     fn the_grid_fills_the_window_inside_the_margin() {
         let mut fonts = Fonts::new(Faces::new());
         fonts.rescale(1.0);
         assert!(fonts.cell.0 >= 7 && fonts.cell.1 > fonts.cell.0);
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            fonts.rescale(scale);
+            let size = least(&fonts, scale);
+            let (_, _, area) = layout(size.width, size.height, &fonts, scale);
+            assert_eq!((area.width, area.height), (40, 12), "at {scale}");
+        }
     }
 }

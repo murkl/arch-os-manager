@@ -22,3 +22,12 @@ errors:
   11: |
     The keyring is not where it is expected
     pacman.conf names a GPGDir not ending in gnupg, so it is left alone.
+  12: |
+    The files could not be checked
+    pacman did not get to compare them. The details show what it reported.
+hints:
+  "The requested URL returned error: 404":
+    text: |
+      A package is no longer on the server
+      The list of packages is older than the server's. Update the system, then try again.
+    offer: upgrade

@@ -8,13 +8,13 @@ rpc=https://aur.archlinux.org/rpc/
 # explicit ones and the foreign ones. pacman ends with 1 when a list is empty.
 op_installed() {
     pacman -Q | sed 's/^/pkg\t/; s/ /\t/'
-    pacman -Qqe | sed 's/^/explicit\t/' || [ $? -eq 1 ]
-    pacman -Qqm | sed 's/^/foreign\t/' || [ $? -eq 1 ]
+    pacman -Qqe | sed 's/^/explicit\t/' || allow 1
+    pacman -Qqm | sed 's/^/foreign\t/' || allow 1
 }
 
 # A regular expression, escaped by the caller. pacman ends with 1 when nothing matches.
 op_search() {
-    pacman -Ss -- "$1" || [ $? -eq 1 ]
+    pacman -Ss -- "$1" || allow 1
 }
 
 op_aur_search() {
@@ -64,7 +64,7 @@ op_versions() {
     grep -o 'href="[^"]*\.pkg\.tar\.[a-z]*"' <<<"$page" | while read -r href; do
         href="${href#href=\"}"
         printf 'archive\t%s%s\n' "$url" "${href%\"}"
-    done || [ $? -eq 1 ]
+    done || allow 1
 }
 
 op_pkgbuild() {

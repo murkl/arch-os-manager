@@ -8,7 +8,7 @@ use crate::i18n::{t, tf, tn};
 use crate::ui::gauge;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{ALL, HOME, Target};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct HomePage {
     list: List<Target>,
@@ -19,7 +19,7 @@ pub struct HomePage {
 impl HomePage {
     pub fn new() -> HomePage {
         HomePage {
-            list: List::default(),
+            list: List::filterable(),
             touched: false,
         }
     }
@@ -58,7 +58,7 @@ impl HomePage {
         ctx.shared
             .updates
             .ready()
-            .is_some_and(|u| !u.is_empty())
+            .is_some_and(|p| !p.updates.is_empty())
             .then_some(Target::Upgrade)
     }
 }
@@ -102,12 +102,20 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
     let s = &ctx.shared;
     let nothing = (String::new(), Tone::Muted);
     match target {
-        Target::Upgrade => count(
-            &s.updates,
-            |n| (tn("{n} update", "{n} updates", n, &[]), Tone::Accent),
-            (t("up to date").into(), Tone::Ok),
-            ctx,
-        ),
+        Target::Upgrade => match &s.updates {
+            // Up to date only where every source said so.
+            Loaded::Ready(p) if p.updates.is_empty() && !p.failed.is_empty() => {
+                (t("unknown").into(), Tone::Muted, false)
+            }
+            Loaded::Ready(p) if p.updates.is_empty() => (t("up to date").into(), Tone::Ok, false),
+            Loaded::Ready(p) => {
+                let n = p.updates.len();
+                (tn("{n} update", "{n} updates", n, &[]), Tone::Accent, false)
+            }
+            Loaded::Loading => ctx.loading(),
+            Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
+            Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
+        },
         Target::Reboot => (t("required").into(), Tone::Warn, false),
         Target::News => match &s.news {
             Loaded::Ready((items, offline)) => {
@@ -183,16 +191,20 @@ impl Page for HomePage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _ctx: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _ctx: &Ctx) -> Vec<(&'static str, Does)> {
         if self.list.typing() {
-            return super::list_hints(true);
+            return vec![
+                ("↑↓", Does::Choose),
+                ("⏎", Does::Open),
+                ("esc", Does::CloseSearch),
+            ];
         }
         vec![
-            ("↑↓", t("choose").into()),
-            ("⏎", t("open").into()),
-            ("f", t("search").into()),
-            ("r", t("reload").into()),
-            ("q", t("quit").into()),
+            ("↑↓", Does::Choose),
+            ("⏎", Does::Open),
+            ("f", Does::Search),
+            ("r", Does::Reload),
+            ("q", Does::Quit),
         ]
     }
 
@@ -267,7 +279,6 @@ mod tests {
             unit: "x.service".into(),
             description: String::new(),
             active: active.into(),
-            sub: String::new(),
             enabled: "enabled".into(),
         };
         app.ctx.shared.services = Loaded::Ready(vec![service("active"), service("active")]);

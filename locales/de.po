@@ -626,11 +626,11 @@ msgid "System update"
 msgstr "Systemupdate"
 
 msgid ""
-"The AUR check failed\n"
-"The AUR helper could not ask the AUR for updates. Check the internet connection.\n"
+"The AUR packages could not be updated\n"
+"Everything else is up to date. The details show what the AUR helper reported.\n"
 msgstr ""
-"Die AUR-Prüfung ist fehlgeschlagen\n"
-"Der AUR-Helfer konnte das AUR nicht nach Updates fragen. Prüfe die Internetverbindung.\n"
+"Die AUR-Pakete konnten nicht aktualisiert werden\n"
+"Alles andere ist aktuell. Die Details zeigen, was der AUR-Helfer gemeldet hat.\n"
 
 msgid ""
 "The AUR could not be reached\n"
@@ -638,13 +638,6 @@ msgid ""
 msgstr ""
 "Das AUR ist nicht erreichbar\n"
 "Prüfe die Internetverbindung.\n"
-
-msgid ""
-"The Flatpak check failed\n"
-"The Flatpak remotes could not be reached. Check the internet connection.\n"
-msgstr ""
-"Die Flatpak-Prüfung ist fehlgeschlagen\n"
-"Die Flatpak-Quellen sind nicht erreichbar. Prüfe die Internetverbindung.\n"
 
 msgid ""
 "The GNOME dock still shows the Arch OS Manager\n"
@@ -801,10 +794,10 @@ msgstr "Theme übersprungen: {error}"
 
 msgid ""
 "This is no configuration update\n"
-"Only .pacnew and .pacsave files are taken over, removed or merged.\n"
+"Only the files pacman leaves beside a configuration, such as .pacnew and .pacsave, are taken over, removed or merged.\n"
 msgstr ""
 "Das ist kein Konfigurationsupdate\n"
-"Übernommen, gelöscht oder zusammengeführt werden nur .pacnew- und .pacsave-Dateien.\n"
+"Übernommen, gelöscht oder zusammengeführt werden nur Dateien, die pacman neben einer Konfiguration ablegt, etwa .pacnew und .pacsave.\n"
 
 msgid "This needs the password for sudo."
 msgstr "Dafür braucht es das Passwort für sudo."
@@ -898,11 +891,14 @@ msgstr "wird geprüft"
 msgid "choose"
 msgstr "wählen"
 
+msgid "clear search"
+msgstr "Suche leeren"
+
 msgid "close filter"
 msgstr "Filter schließen"
 
-msgid "confirm"
-msgstr "bestätigen"
+msgid "close search"
+msgstr "Suche schließen"
 
 msgid "details"
 msgstr "Details"
@@ -927,6 +923,9 @@ msgstr "im Cache"
 
 msgid "installed"
 msgstr "installiert"
+
+msgid "main menu"
+msgstr "Hauptmenü"
 
 msgid "mark"
 msgstr "markieren"
@@ -991,6 +990,9 @@ msgstr "nur von Hand"
 msgid "open"
 msgstr "öffnen"
 
+msgid "open {n}"
+msgstr "{n} öffnen"
+
 msgid "overview"
 msgstr "Übersicht"
 
@@ -1028,8 +1030,8 @@ msgstr "suchen"
 msgid "settings.yaml is not used: {error}"
 msgstr "settings.yaml wird nicht verwendet: {error}"
 
-msgid "show again"
-msgstr "wieder zeigen"
+msgid "show"
+msgstr "einblenden"
 
 msgid "started by others"
 msgstr "von anderen gestartet"
@@ -1094,9 +1096,6 @@ msgstr "{n} Kernel-Paket bleibt: die Snapshots brauchen es für eine Wiederherst
 
 msgid "{n} kernel packages stay: the snapshots need them for a recovery."
 msgstr "{n} Kernel-Pakete bleiben: die Snapshots brauchen sie für eine Wiederherstellung."
-
-msgid "{n} marked"
-msgstr "{n} markiert"
 
 msgid "{n} open"
 msgstr "{n} offen"
@@ -1209,3 +1208,53 @@ msgstr "Lizenz"
 
 msgid "Size"
 msgstr "Größe"
+
+msgid "The AUR could not be reached. Its updates are missing here."
+msgstr "Das AUR war nicht erreichbar. Seine Updates fehlen hier."
+
+msgid "The Flatpak remotes could not be reached. Their updates are missing here."
+msgstr "Die Flatpak-Quellen waren nicht erreichbar. Ihre Updates fehlen hier."
+
+msgid ""
+"The files could not be checked\n"
+"pacman did not get to compare them. The details show what it reported.\n"
+msgstr ""
+"Die Dateien konnten nicht geprüft werden\n"
+"pacman kam nicht zum Vergleichen. Die Details zeigen, was es gemeldet hat.\n"
+
+msgid "Lets pacman-contrib list updates without root"
+msgstr "Lässt pacman-contrib Updates ohne root auflisten"
+
+msgid ""
+"The merged configuration does not parse\n"
+"visudo found an error in it, so the configuration stays as it was. Merge again.\n"
+msgstr ""
+"Die zusammengeführte Konfiguration ist fehlerhaft\n"
+"visudo hat einen Fehler darin gefunden, deshalb bleibt die Konfiguration, wie sie war. Führe sie erneut zusammen.\n"
+
+msgid ""
+"Update the firmware?\n"
+"The device writes the new firmware now or during the next restart. Keep it plugged in until it is done.\n"
+msgstr ""
+"Firmware aktualisieren?\n"
+"Das Gerät schreibt die neue Firmware jetzt oder beim nächsten Neustart. Lass es angeschlossen, bis es fertig ist.\n"
+
+msgid "Ranking the mirrors"
+msgstr "Spiegelserver werden bewertet"
+
+msgid ""
+"A package is no longer on the server\n"
+"The list of packages is older than the server's. Update the system, then try again.\n"
+msgstr ""
+"Ein Paket liegt nicht mehr auf dem Server\n"
+"Die Paketliste ist älter als die des Servers. Aktualisiere das System und versuche es erneut.\n"
+
+msgid ""
+"The AUR helper is built for an older pacman\n"
+"Build it again: remove and install it under Optional packages.\n"
+msgstr ""
+"Der AUR-Helfer ist für ein älteres pacman gebaut\n"
+"Baue ihn neu: Entferne und installiere ihn unter Optionale Pakete.\n"
+
+msgid "needs a Wayland session"
+msgstr "braucht eine Wayland-Sitzung"

@@ -133,7 +133,9 @@ pub fn parse_po(src: &str) -> HashMap<String, String> {
 }
 
 fn unquote(s: &str) -> String {
-    let inner = s.trim().trim_start_matches('"').trim_end_matches('"');
+    let s = s.trim();
+    let inner = s.strip_prefix('"').unwrap_or(s);
+    let inner = inner.strip_suffix('"').unwrap_or(inner);
     let mut out = String::new();
     let mut chars = inner.chars();
     while let Some(c) = chars.next() {
@@ -171,6 +173,9 @@ msgstr ""
 "Zwei "
 "\"Zeilen\"\n"
 
+msgid "Say \"hi\""
+msgstr "Sag \"hallo\""
+
 msgid "Open"
 msgstr ""
 "#;
@@ -179,6 +184,11 @@ msgstr ""
         assert_eq!(
             map.get("Two lines\n").map(String::as_str),
             Some("Zwei \"Zeilen\"\n")
+        );
+        assert_eq!(
+            map.get("Say \"hi\"").map(String::as_str),
+            Some("Sag \"hallo\""),
+            "a quote at the end is text"
         );
         assert!(
             !map.contains_key("Open"),

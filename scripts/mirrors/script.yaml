@@ -2,7 +2,7 @@ ops:
   list:
     title: Reading the mirror list
   rank:
-    title: Ranks the mirrors by speed
+    title: Ranking the mirrors
     root: true
     needs: [reflector]
 errors:

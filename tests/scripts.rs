@@ -4,9 +4,13 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 
 use system_manager::data::{packages, system::System};
 use system_manager::script::{op, query};
+
+/// The clean-up reads the real /.snapshots, which one test creates as root while it runs.
+static SNAPSHOTS: Mutex<()> = Mutex::new(());
 
 struct Sandbox {
     dir: PathBuf,
@@ -138,9 +142,43 @@ fn updates_tells_an_unreachable_server_from_a_failing_helper() {
     let s = Sandbox::new("offline");
     s.stub("checkupdates", "exit 1");
     assert_eq!(s.run("update", &["list"], &[]).code, 10);
-    s.stub("checkupdates", "exit 2");
+    s.stub(
+        "checkupdates",
+        "echo 'linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1'",
+    );
     s.stub("paru", "echo 'error: could not resolve host' >&2; exit 1");
-    assert_eq!(s.run("update", &["list"], &[("SM_AUR", "paru")]).code, 11);
+    s.stub("flatpak", "exit 1");
+    let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(
+        o.out,
+        "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\nfailed\taur\nfailed\tflatpak\n"
+    );
+}
+
+#[test]
+fn updates_leave_out_what_pacman_ignores_and_name_a_branch_where_two_are_pending() {
+    let s = Sandbox::new("ignored");
+    s.stub("checkupdates", "exit 2");
+    s.stub(
+        "paru",
+        "echo 'foo 1-1 -> 2-1 [ignored]'; echo 'bar 1-1 -> 2-1'; exit 0",
+    );
+    s.stub(
+        "flatpak",
+        r#"case "$1" in
+list) printf 'org.gnome.Platform\tx86_64\t49\ta1\t\norg.gnome.Platform\tx86_64\t50\tb1\t\n' ;;
+remote-ls) printf 'org.gnome.Platform\tx86_64\t49\ta2\t\norg.gnome.Platform\tx86_64\t50\tb2\t\n' ;;
+esac"#,
+    );
+    let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(
+        o.out,
+        "aur\tbar\t1-1\t2-1\n\
+         flatpak\torg.gnome.Platform//49\ta1\ta2\n\
+         flatpak\torg.gnome.Platform//50\tb1\tb2\n"
+    );
 }
 
 #[test]
@@ -165,6 +203,40 @@ fn an_unexpected_failure_names_file_line_and_command() {
     let first = o.events.lines().next().unwrap_or_default();
     let f: Vec<&str> = first.split('\t').collect();
     assert_eq!(f[..4], ["fail", "3", "packages/script.sh", "10"], "{first}");
+}
+
+/// A run holds shutdown and sleep off while it lasts, a query does not.
+#[test]
+fn a_run_holds_shutdown_off_and_a_query_does_not() {
+    let s = Sandbox::new("hold");
+    s.stub("systemd-inhibit", "exit 0");
+    s.stub("pacman", "exit 0");
+    s.stub("flatpak", "exit 0");
+    let o = s.run("update", &["run"], &[("SM_RUN", "Updating the system")]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls.contains(
+            "systemd-inhibit --what=shutdown:sleep --mode=block --who=System Manager --why=Updating the system tail --pid="
+        ),
+        "{}",
+        o.calls
+    );
+    let q = Sandbox::new("hold-query");
+    q.stub("systemd-inhibit", "exit 0");
+    let o = q.run("system", &["nopasswd"], &[]);
+    assert!(!o.calls.contains("systemd-inhibit"), "{}", o.calls);
+}
+
+/// Within a helper of lib.sh, the failure names the script's line that called it, and the
+/// code of the command that failed.
+#[test]
+fn a_failure_in_a_helper_names_the_line_of_the_script() {
+    let s = Sandbox::new("trap-helper");
+    s.stub("pacman", "exit 3");
+    let o = s.run("packages", &["search", "x"], &[]);
+    let first = o.events.lines().next().unwrap_or_default();
+    let f: Vec<&str> = first.split('\t').collect();
+    assert_eq!(f[..4], ["fail", "3", "packages/script.sh", "17"], "{first}");
 }
 
 #[test]
@@ -303,13 +375,27 @@ fn repair_reinstalls_the_native_packages_with_altered_files_only() {
     s.stub(
         "pacman",
         r#"case "$1" in
--Qkk) printf 'backup file: pacman: /etc/pacman.conf (Size mismatch)\npacman: 426 total files, 0 altered files\nwarning: bar: /usr/bin/bar (Size mismatch)\nbar: 10 total files, 1 altered files\nwarning: baz-git: /usr/bin/baz (No such file or directory)\nbaz-git: 3 total files, 1 altered files\n'; exit 1 ;;
--Qqn) printf 'bar\npacman\n' ;;
+-Qkk) cat <<'EOF'
+backup file: pacman: /etc/pacman.conf (SHA256 checksum mismatch)
+pacman: 426 total files, 0 altered files
+warning: bar: /usr/bin/bar (Size mismatch)
+warning: bar: /usr/bin/bar (SHA256 checksum mismatch)
+bar: 10 total files, 1 altered file
+warning: baz-git: /usr/bin/baz (No such file or directory)
+baz-git: 3 total files, 1 altered file
+warning: filesystem: /boot (Permissions mismatch)
+filesystem: 127 total files, 1 altered file
+warning: systemd: /var/log/journal (GID mismatch)
+warning: systemd: /usr/lib/systemd/systemd (Modification time mismatch)
+systemd: 1995 total files, 2 altered files
+EOF
+exit 1 ;;
+-Qqn) printf 'bar\nfilesystem\npacman\nsystemd\n' ;;
 esac"#,
     );
     let o = s.run("repair", &["files"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
-    assert!(o.calls.contains("pacman -S -- bar\n"), "{}", o.calls);
+    assert!(o.calls.ends_with("pacman -S -- bar\n"), "{}", o.calls);
     assert!(!o.calls.contains("baz-git") && !o.calls.contains("pacman -S -- pacman"));
     assert!(
         o.out.contains("foreign, not reinstalled: baz-git"),
@@ -323,6 +409,11 @@ esac"#,
     let o = clean.run("repair", &["files"], &[]);
     assert!(o.code == 0 && !o.calls.contains("pacman -S"), "{}", o.calls);
     assert_eq!(o.events, "step\tcheck\n");
+
+    // Without a single summary, pacman checked nothing.
+    let refused = Sandbox::new("repair-files-refused");
+    refused.stub("sudo", "echo 'sudo: a password is required' >&2; exit 1");
+    assert_eq!(refused.run("repair", &["files"], &[]).code, 12);
 }
 
 #[test]
@@ -343,6 +434,16 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
         ]
     );
     assert_eq!(o.events, "step\trepo\nstep\taur\nstep\tflatpak\n");
+    // A failing helper leaves Flatpak still to update, then says so.
+    s.stub("paru", "exit 1");
+    let o = s.run("update", &["run"], &[("SM_AUR", "paru")]);
+    assert_eq!(o.code, 11, "{}", o.events);
+    assert!(
+        o.calls
+            .ends_with("flatpak update --assumeyes --noninteractive\n"),
+        "{}",
+        o.calls
+    );
 }
 
 #[test]
@@ -399,11 +500,11 @@ fn the_update_indicator_checks_and_updates_through_the_program() {
     assert_eq!(o.code, 0, "{}", o.events);
     let stored = std::fs::read_to_string(s.dir.join("gsettings")).unwrap();
     assert!(
-        stored.contains("check-cmd\t'\"/opt/it\\'s mine/system-manager\" check'\n"),
+        stored.contains("check-cmd\t\"\\\"/opt/it's mine/system-manager\\\" check\"\n"),
         "{stored}"
     );
     assert!(
-        stored.contains("update-cmd\t'\"/opt/it\\'s mine/system-manager\" --window upgrade'\n")
+        stored.contains("update-cmd\t\"\\\"/opt/it's mine/system-manager\\\" --window upgrade\"\n")
     );
     // GNOME keeps something else than it was given.
     s.stub("gsettings", r#"[ "$3" = get ] && echo "'other'"; exit 0"#);
@@ -578,7 +679,8 @@ fn the_menu_entry_and_the_timer_follow_on_and_off() {
     assert_eq!(
         s.run("desktop", &["apply", "/x", "on", "often", "off"], &env)
             .code,
-        2
+        1,
+        "an interval the runtime never passes is a slip of the program"
     );
 
     assert_eq!(
@@ -627,7 +729,11 @@ fn features_tell_working_missing_and_broken_apart() {
 #[test]
 fn an_aur_helper_is_built_from_source_and_removed_by_its_owner() {
     let s = Sandbox::new("helper");
-    s.stub("pacman", r#"if [ "$1" = -Qqo ]; then echo "$2-bin"; fi"#);
+    s.stub(
+        "pacman",
+        r#"if [ "$1" = -Qqo ]; then echo "${3##*/}-bin"; fi"#,
+    );
+    s.stub("paru", "");
     s.stub("curl", "");
     s.stub("tar", r#"mkdir -p "$4/paru""#);
     s.stub(
@@ -645,6 +751,12 @@ fn an_aur_helper_is_built_from_source_and_removed_by_its_owner() {
     );
     let o = s.run("features", &["remove", "paru"], &[]);
     assert_eq!(o.code, 0, "{}{}", o.events, o.calls);
+    let owner = format!("pacman -Qqo -- {}\n", s.dir.join("bin/paru").display());
+    assert!(
+        o.calls.contains(&owner),
+        "the command, not ./paru: {}",
+        o.calls
+    );
     assert!(
         o.calls.ends_with("pacman -Rns -- paru-bin\n"),
         "{}",
@@ -656,6 +768,7 @@ fn an_aur_helper_is_built_from_source_and_removed_by_its_owner() {
 /// Needs /.snapshots to be created, so it runs as root, as in the CI container.
 #[test]
 fn cleanup_keeps_the_kernels_the_snapshots_need() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     if !rustix::process::getuid().is_root() || std::path::Path::new("/.snapshots").exists() {
         eprintln!("skipped: needs root and no /.snapshots");
         return;
@@ -714,6 +827,7 @@ fn cleanup_keeps_the_kernels_the_snapshots_need() {
 
 #[test]
 fn cleanup_removes_a_cached_package_with_its_signature() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let s = Sandbox::new("cleanup-sig");
     let cache = s.dir.join("pkg");
     std::fs::create_dir_all(&cache).unwrap();
@@ -730,13 +844,21 @@ fn cleanup_removes_a_cached_package_with_its_signature() {
     );
     s.stub(
         "paccache",
-        &format!("echo '==> Candidate packages:'; echo '{package}'; echo"),
+        &format!("echo '==> Candidate packages:'; echo '{package}'; echo '{package}.sig'; echo"),
     );
     s.stub(
         "pacman",
         r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
     );
     s.stub("flatpak", "exit 0");
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(
+        o.out.matches("cache\t").count(),
+        1,
+        "a signature is no package of its own: {}",
+        o.out
+    );
     let o = s.run("cleanup", &["run"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert!(!cache.join(package).exists());
@@ -931,4 +1053,341 @@ fn the_icon_outdates_a_cache_another_program_left_in_the_theme() {
         0
     );
     assert!(age(false) >= cached);
+}
+
+#[test]
+fn packages_reach_the_aur_through_its_interface_a_hundred_names_at_a_time() {
+    let s = Sandbox::new("aur-info");
+    s.stub("curl", r#"echo '{"resultcount":0,"results":[]}'"#);
+    let names: Vec<String> = (0..150).map(|i| format!("p{i}")).collect();
+    let mut args = vec!["aur-info"];
+    args.extend(names.iter().map(String::as_str));
+    let o = s.run("packages", &args, &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let requests: Vec<&str> = o.calls.lines().filter(|l| l.starts_with("curl")).collect();
+    assert_eq!(requests.len(), 2, "{}", o.calls);
+    assert_eq!(requests[0].matches("arg[]=").count(), 100);
+    assert!(requests[1].contains("arg[]=p149") && requests[1].matches("arg[]=").count() == 50);
+    assert!(
+        requests.iter().all(|r| r.contains("--proto =https")),
+        "through fetch"
+    );
+    assert_eq!(o.out.lines().filter(|l| !l.is_empty()).count(), 2);
+
+    let o = s.run("packages", &["aur-search", "foo bar"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(o.calls.contains("arg=foo bar"), "{}", o.calls);
+    s.stub("curl", "exit 22");
+    for args in [
+        &["aur-search", "x"][..],
+        &["aur-info", "x"],
+        &["pkgbuild", "x"],
+    ] {
+        assert_eq!(s.run("packages", args, &[]).code, 10, "{args:?}");
+    }
+}
+
+#[test]
+fn packages_install_remove_and_go_back_through_pacman_or_the_helper() {
+    let s = Sandbox::new("packages-change");
+    s.stub("pacman", "exit 0");
+    s.stub("paru", "exit 0");
+    let runs: [(&[&str], &str); 4] = [
+        (
+            &["install", "repo", "a", "b"],
+            "pacman -S --needed -- a b\n",
+        ),
+        (&["install", "aur", "c"], "paru --skipreview -S -- c\n"),
+        (&["remove", "a", "b"], "pacman -Rns -- a b\n"),
+        (
+            &[
+                "downgrade",
+                "/var/cache/pacman/pkg/a-1-1-x86_64.pkg.tar.zst",
+            ],
+            "pacman -U -- /var/cache/pacman/pkg/a-1-1-x86_64.pkg.tar.zst\n",
+        ),
+    ];
+    for (args, call) in runs {
+        let o = s.run("packages", args, &[("SM_AUR", "paru")]);
+        assert_eq!(o.code, 0, "{args:?}: {}", o.events);
+        assert!(o.calls.ends_with(call), "{args:?}: {}", o.calls);
+    }
+    let o = s.run("packages", &["info", "sync", "extra/a"], &[]);
+    assert!(o.calls.ends_with("pacman -Si -- extra/a\n"), "{}", o.calls);
+    s.stub("pacman", "exit 1");
+    assert_eq!(s.run("packages", &["info", "local", "gone"], &[]).code, 11);
+}
+
+#[test]
+fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
+    let s = Sandbox::new("pacnew-merge");
+    // Where this machine keeps snapshots, none is taken of the sandbox.
+    s.stub("snapper", "exit 0");
+    let etc = s.dir.join("etc");
+    std::fs::create_dir_all(etc.join("sudoers.d")).unwrap();
+    let (current, new) = (etc.join("foo.conf"), etc.join("foo.conf.pacnew"));
+    std::fs::write(&current, "a=1\n").unwrap();
+    std::fs::write(&new, "a=2\n").unwrap();
+    let path = |p: &std::path::Path| p.to_str().unwrap().to_string();
+
+    let o = s.run("pacnew", &["diff", &path(&new)], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(o.out.contains("-a=1\n+a=2\n"), "{}", o.out);
+    let gone = path(&etc.join("gone.conf.pacnew"));
+    assert_eq!(s.run("pacnew", &["diff", &gone], &[]).code, 10);
+
+    // Meld closed without a change: nothing happens.
+    s.stub("meld", "exit 0");
+    let o = s.run("pacnew", &["merge", &path(&new)], &[]);
+    assert_eq!(o.code, 12, "{}{}", o.events, o.calls);
+    assert!(new.exists());
+    // Saved on the left: that goes into the configuration, and the update is done.
+    s.stub("meld", r#"echo merged >"$1""#);
+    let o = s.run("pacnew", &["merge", &path(&new)], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(std::fs::read_to_string(&current).unwrap(), "merged\n");
+    assert!(!new.exists());
+    assert!(o.calls.contains("meld "), "{}", o.calls);
+
+    // A sudoers that does not parse never replaces the one that does.
+    let (sudoers, update) = (
+        etc.join("sudoers.d/wheel"),
+        etc.join("sudoers.d/wheel.pacnew"),
+    );
+    std::fs::write(&sudoers, "%wheel ALL=(ALL:ALL) ALL\n").unwrap();
+    std::fs::write(&update, "x\n").unwrap();
+    s.stub("visudo", "exit 1");
+    assert_eq!(s.run("pacnew", &["merge", &path(&update)], &[]).code, 13);
+    assert_eq!(
+        std::fs::read_to_string(&sudoers).unwrap(),
+        "%wheel ALL=(ALL:ALL) ALL\n"
+    );
+
+    let o = s.run("pacnew", &["keep", &path(&update)], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(!update.exists() && sudoers.exists());
+    for odd in ["foo.conf.pacsave.1", "foo.conf.pacorig"] {
+        let file = etc.join(odd);
+        std::fs::write(&file, "").unwrap();
+        assert_eq!(
+            s.run("pacnew", &["keep", &path(&file)], &[]).code,
+            0,
+            "{odd}"
+        );
+    }
+    assert_eq!(s.run("pacnew", &["keep", &path(&current)], &[]).code, 11);
+}
+
+#[test]
+fn the_mirror_list_names_its_servers_and_a_ranking_tells_offline_from_failed() {
+    let s = Sandbox::new("mirrors");
+    s.stub(
+        "systemctl",
+        r#"case "$*" in *ConditionResult*) echo no ;; *) exit 0 ;; esac"#,
+    );
+    let o = s.run("mirrors", &["list"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.out.starts_with("changed\t") && o.out.contains("\ntimer\ton\n"),
+        "{}",
+        o.out
+    );
+    assert_eq!(
+        s.run("mirrors", &["rank"], &[]).code,
+        10,
+        "a condition not met"
+    );
+    s.stub("systemctl", "exit 1");
+    assert_eq!(s.run("mirrors", &["rank"], &[]).code, 11);
+}
+
+#[test]
+fn firmware_with_nothing_to_update_is_no_failure_and_an_update_sends_no_report() {
+    let s = Sandbox::new("firmware");
+    s.stub(
+        "fwupdmgr",
+        r#"case "$1" in get-updates) echo '{"Devices": []}'; exit 2 ;; refresh) exit 0 ;; esac"#,
+    );
+    let o = s.run("firmware", &["list"], &[]);
+    assert_eq!((o.code, o.out.as_str()), (0, "{\"Devices\": []}\n"));
+    let o = s.run("firmware", &["update"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls
+            .ends_with("fwupdmgr update --assume-yes --no-reboot-check --no-unreported-check\n"),
+        "{}",
+        o.calls
+    );
+    s.stub("fwupdmgr", "exit 1");
+    assert_eq!(s.run("firmware", &["update"], &[]).code, 10, "no catalogue");
+}
+
+#[test]
+fn services_are_listed_logged_and_changed_in_their_scope() {
+    let s = Sandbox::new("services");
+    s.stub("systemctl", "echo '[]'");
+    s.stub("journalctl", "exit 0");
+    let o = s.run("services", &["list", "user"], &[]);
+    assert_eq!((o.code, o.out.as_str()), (0, "units\t[]\nfiles\t[]\n"));
+    assert!(
+        o.calls.contains("systemctl --user list-units"),
+        "{}",
+        o.calls
+    );
+    let runs: [(&[&str], &str); 4] = [
+        (
+            &["log", "user", "a.service"],
+            "journalctl --user-unit a.service -n 30 --output=json --all --no-pager\n",
+        ),
+        (
+            &["log", "system", "b.service"],
+            "journalctl --unit b.service -n 30 --output=json --all --no-pager\n",
+        ),
+        (
+            &["system", "restart", "b.service"],
+            "systemctl restart -- b.service\n",
+        ),
+        (
+            &["user", "stop", "a.service"],
+            "systemctl --user stop -- a.service\n",
+        ),
+    ];
+    for (args, call) in runs {
+        let o = s.run("services", args, &[]);
+        assert_eq!(o.code, 0, "{args:?}: {}", o.events);
+        assert!(o.calls.ends_with(call), "{args:?}: {}", o.calls);
+    }
+}
+
+#[test]
+fn the_news_the_log_and_a_restart_ask_their_tools() {
+    let s = Sandbox::new("small");
+    s.stub("curl", "echo '<rss/>'");
+    s.stub("journalctl", "exit 0");
+    s.stub("systemctl", "exit 0");
+    let o = s.run("news", &["fetch"], &[]);
+    assert_eq!((o.code, o.out.as_str()), (0, "<rss/>\n"));
+    assert!(
+        o.calls.contains("https://archlinux.org/feeds/news/"),
+        "{}",
+        o.calls
+    );
+    s.stub("curl", "exit 6");
+    assert_eq!(s.run("news", &["fetch"], &[]).code, 10);
+    let o = s.run("log", &["errors"], &[]);
+    assert!(
+        o.calls
+            .contains("journalctl --boot --priority=3 --lines=500 --output=json --all"),
+        "{}",
+        o.calls
+    );
+    let o = s.run("system", &["reboot"], &[]);
+    assert!(
+        o.code == 0 && o.calls.ends_with("systemctl reboot\n"),
+        "{}",
+        o.calls
+    );
+    s.stub("sudo", "exit 1");
+    assert_eq!(s.run("system", &["auth"], &[]).code, 1);
+}
+
+#[test]
+fn reflector_ranks_by_speed_in_the_country_of_the_time_zone_where_it_has_mirrors() {
+    let s = Sandbox::new("reflector");
+    s.stub("pacman", "exit 0");
+    s.stub("systemctl", "exit 0");
+    s.stub("install", r#"cat >"$HOME/reflector.conf""#);
+    s.stub("readlink", "echo /usr/share/zoneinfo/Europe/Amsterdam");
+    s.stub("reflector", "printf 'Country Code Count\\n------- ---- -----\\nNetherlands NL 30\\nUnited States US 200\\n'");
+    let o = s.run("features", &["install", "reflector"], &[]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.calls);
+    let conf = std::fs::read_to_string(s.dir.join("reflector.conf")).unwrap();
+    assert!(
+        conf.contains("--sort rate\n") && conf.ends_with("--country NL\n"),
+        "{conf}"
+    );
+    assert!(
+        o.calls
+            .ends_with("systemctl enable --now reflector.timer\n"),
+        "{}",
+        o.calls
+    );
+
+    // A country without a mirror ranks them all.
+    s.stub("readlink", "echo /usr/share/zoneinfo/Pacific/Pitcairn");
+    assert_eq!(s.run("features", &["install", "reflector"], &[]).code, 0);
+    let conf = std::fs::read_to_string(s.dir.join("reflector.conf")).unwrap();
+    assert!(!conf.contains("--country"), "{conf}");
+
+    let o = s.run("features", &["remove", "reflector"], &[]);
+    let (disabled, removed) = (
+        o.calls.rfind("systemctl disable --now reflector.timer\n"),
+        o.calls.rfind("pacman -Rns -- reflector\n"),
+    );
+    assert!(disabled.is_some() && disabled < removed, "{}", o.calls);
+    let o = s.run("features", &["install", "fwupd"], &[]);
+    assert!(
+        o.calls
+            .ends_with("systemctl enable --now fwupd-refresh.timer\n"),
+        "{}",
+        o.calls
+    );
+}
+
+#[test]
+fn cleanup_removes_orphans_and_the_builds_of_packages_gone() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
+    let s = Sandbox::new("cleanup-builds");
+    let cache = s.dir.join("pkg");
+    std::fs::create_dir_all(&cache).unwrap();
+    let builds = s.dir.join("cache/paru/clone");
+    for b in ["gone-pkg", "pacman"] {
+        std::fs::create_dir_all(builds.join(b)).unwrap();
+        std::fs::write(builds.join(b).join("PKGBUILD"), "x").unwrap();
+    }
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
+            cache.display()
+        ),
+    );
+    s.stub(
+        "paccache",
+        "echo '==> no candidate packages found for pruning'",
+    );
+    s.stub(
+        "pacman",
+        r#"case "$1" in
+-Qdtq) echo orphan-lib ;;
+-Qi) printf 'Name            : orphan-lib\nInstalled Size  : 1.50 MiB\n' ;;
+-Rns) exit 0 ;;
+*) exec /usr/bin/pacman "$@" ;;
+esac"#,
+    );
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.out.contains("orphan\torphan-lib\t1.50 MiB\n"),
+        "{}",
+        o.out
+    );
+    assert!(
+        o.out
+            .contains(&format!("aur\t{}/gone-pkg\t", builds.display())),
+        "{}",
+        o.out
+    );
+    assert!(
+        !o.out.contains("clone/pacman"),
+        "an installed package keeps its build"
+    );
+    let o = s.run("cleanup", &["run"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls.contains("pacman -Rns --noconfirm -- orphan-lib\n"),
+        "{}",
+        o.calls
+    );
+    assert!(!builds.join("gone-pkg").exists() && builds.join("pacman").exists());
 }

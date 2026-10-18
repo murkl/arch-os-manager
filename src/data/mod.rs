@@ -36,7 +36,8 @@ pub fn format_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = bytes as f64;
     let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
+    // Rounded to a tenth, 1023.95 would read 1024.0 of the smaller unit.
+    while value >= 1023.95 && unit < UNITS.len() - 1 {
         value /= 1024.0;
         unit += 1;
     }
@@ -76,5 +77,7 @@ mod tests {
         assert_eq!(format_size(1), "1 byte");
         assert_eq!(format_size(8_472_494), "8.1 MiB");
         assert_eq!(format_size(3 * 1024 * 1024 * 1024), "3.0 GiB");
+        assert_eq!(format_size(1024 * 1024 - 1), "1.0 MiB");
+        assert_eq!(format_size(1023), "1023 bytes");
     }
 }

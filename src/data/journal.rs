@@ -1,5 +1,7 @@
 //! Journal entries from `journalctl --output=json`.
 
+use std::collections::HashSet;
+
 use serde_json::Value;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -8,9 +10,21 @@ pub struct Entry {
     pub time: i64,
     pub ident: String,
     pub message: String,
+    /// The message as `pattern` makes it, made once rather than at every look.
+    kind: String,
 }
 
 impl Entry {
+    pub fn new(time: i64, ident: &str, message: &str) -> Entry {
+        let (ident, message) = (printable(ident), printable(message));
+        Entry {
+            time,
+            ident,
+            kind: pattern(&message),
+            message,
+        }
+    }
+
     pub fn clock(&self) -> String {
         jiff::Timestamp::from_microsecond(self.time)
             .map(|t| {
@@ -38,22 +52,47 @@ pub fn parse(out: &str) -> Vec<Entry> {
                 .into_owned(),
                 _ => String::new(),
             };
-            Some(Entry {
-                time: text("__REALTIME_TIMESTAMP").parse().ok()?,
-                ident: Some(text("SYSLOG_IDENTIFIER"))
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| text("_COMM")),
-                message: text("MESSAGE"),
-            })
+            let ident = Some(text("SYSLOG_IDENTIFIER"))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| text("_COMM"));
+            Some(Entry::new(
+                text("__REALTIME_TIMESTAMP").parse().ok()?,
+                &ident,
+                &text("MESSAGE"),
+            ))
         })
         .collect()
 }
 
+/// Without the colours and controls a program wrote for a terminal.
+fn printable(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\x1b' => {
+                if chars.next() == Some('[') {
+                    chars.by_ref().find(|c| ('@'..='~').contains(c));
+                }
+            }
+            '\t' => out.push(' '),
+            '\n' => out.push('\n'),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The kinds of the texts the person chose to hide, made once for a look at many entries.
+pub fn kinds(hidden: &[String]) -> HashSet<String> {
+    hidden.iter().map(|h| pattern(h)).collect()
+}
+
 impl Entry {
     /// Whether the person chose to hide it: it is one of the texts, numbers aside.
-    pub fn hidden(&self, texts: &[String]) -> bool {
-        let message = pattern(&self.message);
-        texts.iter().any(|h| message == pattern(h))
+    pub fn hidden(&self, kinds: &HashSet<String>) -> bool {
+        kinds.contains(&self.kind)
     }
 }
 
@@ -104,8 +143,9 @@ pub fn pattern(message: &str) -> String {
     out
 }
 
-pub fn visible<'a>(entries: &'a [Entry], hidden: &'a [String]) -> impl Iterator<Item = &'a Entry> {
-    entries.iter().filter(|e| !e.hidden(hidden))
+pub fn visible<'a>(entries: &'a [Entry], hidden: &[String]) -> impl Iterator<Item = &'a Entry> {
+    let kinds = kinds(hidden);
+    entries.iter().filter(move |e| !e.hidden(&kinds))
 }
 
 #[cfg(test)]
@@ -140,24 +180,27 @@ mod tests {
             pattern("fs-verity: hash 6dd0af06ad12 inode 759644"),
             "fs-verity: hash # inode #"
         );
-        let entry = |m: &str| Entry {
-            time: 0,
-            ident: "kernel".into(),
-            message: m.into(),
-        };
-        assert!(entry(b).hidden(&[pattern(a)]));
-        assert!(!entry("usb 1-2: new device").hidden(&[pattern(a)]));
+        let entry = |m: &str| Entry::new(0, "kernel", m);
+        assert!(entry(b).hidden(&kinds(&[pattern(a)])));
+        assert!(!entry("usb 1-2: new device").hidden(&kinds(&[pattern(a)])));
     }
 
     #[test]
     fn hides_only_its_own_kind() {
-        let entry = |m: &str| Entry {
-            time: 0,
-            ident: "kernel".into(),
-            message: m.into(),
-        };
-        assert!(!entry("usb 1-2: new device").hidden(&["".into()]));
-        assert!(!entry("error -71").hidden(&[pattern("1")]));
-        assert!(!entry("ACPI Error: AE_NOT_FOUND").hidden(&["AE_NOT_FOUND".into()]));
+        let entry = |m: &str| Entry::new(0, "kernel", m);
+        assert!(!entry("usb 1-2: new device").hidden(&kinds(&["".into()])));
+        assert!(!entry("error -71").hidden(&kinds(&[pattern("1")])));
+        assert!(!entry("ACPI Error: AE_NOT_FOUND").hidden(&kinds(&["AE_NOT_FOUND".into()])));
+    }
+
+    #[test]
+    fn drops_the_colours_and_controls_meant_for_a_terminal() {
+        let e = Entry::new(
+            0,
+            "sys\x07temd",
+            "\x1b[0;1;31mFailed\x1b[0m\tto start\nsecond line",
+        );
+        assert_eq!(e.ident, "systemd");
+        assert_eq!(e.message, "Failed to start\nsecond line");
     }
 }

@@ -1,5 +1,7 @@
 //! Installed packages, repository search results and package details from pacman.
 
+use std::collections::HashSet;
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Installed {
     pub name: String,
@@ -25,9 +27,13 @@ pub fn parse_installed(out: &str) -> Vec<Installed> {
             _ => {}
         }
     }
+    let (explicit, foreign): (HashSet<&str>, HashSet<&str>) = (
+        explicit.into_iter().collect(),
+        foreign.into_iter().collect(),
+    );
     for p in &mut all {
-        p.explicit = explicit.contains(&p.name.as_str());
-        p.foreign = foreign.contains(&p.name.as_str());
+        p.explicit = explicit.contains(p.name.as_str());
+        p.foreign = foreign.contains(p.name.as_str());
     }
     all.sort_by(|a, b| a.name.cmp(&b.name));
     all

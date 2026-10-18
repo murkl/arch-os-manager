@@ -1,5 +1,7 @@
 //! Services of the system and of the user, from systemctl's JSON.
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -9,7 +11,6 @@ pub struct Service {
     pub description: String,
     /// active, inactive, failed, activating, empty for a unit file never loaded.
     pub active: String,
-    pub sub: String,
     /// enabled, disabled, static, masked, …, empty for a unit without a file.
     pub enabled: String,
 }
@@ -28,9 +29,9 @@ impl Service {
 struct Unit {
     unit: String,
     #[serde(default)]
-    active: String,
+    load: String,
     #[serde(default)]
-    sub: String,
+    active: String,
     #[serde(default)]
     description: String,
 }
@@ -55,22 +56,20 @@ pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
             _ => {}
         }
     }
-    let state = |unit: &str| {
-        files
-            .iter()
-            .find(|f| f.unit_file == unit)
-            .map(|f| f.state.clone())
-            .unwrap_or_default()
-    };
+    let state: HashMap<&str, &str> = files
+        .iter()
+        .map(|f| (f.unit_file.as_str(), f.state.as_str()))
+        .collect();
+    // A unit only named somewhere, with no file behind it, is nothing to start.
     let mut all: Vec<Service> = units
         .iter()
+        .filter(|u| u.load != "not-found")
         .map(|u| Service {
             user,
             unit: u.unit.clone(),
             description: u.description.clone(),
             active: u.active.clone(),
-            sub: u.sub.clone(),
-            enabled: state(&u.unit),
+            enabled: state.get(u.unit.as_str()).unwrap_or(&"").to_string(),
         })
         .collect();
     // A template is no service until it has an instance.
@@ -81,7 +80,6 @@ pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
                 unit: f.unit_file.clone(),
                 description: String::new(),
                 active: String::new(),
-                sub: String::new(),
                 enabled: f.state.clone(),
             });
         }
@@ -93,6 +91,29 @@ pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// As systemctl printed them on a real system.
+    #[test]
+    fn leaves_out_a_unit_without_a_file() {
+        let out = concat!(
+            r#"units	[{"unit":"auto-cpufreq.service","load":"not-found","active":"inactive","sub":"dead","description":"auto-cpufreq.service"},{"unit":"getty@tty1.service","load":"loaded","active":"inactive","sub":"dead","description":"Getty on tty1"},{"unit":"systemd-journald.service","load":"loaded","active":"active","sub":"running","description":"Journal Service"}]"#,
+            "\n",
+            r#"files	[{"unit_file":"getty@.service","state":"enabled","preset":"enabled"},{"unit_file":"reflector.service","state":"disabled","preset":"disabled"},{"unit_file":"systemd-journald.service","state":"static","preset":null}]"#,
+            "\n"
+        );
+        let s = parse(out, true).unwrap();
+        let names: Vec<&str> = s.iter().map(|x| x.unit.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "systemd-journald.service",
+                "getty@tty1.service",
+                "reflector.service"
+            ]
+        );
+        assert_eq!(s[0].enabled, "static");
+        assert!(s[0].running() && s[0].user);
+    }
 
     #[test]
     fn joins_units_and_files_failed_first() {

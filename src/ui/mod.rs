@@ -14,6 +14,8 @@ mod style;
 mod target;
 
 pub use app::App;
+#[cfg(test)]
+pub(crate) use app::tests as app_tests;
 pub use style::Style;
 pub use target::Target;
 
@@ -30,7 +32,7 @@ use crate::data::news::Item;
 use crate::data::packages::Installed;
 use crate::data::services::Service;
 use crate::data::system::System;
-use crate::data::updates::Update;
+use crate::data::updates::Pending;
 use crate::data::usage::Usage;
 use crate::script::{self, Failure};
 use crate::settings::Settings;
@@ -100,13 +102,12 @@ impl Key {
     }
 
     /// Whether holding the key repeats it: moving and typing do, everything else happens once
-    /// per press.
+    /// per press, so a held enter answers no question that follows.
     pub fn repeats(self, typing: bool) -> bool {
-        typing
-            || matches!(
-                self.nav(false),
-                Some(Nav::Up | Nav::Down | Nav::PageUp | Nav::PageDown)
-            )
+        matches!(
+            self.nav(false),
+            Some(Nav::Up | Nav::Down | Nav::PageUp | Nav::PageDown)
+        ) || typing && matches!(self, Key::Char(_) | Key::Backspace | Key::Delete)
     }
 
     /// The bytes a terminal sends for the key, for the details view of a run.
@@ -120,8 +121,10 @@ impl Key {
             Key::Delete => b"\x1b[3~".to_vec(),
             Key::Tab => b"\t".to_vec(),
             Key::BackTab => b"\x1b[Z".to_vec(),
-            Key::Up | Key::WheelUp => b"\x1b[A".to_vec(),
-            Key::Down | Key::WheelDown => b"\x1b[B".to_vec(),
+            // The wheel scrolls. Typed, it would answer a question with an arrow.
+            Key::WheelUp | Key::WheelDown => Vec::new(),
+            Key::Up => b"\x1b[A".to_vec(),
+            Key::Down => b"\x1b[B".to_vec(),
             Key::Right => b"\x1b[C".to_vec(),
             Key::Left => b"\x1b[D".to_vec(),
             Key::PageUp => b"\x1b[5~".to_vec(),
@@ -176,13 +179,15 @@ pub enum Msg {
     Usage(Usage),
     /// What the old manager left, read behind the splash.
     Legacy(crate::migrate::Legacy),
+    /// Text pasted into the terminal as one, typed where a text box has the keys.
+    Paste(String),
 }
 
 /// A shared value read anew.
 pub enum Fresh {
     Features(Result<Features, Failure>),
     System(Result<System, Failure>),
-    Updates(Result<Vec<Update>, Failure>),
+    Updates(Result<Pending, Failure>),
     News(Result<(Vec<Item>, bool), Failure>),
     Installed(Result<Vec<Installed>, Failure>),
     Services(Result<Vec<Service>, Failure>),
@@ -215,6 +220,71 @@ pub enum Tone {
     Error,
 }
 
+/// What a key does, as the footer names it. Every page takes its words from here, so one deed
+/// reads the same everywhere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Does {
+    Choose,
+    Scroll,
+    Open,
+    /// Opens the marked rows, this many.
+    OpenMarked(usize),
+    Run,
+    Answer,
+    Use,
+    Hide,
+    Show,
+    Mark,
+    Read,
+    Unread,
+    Details,
+    Overview,
+    Search,
+    Filter,
+    CloseSearch,
+    CloseFilter,
+    ClearSearch,
+    Reload,
+    /// Closes the page. The app names it `Menu` where the start page lies below.
+    Back,
+    Menu,
+    Stop,
+    Quit,
+}
+
+impl Does {
+    pub fn label(self) -> String {
+        use crate::i18n::{t, tf};
+        match self {
+            Does::OpenMarked(n) => return tf("open {n}", &[("n", &n)]),
+            Does::Choose => t("choose"),
+            Does::Scroll => t("scroll"),
+            Does::Open => t("open"),
+            Does::Run => t("run"),
+            Does::Answer => t("answer"),
+            Does::Use => t("use"),
+            Does::Hide => t("hide"),
+            Does::Show => t("show"),
+            Does::Mark => t("mark"),
+            Does::Read => t("read"),
+            Does::Unread => t("unread"),
+            Does::Details => t("details"),
+            Does::Overview => t("overview"),
+            Does::Search => t("search"),
+            Does::Filter => t("filter"),
+            Does::CloseSearch => t("close search"),
+            Does::CloseFilter => t("close filter"),
+            Does::ClearSearch => t("clear search"),
+            Does::Reload => t("reload"),
+            Does::Back => t("back"),
+            Does::Menu => t("main menu"),
+            Does::Stop => t("stop"),
+            Does::Quit => t("quit"),
+        }
+        .to_string()
+    }
+}
+
 pub trait Page {
     /// The page's name in the header path.
     fn title(&self) -> String;
@@ -225,7 +295,7 @@ pub trait Page {
         ctx: &mut Ctx,
     );
     /// The keys the footer names, as key and what it does.
-    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)>;
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)>;
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow;
     /// A job of this page is done: its result is ready to take.
     fn done(&mut self, _ctx: &mut Ctx) -> Flow {
@@ -253,8 +323,6 @@ pub trait Page {
     fn bare(&self) -> bool {
         false
     }
-    /// On top again after the page above it closed.
-    fn resumed(&mut self, _ctx: &mut Ctx) {}
 }
 
 /// A value read in the background: nothing yet, the value, or why not. A reload keeps the old value.
@@ -276,6 +344,14 @@ impl<T> Loaded<T> {
         }
     }
 
+    /// Gives up a value still to come, for a reason that keeps it from ever coming. A value
+    /// already there stays.
+    pub fn give_up(&mut self, why: &Failure) {
+        if matches!(self, Loaded::Loading) {
+            *self = Loaded::Failed(why.clone());
+        }
+    }
+
     pub fn from(result: Result<T, Failure>) -> Loaded<T> {
         match result {
             Ok(v) => Loaded::Ready(v),
@@ -289,7 +365,7 @@ impl<T> Loaded<T> {
 pub struct Shared {
     pub features: Loaded<Features>,
     pub system: Loaded<System>,
-    pub updates: Loaded<Vec<Update>>,
+    pub updates: Loaded<Pending>,
     /// The news, and whether they came from the cache because the feed was out of reach.
     pub news: Loaded<(Vec<Item>, bool)>,
     pub installed: Loaded<Vec<Installed>>,

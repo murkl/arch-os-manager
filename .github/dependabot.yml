@@ -1,4 +1,5 @@
-# The pinned actions, bumped as a pull request CI can check.
+# The pinned actions and the locked crates, bumped monthly as a pull request
+# CI can check. A crate's next major version stays a change by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -7,3 +8,14 @@ updates:
       interval: monthly
     commit-message:
       prefix: ci
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    versioning-strategy: lockfile-only
+    groups:
+      crates:
+        patterns: ["*"]
+    commit-message:
+      prefix: build

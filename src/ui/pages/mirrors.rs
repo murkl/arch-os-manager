@@ -10,7 +10,7 @@ use crate::script::op;
 use crate::ui::detail::{Act, Block, Detail, loaded};
 use crate::ui::icon;
 use crate::ui::list::Lead;
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct MirrorsPage {
     detail: Detail,
@@ -67,7 +67,7 @@ impl Page for MirrorsPage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 

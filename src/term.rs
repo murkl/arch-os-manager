@@ -5,8 +5,8 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-    KeyModifiers, MouseEventKind,
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind,
 };
 
 use crate::ui::{App, FRAME, Key, Msg, Target};
@@ -33,6 +33,7 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
                     _ => None,
                 },
                 Event::Resize(..) => Some(Msg::Resize),
+                Event::Paste(text) => Some(Msg::Paste(text)),
                 _ => None,
             };
             if let Some(msg) = msg
@@ -90,12 +91,12 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
 }
 
 /// The wheel as scrolling: without it, a terminal sends the arrow keys instead. A text is then
-/// selected with shift held.
+/// selected with shift held. Pasted text comes as one, not as keys.
 fn mouse(capture: bool) {
     let mut out = std::io::stdout();
     let done = match capture {
-        true => ratatui::crossterm::execute!(out, EnableMouseCapture),
-        false => ratatui::crossterm::execute!(out, DisableMouseCapture),
+        true => ratatui::crossterm::execute!(out, EnableMouseCapture, EnableBracketedPaste),
+        false => ratatui::crossterm::execute!(out, DisableMouseCapture, DisableBracketedPaste),
     };
     if let Err(e) = done {
         crate::warn!("mouse capture {capture}: {e}");
@@ -139,6 +140,20 @@ fn key(k: KeyEvent) -> Option<Key> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_terminal_keys_are_the_interface_keys() {
+        let k = |code, modifiers| key(KeyEvent::new(code, modifiers));
+        let none = KeyModifiers::NONE;
+        assert_eq!(
+            k(KeyCode::Char('C'), KeyModifiers::CONTROL),
+            Some(Key::Ctrl('c'))
+        );
+        assert_eq!(k(KeyCode::Char('Q'), none), Some(Key::Char('Q')));
+        assert_eq!(k(KeyCode::BackTab, KeyModifiers::SHIFT), Some(Key::BackTab));
+        assert_eq!(k(KeyCode::PageDown, none), Some(Key::PageDown));
+        assert_eq!(k(KeyCode::F(5), none), None);
+    }
 
     #[test]
     fn a_key_coming_again_at_the_rate_of_a_keyboard_is_held() {

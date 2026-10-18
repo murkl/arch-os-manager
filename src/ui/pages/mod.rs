@@ -16,21 +16,21 @@ pub mod settings;
 pub mod splash;
 pub mod upgrade;
 
-use crate::i18n::t;
+use super::Does;
 
 /// The footer of a plain list.
-pub fn list_hints(filter: bool) -> Vec<(&'static str, String)> {
+pub fn list_hints(filter: bool) -> Vec<(&'static str, Does)> {
     if filter {
         return vec![
-            ("↑↓", t("choose").to_string()),
-            ("⏎", t("open").to_string()),
-            ("esc", t("close filter").to_string()),
+            ("↑↓", Does::Choose),
+            ("⏎", Does::Open),
+            ("esc", Does::CloseFilter),
         ];
     }
     vec![
-        ("↑↓", t("choose").to_string()),
-        ("⏎", t("open").to_string()),
-        ("f", t("filter").to_string()),
-        ("esc", t("back").to_string()),
+        ("↑↓", Does::Choose),
+        ("⏎", Does::Open),
+        ("f", Does::Filter),
+        ("esc", Does::Back),
     ]
 }

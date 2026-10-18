@@ -7,7 +7,7 @@ use ratatui::style::Style as Cell;
 use super::draw::{cut, put, scrollbar, waiting, width, wrap};
 use super::icon;
 use super::list::{Lead, List, Picked, Row, draw_row};
-use super::{Ctx, Flow, Key, Loaded, Nav, Style, Tone};
+use super::{Ctx, Does, Flow, Key, Loaded, Nav, Style, Tone};
 use crate::i18n::t;
 use crate::script::Failure;
 
@@ -166,20 +166,20 @@ impl Detail {
         render(&self.body, width as usize, ctx).len() as u16
     }
 
-    pub fn hints(&self) -> Vec<(&'static str, String)> {
+    pub fn hints(&self) -> Vec<(&'static str, Does)> {
         let mut h = Vec::new();
         if self.acts.is_empty() {
             if self.overflow {
-                h.push(("↑↓", t("scroll").to_string()));
+                h.push(("↑↓", Does::Scroll));
             }
         } else {
-            h.push(("↑↓", t("choose").to_string()));
-            h.push(("⏎", t("run").to_string()));
+            h.push(("↑↓", Does::Choose));
+            h.push(("⏎", Does::Run));
             if self.overflow {
-                h.push(("⇞⇟", t("scroll").to_string()));
+                h.push(("⇞⇟", Does::Scroll));
             }
         }
-        h.push(("esc", t("back").to_string()));
+        h.push(("esc", Does::Back));
         h
     }
 
@@ -310,14 +310,18 @@ fn render_part(body: &[Block], w: usize, ctx: &Ctx, label_width: usize) -> Vec<L
                     .into_iter()
                     .map(|l| Line::Spans(vec![(l, Tone::Normal, true)])),
             ),
-            Block::Code(lines) => out.extend(
-                lines
-                    .iter()
-                    .map(|(l, tone)| Line::Spans(vec![(cut(l, w, mark), *tone, false)])),
-            ),
-            Block::Styled(lines) => {
-                out.extend(lines.iter().map(|spans| Line::Spans(spans.clone())))
-            }
+            Block::Code(lines) => out.extend(lines.iter().map(|(l, tone)| {
+                Line::Spans(vec![(cut(&untab(l, &mut 0), w, mark), *tone, false)])
+            })),
+            Block::Styled(lines) => out.extend(lines.iter().map(|spans| {
+                let mut column = 0;
+                Line::Spans(
+                    spans
+                        .iter()
+                        .map(|(text, tone, bold)| (untab(text, &mut column), *tone, *bold))
+                        .collect(),
+                )
+            })),
             Block::Row(lead, label, detail) => {
                 out.push(Line::Row(*lead, label.clone(), detail.clone()))
             }
@@ -329,6 +333,23 @@ fn render_part(body: &[Block], w: usize, ctx: &Ctx, label_width: usize) -> Vec<L
                 }
             }
             Block::Blank => out.push(Line::Spans(Vec::new())),
+        }
+    }
+    out
+}
+
+/// Tabs as spaces to the next stop of four from `column`, which moves along: a cell grid drops
+/// them as control characters.
+fn untab(text: &str, column: &mut usize) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c == '\t' {
+            let n = 4 - *column % 4;
+            out.extend(std::iter::repeat_n(' ', n));
+            *column += n;
+        } else {
+            out.push(c);
+            *column += width(c.encode_utf8(&mut [0; 4]));
         }
     }
     out
@@ -403,6 +424,14 @@ mod tests {
     }
 
     #[test]
+    fn tabs_stand_as_spaces_to_the_next_stop() {
+        assert_eq!(untab("\tpackage() {", &mut 0), "    package() {");
+        let mut column = 0;
+        assert_eq!(untab("ab", &mut column), "ab");
+        assert_eq!(untab("\tc", &mut column), "  c");
+    }
+
+    #[test]
     fn facts_longer_than_their_room_scroll_by_wheel_and_page_while_the_actions_stay() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = crate::ui::app::tests::app();
@@ -445,11 +474,7 @@ mod tests {
 
         d.set(vec![Block::Text("short".into(), Tone::Normal)], Vec::new());
         drawn(&mut d, area, &app.ctx);
-        assert_eq!(
-            d.hints(),
-            [("esc", "back".to_string())],
-            "nothing to scroll"
-        );
+        assert_eq!(d.hints(), [("esc", Does::Back)], "nothing to scroll");
     }
 
     #[test]

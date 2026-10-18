@@ -5,10 +5,11 @@ use ratatui::layout::Rect;
 
 use crate::data::news::{Block as Html, Item, blocks};
 use crate::i18n::t;
+use crate::state::State;
 use crate::ui::detail::{Act, Block, Detail, loaded};
 use crate::ui::icon;
 use crate::ui::list::{Lead, List, Picked, Row};
-use crate::ui::{Ctx, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub fn unread(ctx: &Ctx) -> usize {
     let read = ctx.state.news_read.as_deref().unwrap_or_default();
@@ -22,15 +23,16 @@ fn mark(ctx: &mut Ctx, link: &str, read: bool) {
     let Some((items, _)) = ctx.shared.news.ready() else {
         return;
     };
-    let list = ctx.state.news_read.get_or_insert_with(Vec::new);
-    if list.iter().any(|l| l == link) == read {
+    if is_read(ctx, link) == read {
         return;
     }
-    list.retain(|l| l != link && items.iter().any(|i| &i.link == l));
-    if read {
-        list.push(link.to_string());
-    }
-    ctx.state.save();
+    ctx.state = State::update(|state| {
+        let list = state.news_read.get_or_insert_with(Vec::new);
+        list.retain(|l| l != link && items.iter().any(|i| &i.link == l));
+        if read {
+            list.push(link.to_string());
+        }
+    });
 }
 
 /// Whether an item was read.
@@ -50,7 +52,7 @@ pub struct NewsPage {
 impl NewsPage {
     pub fn new() -> NewsPage {
         NewsPage {
-            list: List::default(),
+            list: List::filterable(),
         }
     }
 }
@@ -99,17 +101,17 @@ impl Page for NewsPage {
         self.list.draw(list_area, buf, ctx);
     }
 
-    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
         let mut h = super::list_hints(self.list.typing());
         if !self.list.typing()
             && let Some(link) = self.list.selected().and_then(|r| r.id.as_deref())
         {
             let label = if is_read(ctx, link) {
-                t("unread")
+                Does::Unread
             } else {
-                t("read")
+                Does::Read
             };
-            h.insert(2, ("space", label.into()));
+            h.insert(2, ("space", label));
         }
         h
     }
@@ -210,7 +212,7 @@ impl Page for ArticlePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, String)> {
+    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
         self.detail.hints()
     }
 

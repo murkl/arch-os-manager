@@ -32,10 +32,25 @@ pub fn news_cache() -> PathBuf {
     home().join("cache").join("news.xml")
 }
 
+/// This program where it lies. An update replaces it while it runs, and the kernel then names
+/// the running file with ` (deleted)` appended, while the new one lies at the old path.
+pub fn program() -> std::io::Result<PathBuf> {
+    std::env::current_exe().map(undeleted)
+}
+
+fn undeleted(exe: PathBuf) -> PathBuf {
+    match exe.to_str().and_then(|s| s.strip_suffix(" (deleted)")) {
+        Some(path) => PathBuf::from(path),
+        None => exe,
+    }
+}
+
 /// Writes beside the target and renames over it, so a crash never leaves half a file. The copy
 /// is named by the process: the window and the timer may write the same file at once.
 pub fn write_atomic(path: &std::path::Path, content: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
+    // A link, as dotfiles keep settings, is written through.
+    let path = &std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -54,6 +69,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_program_replaced_while_running_is_named_where_the_new_one_lies() {
+        assert_eq!(
+            undeleted(PathBuf::from("/usr/bin/system-manager (deleted)")),
+            PathBuf::from("/usr/bin/system-manager")
+        );
+        assert_eq!(
+            undeleted(PathBuf::from("/opt/a (deleted) b")),
+            PathBuf::from("/opt/a (deleted) b")
+        );
+    }
+
+    #[test]
     fn an_atomic_write_replaces_the_file_and_leaves_nothing_beside_it() {
         let dir = std::env::temp_dir().join(format!("sm-atomic-{}", std::process::id()));
         let path = dir.join("state.yaml");
@@ -65,6 +92,22 @@ mod tests {
         std::fs::create_dir_all(dir.join("taken/inside")).unwrap();
         assert!(write_atomic(&dir.join("taken"), b"x").is_err());
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_atomic_write_through_a_link_keeps_the_link() {
+        let dir = std::env::temp_dir().join(format!("sm-atomic-link-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("dotfiles")).unwrap();
+        let (real, link) = (
+            dir.join("dotfiles/settings.yaml"),
+            dir.join("settings.yaml"),
+        );
+        std::fs::write(&real, "one").unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        write_atomic(&link, b"two").unwrap();
+        assert!(link.symlink_metadata().unwrap().is_symlink());
+        assert_eq!(std::fs::read(&real).unwrap(), b"two");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
