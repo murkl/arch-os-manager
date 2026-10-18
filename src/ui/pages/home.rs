@@ -86,7 +86,7 @@ fn count<T>(
     ctx: &Ctx,
 ) -> (String, Tone, bool) {
     match value {
-        Loaded::Loading => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
+        Loaded::Loading => ctx.loading(),
         Loaded::Ready(v) if v.is_empty() => (none.0, none.1, false),
         Loaded::Ready(v) => {
             let (text, tone) = some(v.len());
@@ -119,7 +119,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
                     (n, _) => (tf("{n} unread", &[("n", &n)]), Tone::Warn, false),
                 }
             }
-            Loaded::Loading => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
+            Loaded::Loading => ctx.loading(),
             _ => (t("offline").into(), Tone::Muted, false),
         },
         Target::Packages => count(&s.installed, |n| (n.to_string(), Tone::Muted), nothing, ctx),
@@ -139,7 +139,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
         },
         Target::Cleanup => match &s.cleanup {
             Loaded::Ready(plan) => (format_size(plan.bytes()), Tone::Muted, false),
-            Loaded::Loading => (ctx.style.glyphs.ellipsis.into(), Tone::Muted, false),
+            Loaded::Loading => ctx.loading(),
             Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
             Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
         },
@@ -225,15 +225,38 @@ impl Page for HomePage {
         self.list.typing()
     }
 
+    /// Every row still reading, and the usage before its first reading, shows the spinner.
     fn animating(&self, ctx: &Ctx) -> bool {
-        matches!(ctx.shared.updates, Loaded::Loading)
-            || matches!(ctx.shared.features, Loaded::Loading)
+        ctx.busy() || ctx.usage.is_none()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A row still reading shows the spinner, and the page keeps drawing while anything reads.
+    #[test]
+    fn a_row_still_reading_shows_the_spinner_until_it_is_in() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, _) = crate::ui::app::tests::app();
+        let frames = app.ctx.style.glyphs.spinner;
+        app.ctx.shared.services = Loaded::Loading;
+        let (text, tone, dim) = status(Target::Services, &app.ctx);
+        assert!(frames.contains(&text.as_str()) && tone == Tone::Accent && !dim);
+        app.ctx.shared.services = Loaded::Ready(Vec::new());
+        let (text, ..) = status(Target::Services, &app.ctx);
+        assert!(!frames.contains(&text.as_str()));
+
+        let page = HomePage::new();
+        app.ctx.usage = Some(crate::data::usage::Usage::default());
+        assert!(!page.animating(&app.ctx));
+        app.ctx.pending.set(1);
+        assert!(page.animating(&app.ctx));
+        app.ctx.pending.set(0);
+        app.ctx.usage = None;
+        assert!(page.animating(&app.ctx));
+    }
 
     #[test]
     fn services_count_until_one_fails_and_no_configuration_update_is_up_to_date() {

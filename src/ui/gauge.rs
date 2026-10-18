@@ -69,33 +69,32 @@ fn layout(width: u16, icons: bool) -> Option<Block> {
         })
 }
 
-/// What a block shows: how full, and that in percent.
+/// What a block shows: how full, that in percent, and the state it is in.
 struct Reading {
     share: Option<f64>,
     value: String,
+    tone: Tone,
 }
 
 impl Reading {
-    /// Before the first reading.
+    /// Before the first reading: the spinner, as a row still reading shows it.
     fn waiting(ctx: &Ctx) -> Reading {
+        let (value, tone, _) = ctx.loading();
         Reading {
             share: None,
-            value: ctx.style.glyphs.ellipsis.into(),
+            value,
+            tone,
         }
     }
 
-    /// In whole percent, `?` where unknown.
+    /// In whole percent, `?` where unknown and muted.
     fn of(share: Option<f64>) -> Reading {
         let share = share.map(|s| s.clamp(0.0, 1.0));
         Reading {
             share,
             value: share.map_or("?".into(), |s| format!("{:.0}%", s * 100.0)),
+            tone: share.map_or(Tone::Muted, tone),
         }
-    }
-
-    /// The state of its share, muted where unknown.
-    fn tone(&self) -> Tone {
-        self.share.map_or(Tone::Muted, tone)
     }
 }
 
@@ -125,7 +124,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, ctx: &Ctx) -> bool {
         (icon::DISK, "Disk"),
     ];
     for (i, ((glyph, name), reading)) in (0..).zip(names.iter().zip(&readings)) {
-        let tone = reading.tone();
+        let tone = reading.tone;
         let mut x = area.x + i * block.step;
         if block.icon {
             put(buf, x, area.y, glyph, 1, s.tone(Tone::Muted));
@@ -150,6 +149,22 @@ pub fn draw(buf: &mut Buffer, area: Rect, ctx: &Ctx) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Before the first reading the value is the spinner, in the accent colour.
+    #[test]
+    fn before_the_first_reading_the_value_is_the_spinner() {
+        let (app, _) = crate::ui::app::tests::app();
+        let reading = Reading::waiting(&app.ctx);
+        assert!(
+            app.ctx
+                .style
+                .glyphs
+                .spinner
+                .contains(&reading.value.as_str())
+        );
+        assert_eq!(reading.tone, Tone::Accent);
+        assert_eq!(Reading::of(None).tone, Tone::Muted);
+    }
 
     #[test]
     fn a_reading_is_whole_percent_and_unknown_as_a_question_mark() {
