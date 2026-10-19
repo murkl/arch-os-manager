@@ -4,6 +4,8 @@ ops:
   notify:
     title: Showing a notification
     needs: [libnotify]
+  close:
+    title: Closing the notification
   open:
     title: Opening the manager
   extension-install:

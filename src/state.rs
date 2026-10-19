@@ -12,6 +12,10 @@ pub struct State {
     /// The updates the last notification was about, so the same ones are not announced twice.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notified: Vec<String>,
+    /// The notification still standing unanswered, as its server and id, which the next one
+    /// replaces.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification: Option<String>,
 }
 
 impl State {

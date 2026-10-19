@@ -319,6 +319,19 @@ mod tests {
         );
     }
 
+    /// Asked again after the command's own output, as once its timestamp ran out, sudo gets the
+    /// held password again. Right after an answer, the same question is a refusal.
+    #[test]
+    fn answers_sudo_again_once_other_output_came_between() {
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        sudo::set("pw".into());
+        let (_, out) = drive(
+            r#"stty -echo; for i in 1 2; do printf '%s' "$SUDO_PROMPT"; read -r p; echo; [ "$p" = pw ] && echo "got $i"; printf 'a\nb\nc\n'; done; stty echo"#,
+        );
+        sudo::forget();
+        assert!(out.contains("got 1") && out.contains("got 2"), "{out}");
+    }
+
     #[test]
     fn never_hands_an_empty_password_to_sudo() {
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());

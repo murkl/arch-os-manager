@@ -1,9 +1,9 @@
 //! A script that only reads: no terminal, no questions, a time limit.
 
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::os::fd::AsRawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::process::Stdio;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -12,6 +12,9 @@ use super::{Failure, Op, attach_fd3, command, pipe};
 
 const LIMIT: Duration = Duration::from_secs(120);
 
+/// The nice value of a query: it reads in the background, a run is what the person waits for.
+const NICE: i32 = 10;
+
 /// Runs a script and returns what it printed. A script that elevates is refused.
 pub fn query(op: Op, args: &[&str]) -> Result<String, Failure> {
     query_within(op, args, LIMIT)
@@ -19,9 +22,19 @@ pub fn query(op: Op, args: &[&str]) -> Result<String, Failure> {
 
 /// As query, for a script that waits on a person, such as a notification.
 pub fn query_within(op: Op, args: &[&str], limit: Duration) -> Result<String, Failure> {
+    query_lines(op, args, limit, |_| {})
+}
+
+/// As query_within, telling each line of the output as it comes, before the script ends.
+pub fn query_lines(
+    op: Op,
+    args: &[&str],
+    limit: Duration,
+    mut each: impl FnMut(&str),
+) -> Result<String, Failure> {
     assert!(!op.meta().root, "{op} elevates and runs only as a run");
     let started = Instant::now();
-    let result = run(op, args, limit);
+    let result = run(op, args, limit, &mut each);
     let millis = started.elapsed().as_millis();
     match &result {
         Ok(out) => crate::info!(
@@ -37,20 +50,37 @@ pub fn query_within(op: Op, args: &[&str], limit: Duration) -> Result<String, Fa
     result
 }
 
-fn run(op: Op, args: &[&str], limit: Duration) -> Result<String, Failure> {
+fn run(
+    op: Op,
+    args: &[&str],
+    limit: Duration,
+    each: &mut dyn FnMut(&str),
+) -> Result<String, Failure> {
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-    let mut cmd = command(op, &args).map_err(|e| Failure::new(op, e))?;
+    let cmd = command(op, &args).map_err(|e| Failure::new(op, e))?;
+    collect(op, cmd, limit, each)
+}
+
+/// What the command of a query printed, within the limit, each line told as it comes.
+fn collect(
+    op: Op,
+    mut cmd: Command,
+    limit: Duration,
+    each: &mut dyn FnMut(&str),
+) -> Result<String, Failure> {
     let (events, events_w) = pipe().map_err(|e| Failure::new(op, e.to_string()))?;
     let raw = events_w.as_raw_fd();
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     // A session of its own, as in the window: no terminal to stop at or write into, and one
-    // group the limit stops whole.
-    // SAFETY: setsid, dup2 and fcntl are async-signal-safe.
+    // group the limit stops whole. Behind the interface for the processors, and so for the disk,
+    // whose priority Linux takes from the nice value where none is set.
+    // SAFETY: setsid, setpriority, dup2 and fcntl are async-signal-safe.
     unsafe {
         cmd.pre_exec(move || {
             rustix::process::setsid()?;
+            let _ = rustix::process::setpriority_process(None, NICE);
             attach_fd3(raw)
         })
     };
@@ -75,8 +105,15 @@ fn run(op: Op, args: &[&str], limit: Duration) -> Result<String, Failure> {
     });
 
     let mut out = Vec::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        let _ = stdout.read_to_end(&mut out);
+    if let Some(stdout) = child.stdout.take() {
+        let mut lines = BufReader::new(stdout);
+        loop {
+            let start = out.len();
+            match lines.read_until(b'\n', &mut out) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => each(String::from_utf8_lossy(&out[start..]).trim_end_matches('\n')),
+            }
+        }
     }
     let status = child.wait().map_err(|e| Failure::new(op, e.to_string()))?;
     let _ = done.send(());
@@ -118,13 +155,37 @@ mod tests {
 
     #[test]
     fn returns_what_the_script_printed() {
-        let out = run(op::SYSTEM_STATE, &[], LIMIT).expect("system state runs");
+        let out = run(op::SYSTEM_STATE, &[], LIMIT, &mut |_| {}).expect("system state runs");
         assert!(out.contains("hostname\t"));
     }
 
     #[test]
     fn stops_a_script_at_the_limit() {
-        let failure = run(op::SYSTEM_STATE, &[], Duration::ZERO).unwrap_err();
+        let failure = run(op::SYSTEM_STATE, &[], Duration::ZERO, &mut |_| {}).unwrap_err();
         assert!(failure.detail.contains("no answer"), "{failure:?}");
+    }
+
+    /// A line is told as it comes, while the script still runs.
+    #[test]
+    fn tells_each_line_before_the_script_ends() {
+        let started = Instant::now();
+        let mut seen = Vec::new();
+        let mut cmd = Command::new("bash");
+        cmd.args(["-c", "echo first; sleep 1; printf last"]);
+        let out = collect(op::SYSTEM_STATE, cmd, LIMIT, &mut |line| {
+            seen.push((line.to_string(), started.elapsed()))
+        })
+        .unwrap();
+        assert_eq!(out, "first\nlast");
+        assert_eq!(seen[0].0, "first");
+        assert!(seen[0].1 < Duration::from_millis(900), "{seen:?}");
+        assert_eq!(seen[1].0, "last");
+    }
+
+    #[test]
+    fn a_query_reads_behind_the_interface() {
+        let ours = rustix::process::getpriority_process(None).unwrap();
+        let out = collect(op::SYSTEM_STATE, Command::new("nice"), LIMIT, &mut |_| {}).unwrap();
+        assert_eq!(out.trim(), (ours + NICE).min(19).to_string());
     }
 }

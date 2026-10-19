@@ -1,7 +1,7 @@
 //! The stack of pages, the shared values, and the keys no page takes.
 
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 use ratatui::Frame;
 
@@ -24,7 +24,7 @@ pub struct App {
 
 impl App {
     pub fn new(
-        tx: Sender<Msg>,
+        tx: SyncSender<Msg>,
         wake: Arc<dyn Fn() + Send + Sync>,
         console: bool,
         start: Option<Target>,
@@ -47,6 +47,7 @@ impl App {
         let mut ctx = Ctx {
             settings,
             settings_error,
+            settings_unsaved: None,
             state: State::load(),
             style: Style::new(&themes[0].colors, console),
             console,
@@ -239,14 +240,20 @@ impl App {
             crate::warn!("migrate: settings.yaml is not used");
             return;
         }
-        if legacy.take_over(&mut self.ctx.settings) {
-            if let Err(e) = self.ctx.settings.save() {
-                crate::warn!("migrate: settings.yaml not written: {e}");
-                return;
-            }
-            self.ctx.reload();
+        if !legacy.take_over(&mut self.ctx.settings) {
+            std::thread::spawn(move || crate::migrate::clean(&legacy));
+            return;
         }
-        std::thread::spawn(move || crate::migrate::clean(&legacy));
+        let settings = self.ctx.settings.clone();
+        self.ctx.store(move || {
+            let saved = settings.save().map_err(|e| e.to_string());
+            match &saved {
+                Ok(()) => drop(std::thread::spawn(move || crate::migrate::clean(&legacy))),
+                Err(e) => crate::warn!("migrate: settings.yaml not written: {e}"),
+            }
+            Fresh::Saved(saved)
+        });
+        self.ctx.reload();
     }
 
     /// Reads every shared value anew. What is shown stays until the new value arrives.
@@ -333,16 +340,27 @@ impl App {
                 }
             }
             Fresh::System(r) => s.system = Loaded::from(r),
-            Fresh::Updates(r) => s.updates = Loaded::from(r),
+            Fresh::Updates(r) => {
+                s.updates = Loaded::from(r);
+                // Installed, here or elsewhere: a notification still about them goes.
+                if s.updates
+                    .ready()
+                    .is_some_and(|p| p.updates.is_empty() && p.failed.is_empty())
+                {
+                    super::fetch::serial(crate::integration::withdraw);
+                }
+            }
             Fresh::News(r) => {
                 s.news = Loaded::from(r);
                 if let Some((items, _)) = s.news.ready()
                     && self.ctx.state.news_read.is_none()
                 {
                     // First start: only the newest counts as unread, not the whole feed.
-                    self.ctx.state = State::update(|state| {
-                        state.news_read.get_or_insert_with(|| {
-                            items.iter().skip(1).map(|i| i.link.clone()).collect()
+                    let older: Vec<String> = items.iter().skip(1).map(|i| i.link.clone()).collect();
+                    self.ctx.state.news_read = Some(older.clone());
+                    super::fetch::serial(move || {
+                        State::update(|state| {
+                            state.news_read.get_or_insert(older);
                         });
                     });
                 }
@@ -354,6 +372,14 @@ impl App {
             Fresh::Cleanup(r) => s.cleanup = Loaded::from(r),
             Fresh::Mirrors(r) => s.mirrors = Loaded::from(r),
             Fresh::Firmware(r) => s.firmware = Loaded::from(r),
+            Fresh::Saved(Ok(())) => {
+                self.ctx.settings_error = None;
+                self.ctx.settings_unsaved = None;
+            }
+            Fresh::Saved(Err(e)) => {
+                crate::error!("settings not saved: {e}");
+                self.ctx.settings_unsaved = Some(e);
+            }
         }
     }
 }
@@ -362,7 +388,7 @@ impl App {
 const USAGE: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Reads the usage off the drawing thread, until the app is gone.
-fn sample(tx: Sender<Msg>, wake: Arc<dyn Fn() + Send + Sync>) {
+fn sample(tx: SyncSender<Msg>, wake: Arc<dyn Fn() + Send + Sync>) {
     use data::usage::{self, Ticks, Usage};
     let ticks = || {
         std::fs::read_to_string("/proc/stat")
@@ -445,7 +471,7 @@ pub mod tests {
 
     /// An app without background loads, for pressing keys and reading the screen.
     pub fn app() -> (App, Terminal<TestBackend>) {
-        let (tx, _rx) = std::sync::mpsc::channel();
+        let (tx, _rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
         let dir = std::env::temp_dir().join(format!("sm-test-{}", std::process::id()));
         // SAFETY: tests that read the environment read only SM_HOME, set to the same value by all.
         unsafe { std::env::set_var("SM_HOME", &dir) };
@@ -453,6 +479,7 @@ pub mod tests {
         let ctx = Ctx {
             settings: Settings::default(),
             settings_error: None,
+            settings_unsaved: None,
             state: State::default(),
             style: Style::new(
                 &themes
@@ -675,7 +702,7 @@ pub mod tests {
     #[test]
     #[ignore]
     fn preview() {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
         unsafe { std::env::set_var("SM_HOME", std::env::temp_dir().join("sm-preview")) };
         let mut app = App::new(tx, Arc::new(|| {}), false, None);
         app.start();

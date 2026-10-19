@@ -18,7 +18,8 @@ pub fn unread(ctx: &Ctx) -> usize {
     })
 }
 
-/// Remembers an item as read, or as new again. Only what the feed still lists is kept.
+/// Remembers an item as read, or as new again, here at once and in state.yaml behind the
+/// interface. Only what the feed still lists is kept.
 fn mark(ctx: &mut Ctx, link: &str, read: bool) {
     let Some((items, _)) = ctx.shared.news.ready() else {
         return;
@@ -26,12 +27,18 @@ fn mark(ctx: &mut Ctx, link: &str, read: bool) {
     if is_read(ctx, link) == read {
         return;
     }
-    ctx.state = State::update(|state| {
+    let feed: Vec<String> = items.iter().map(|i| i.link.clone()).collect();
+    let link = link.to_string();
+    let change = move |state: &mut State| {
         let list = state.news_read.get_or_insert_with(Vec::new);
-        list.retain(|l| l != link && items.iter().any(|i| &i.link == l));
+        list.retain(|l| *l != link && feed.contains(l));
         if read {
-            list.push(link.to_string());
+            list.push(link.clone());
         }
+    };
+    change(&mut ctx.state);
+    crate::ui::fetch::serial(move || {
+        State::update(change);
     });
 }
 
@@ -249,8 +256,15 @@ mod tests {
         assert!(!is_read(&app.ctx, &first));
         press(&mut app, &[Key::Char(' ')]);
         assert!(is_read(&app.ctx, &first));
+        // The file follows behind the interface.
+        let written = || {
+            assert!(crate::ui::settle(std::time::Duration::from_secs(10)));
+            State::load().news_read.unwrap_or_default().contains(&first)
+        };
+        assert!(written());
         press(&mut app, &[Key::Char(' ')]);
         assert!(!is_read(&app.ctx, &first));
+        assert!(!written());
     }
 
     #[test]

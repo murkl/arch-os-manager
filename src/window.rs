@@ -42,7 +42,7 @@ pub fn run(start: Option<Target>) -> io::Result<()> {
         .build()
         .map_err(|e| io::Error::other(format!("no display: {e}")))?;
     let proxy = Mutex::new(event_loop.create_proxy());
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(crate::ui::QUEUE);
     let app = App::new(
         tx,
         Arc::new(move || {
@@ -971,13 +971,20 @@ pub mod tests {
                 );
             }
         }
-        for icon in crate::ui::icon::ALL.iter().chain([&g.mark]) {
-            for c in icon.chars() {
-                assert!(
-                    symbols.lookup_glyph_index(c) != 0,
-                    "the symbols font has no {c:?}"
-                );
-            }
+        // Every icon icon.rs spells, as tools/icons.sh cuts the font from it.
+        let icons: Vec<char> = include_str!("ui/icon.rs")
+            .split("\\u{")
+            .skip(1)
+            .filter_map(|rest| u32::from_str_radix(rest.split('}').next()?, 16).ok())
+            .filter_map(char::from_u32)
+            .collect();
+        assert!(icons.len() > 30, "{icons:?}");
+        for c in icons.into_iter().chain(g.mark.chars()) {
+            assert!(
+                symbols.lookup_glyph_index(c) != 0,
+                "the symbols font has no {:x}",
+                c as u32
+            );
         }
     }
 

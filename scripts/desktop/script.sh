@@ -132,13 +132,60 @@ UNIT
     if [ "$4" = on ]; then indicator "$program"; fi
 }
 
-# Title, text, the label of the one action and the seconds to wait for it. Prints the
-# action if it was chosen. Unanswered, it ends as if dismissed. GNOME takes the
-# icon in the header from the menu entry the hint names.
+# The notification server as it runs now: the bus and the server's name on it.
+# An id names a notification only for the server that gave it, and a new login
+# or a restarted shell counts anew.
+server() {
+    local bus owner
+    bus="$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetId)" || return 1
+    owner="$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus \
+        GetNameOwner s org.freedesktop.Notifications)" || return 1
+    bus="${bus#s \"}" owner="${owner#s \"}"
+    printf '%s %s\n' "${bus%\"}" "${owner%\"}"
+}
+
+# The id of the notification a handle names, where the server that gave it still
+# runs.
+standing() {
+    local now
+    if [ -z "$1" ]; then return 1; fi
+    now="$(server)" || return 1
+    if [ "${1% *}" != "$now" ]; then return 1; fi
+    printf '%s\n' "${1##* }"
+}
+
+# Title, text, the label of the one action, the seconds to wait for it, and the
+# handle of the notification still standing, which this one replaces. Prints the
+# handle of this one as soon as it shows, then the action where it was chosen, or
+# `standing` where the time ran out unanswered. GNOME takes the icon in the
+# header from the menu entry the hint names.
 op_notify() {
+    local replace server id="" action waiting status=0
+    replace="$(standing "${5:-}")" || replace=""
+    server="$(server)" || server=""
+    scratch
+    mkfifo "${work}/id"
     timeout "$4" notify-send --app-name="System Manager" --icon=system-manager \
-        --hint=string:desktop-entry:system-manager \
-        --action="open=$3" -- "$1" "$2" || allow 124
+        --hint=string:desktop-entry:system-manager ${replace:+"--replace-id=$replace"} \
+        --id-fd=4 --action="open=$3" -- "$1" "$2" 4>"${work}/id" >"${work}/action" &
+    waiting=$!
+    # The id comes once it shows, and the handle with it, while it still waits.
+    read -r id <"${work}/id" || true
+    if [[ $id =~ ^[0-9]+$ ]] && [ -n "$server" ]; then printf 'shown\t%s %s\n' "$server" "$id"; fi
+    wait "$waiting" || status=$?
+    case "$status" in
+    0) while read -r action || [ -n "$action" ]; do printf 'chosen\t%s\n' "$action"; done <"${work}/action" ;;
+    124) echo standing ;;
+    *) return "$status" ;;
+    esac
+}
+
+# Closes the notification a handle names, where its server still runs.
+op_close() {
+    local id
+    id="$(standing "$1")" || return 0
+    busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+        org.freedesktop.Notifications CloseNotification u "$id"
 }
 
 # Started as its own unit, so it outlives the timer's service that asks for it.

@@ -13,7 +13,7 @@ pub mod sudo;
 
 pub use progress::{Phase, Progress};
 pub use prompt::Prompt;
-pub use query::{query, query_within};
+pub use query::{query, query_lines, query_within};
 pub use run::Run;
 pub use session::Event;
 

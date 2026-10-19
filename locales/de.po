@@ -148,6 +148,9 @@ msgid "Cleaning up"
 msgstr "Wird aufgeräumt"
 
 
+msgid "Closing the notification"
+msgstr "Benachrichtigung wird geschlossen"
+
 msgid "Comparing the configuration"
 msgstr "Konfiguration wird verglichen"
 
@@ -1032,6 +1035,9 @@ msgstr "suchen"
 
 msgid "settings.yaml is not used: {error}"
 msgstr "settings.yaml wird nicht verwendet: {error}"
+
+msgid "settings.yaml not saved: {error}"
+msgstr "settings.yaml nicht gespeichert: {error}"
 
 msgid "show"
 msgstr "einblenden"
