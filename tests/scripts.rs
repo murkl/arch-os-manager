@@ -480,7 +480,7 @@ fn updates_leave_flatpak_out_unless_all_of_it_is_handled() {
 }
 
 #[test]
-fn a_notification_nobody_answers_ends_as_dismissed() {
+fn a_notification_nobody_answers_stands_until_the_next() {
     let s = Sandbox::new("notify");
     let args = [
         "notify",
@@ -492,12 +492,72 @@ fn a_notification_nobody_answers_ends_as_dismissed() {
     s.stub("notify-send", "exec sleep 30");
     let started = std::time::Instant::now();
     let o = s.run("desktop", &args, &[]);
-    assert_eq!((o.code, o.out.as_str()), (0, ""), "{}", o.events);
+    assert_eq!((o.code, o.out.as_str()), (0, "standing\n"), "{}", o.events);
     assert!(started.elapsed() < std::time::Duration::from_secs(10));
     s.stub("notify-send", "echo open");
-    assert_eq!(s.run("desktop", &args, &[]).out, "open\n");
+    assert_eq!(s.run("desktop", &args, &[]).out, "chosen\topen\n");
     s.stub("notify-send", "exit 1");
     assert_eq!(s.run("desktop", &args, &[]).code, 1);
+}
+
+/// The bus and the notification server as busctl names them, and what is closed.
+const BUS: &str = r#"case "$*" in
+*GetId*) echo 's "bus1"' ;;
+*GetNameOwner*) echo 's ":1.5"' ;;
+*CloseNotification*) ;;
+*) exit 1 ;;
+esac"#;
+
+/// notify-send giving the id it replaces, else 12, on the descriptor it is told.
+const SHOWN: &str = r#"for a; do case "$a" in --id-fd=*) fd="${a#*=}" ;; --replace-id=*) id="${a#*=}" ;; esac; done
+echo "${id:-12}" >&"$fd""#;
+
+#[test]
+fn a_notification_replaces_the_one_its_server_still_shows() {
+    let s = Sandbox::new("notify-replace");
+    s.stub("busctl", BUS);
+    s.stub("notify-send", &format!("{SHOWN}\nexec sleep 30"));
+    let notify = |handle: &str| {
+        let args = [
+            "notify",
+            "System update",
+            "6 updates are ready.",
+            "Update",
+            "1",
+            handle,
+        ];
+        let _ = std::fs::remove_file(s.dir.join("calls"));
+        s.run("desktop", &args, &[])
+    };
+    let o = notify("bus1 :1.5 7");
+    assert_eq!(o.out, "shown\tbus1 :1.5 7\nstanding\n", "{}", o.events);
+    assert!(o.calls.contains(" --replace-id=7 "), "{}", o.calls);
+    // After a new login or a restarted shell, the old id names nothing of this one.
+    for other in ["bus0 :1.5 7", "bus1 :1.4 7", ""] {
+        let o = notify(other);
+        assert_eq!(o.out, "shown\tbus1 :1.5 12\nstanding\n", "{other:?}");
+        assert!(!o.calls.contains("--replace-id"), "{other:?}: {}", o.calls);
+    }
+    // Without a server to name, nothing is kept to replace.
+    s.stub("busctl", "exit 1");
+    assert_eq!(notify("bus1 :1.5 7").out, "standing\n");
+}
+
+#[test]
+fn a_notification_closes_only_where_its_server_still_shows_it() {
+    let s = Sandbox::new("notify-close");
+    s.stub("busctl", BUS);
+    for (handle, closed) in [("bus1 :1.5 7", true), ("bus0 :1.5 7", false), ("", false)] {
+        let _ = std::fs::remove_file(s.dir.join("calls"));
+        let o = s.run("desktop", &["close", handle], &[]);
+        assert_eq!(o.code, 0, "{handle:?}: {}", o.events);
+        assert_eq!(
+            o.calls.contains("CloseNotification u 7"),
+            closed,
+            "{handle:?}: {}",
+            o.calls
+        );
+    }
 }
 
 #[test]
@@ -658,6 +718,39 @@ esac"#,
     assert!(!dir.exists());
     // Nothing installed, nothing to do.
     assert_eq!(s.run("desktop", &["extension-remove"], &env).code, 0);
+}
+
+/// The timer comes back as a notification stops waiting for its answer, so the next replaces it.
+#[test]
+fn the_timer_keeps_the_time_a_notification_waits() {
+    let s = Sandbox::new("desktop-every");
+    s.stub("systemctl", "exit 1");
+    let data = s.dir.join("data");
+    let env = [("XDG_DATA_HOME", data.to_str().unwrap())];
+    let timer = s
+        .dir
+        .join("config/systemd/user/system-manager-notify.timer");
+    for interval in ["hourly", "daily", "weekly"] {
+        let o = s.run("desktop", &["apply", "/x", "off", interval, "off"], &env);
+        assert_eq!(o.code, 0, "{}", o.events);
+        let unit = std::fs::read_to_string(&timer).unwrap();
+        let span = unit
+            .lines()
+            .find_map(|l| l.strip_prefix("OnUnitActiveSec="))
+            .unwrap();
+        let (n, unit) = span.split_at(span.len() - 1);
+        let per = match unit {
+            "h" => 3600,
+            "d" => 24 * 3600,
+            "w" => 7 * 24 * 3600,
+            other => panic!("{other}"),
+        };
+        let settings = system_manager::settings::Settings {
+            notify: Some(interval.into()),
+            ..Default::default()
+        };
+        assert_eq!(settings.every().as_secs(), n.parse::<u64>().unwrap() * per);
+    }
 }
 
 #[test]

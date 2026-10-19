@@ -16,10 +16,11 @@ mod target;
 pub use app::App;
 #[cfg(test)]
 pub(crate) use app::tests as app_tests;
+pub use fetch::settle;
 pub use style::Style;
 pub use target::Target;
 
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -166,6 +167,10 @@ pub fn next_beat(now: Instant, pace: Duration) -> Instant {
 
 pub type PageId = u64;
 
+/// Messages waiting for the interface at most. A run that prints faster than the interface takes
+/// it waits at its terminal, rather than filling memory: some 8 MiB of output at most.
+pub const QUEUE: usize = 1024;
+
 pub enum Msg {
     Key(Key),
     /// A key held down, sent again by the keyboard's repeat.
@@ -196,6 +201,8 @@ pub enum Fresh {
     Cleanup(Result<Plan, Failure>),
     Mirrors(Result<Mirrors, Failure>),
     Firmware(Result<Vec<Firmware>, Failure>),
+    /// settings.yaml written, or why not.
+    Saved(Result<(), String>),
 }
 
 pub enum Flow {
@@ -381,6 +388,8 @@ pub struct Ctx {
     pub settings: Settings,
     /// Why settings.yaml was not used, until it is written again.
     pub settings_error: Option<String>,
+    /// Why the settings chosen last could not be written, until a write succeeds.
+    pub settings_unsaved: Option<String>,
     pub state: State,
     pub themes: Vec<Theme>,
     /// User theme files that were skipped, and why.
@@ -398,7 +407,7 @@ pub struct Ctx {
     reload: bool,
     /// Shared values asked for and not yet arrived.
     pending: std::cell::Cell<usize>,
-    tx: Sender<Msg>,
+    tx: SyncSender<Msg>,
     wake: Arc<dyn Fn() + Send + Sync>,
     page: PageId,
     /// The action chosen, while it runs: the name of the run it starts.
@@ -454,11 +463,20 @@ impl Ctx {
         (self.style.spinner().into(), Tone::Accent, false)
     }
 
+    /// Writes on the thread of `fetch::serial`, and sends what came of it as a shared value.
+    fn store(&self, job: impl FnOnce() -> Fresh + Send + 'static) {
+        self.pending.set(self.pending.get() + 1);
+        let (tx, wake) = (self.tx.clone(), self.wake.clone());
+        fetch::serial(move || {
+            let _ = tx.send(Msg::Fresh(job()));
+            wake();
+        });
+    }
+
+    /// Writes the settings as they are now, behind the interface. A failure shows in Settings.
     pub fn save_settings(&mut self) {
-        match self.settings.save() {
-            Ok(()) => self.settings_error = None,
-            Err(e) => crate::error!("settings not saved: {e}"),
-        }
+        let settings = self.settings.clone();
+        self.store(move || Fresh::Saved(settings.save().map_err(|e| e.to_string())));
     }
 
     pub fn theme(&self) -> &Theme {

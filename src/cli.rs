@@ -172,9 +172,24 @@ pub fn main() -> ExitCode {
             }
         }
     };
+    // What was chosen right before quitting may still be on its way to the disk.
+    if !crate::ui::settle(WRITES) {
+        crate::warn!(
+            "settings or state still being written after {} s",
+            WRITES.as_secs()
+        );
+        eprintln!(
+            "system-manager: settings or state still being written after {} s",
+            WRITES.as_secs()
+        );
+    }
     script::cleanup();
+    crate::log::finish();
     code
 }
+
+/// How long the end waits for the settings and the state to be written.
+const WRITES: Duration = Duration::from_secs(10);
 
 /// Whether a command refuses root: makepkg does, and the files it writes would be root's in the
 /// user's home. Only reading the updates is the same for root.
@@ -220,16 +235,15 @@ fn init() -> ExitCode {
 }
 
 /// The pending updates, with the AUR helper the settings choose.
-fn pending() -> Result<Pending, Failure> {
-    let (_, features) = setup()?;
-    if let Some(p) = script::missing(op::UPDATE_LIST, &features) {
+fn pending(features: &Features) -> Result<Pending, Failure> {
+    if let Some(p) = script::missing(op::UPDATE_LIST, features) {
         return Err(Failure::new(op::UPDATE_LIST, format!("needs {p}")));
     }
     Ok(updates::parse(&query(op::UPDATE_LIST, &[])?))
 }
 
 fn check() -> ExitCode {
-    match pending() {
+    match setup().and_then(|(_, features)| pending(&features)) {
         Ok(p) => {
             print!("{}", updates::checkupdates_format(&p.updates));
             for source in &p.failed {
@@ -253,8 +267,28 @@ fn check() -> ExitCode {
     }
 }
 
-/// How long a notification waits for a click. The timer comes back within the hour anyway.
-const ANSWER: Duration = Duration::from_secs(3600);
+/// What a notification came to: the handle the script gave it, and the answer.
+#[derive(Debug, Default, PartialEq)]
+struct Answer {
+    shown: Option<String>,
+    open: bool,
+    /// The time ran out unanswered, and it still stands.
+    standing: bool,
+}
+
+impl Answer {
+    fn parse(out: &str) -> Answer {
+        let mut answer = Answer::default();
+        for line in out.lines() {
+            match line.split_once('\t') {
+                Some(("shown", handle)) => answer.shown = Some(handle.to_string()),
+                Some(("chosen", action)) => answer.open |= action == "open",
+                _ => answer.standing |= line == "standing",
+            }
+        }
+        answer
+    }
+}
 
 /// What `notify` prints instead of a notification, when it shows none.
 fn quiet(pending: usize, fresh: bool, only_new: bool) -> Option<String> {
@@ -267,9 +301,16 @@ fn quiet(pending: usize, fresh: bool, only_new: bool) -> Option<String> {
     }
 }
 
+/// Whether the updates are news: one not announced yet, or a notification still standing, which
+/// they bring up to date.
+fn fresh(now: &[String], state: &State) -> bool {
+    now.iter().any(|u| !state.notified.contains(u)) || state.notification.is_some()
+}
+
 fn notify(only_new: bool) -> ExitCode {
-    let (list, complete) = match pending() {
-        Ok(p) => (p.updates, p.failed.is_empty()),
+    let read = setup().and_then(|(settings, features)| Ok((settings, pending(&features)?)));
+    let (settings, list, complete) = match read {
+        Ok((settings, p)) => (settings, p.updates, p.failed.is_empty()),
         Err(f) => {
             crate::warn!("notify: {}", f.detail);
             return ExitCode::FAILURE;
@@ -279,9 +320,11 @@ fn notify(only_new: bool) -> ExitCode {
         .iter()
         .map(|u| format!("{} {}", u.name, u.new))
         .collect();
-    let notified = State::load().notified;
-    let fresh = now.iter().any(|u| !notified.contains(u));
-    if let Some(status) = quiet(list.len(), fresh, only_new) {
+    let state = State::load();
+    if list.is_empty() && complete {
+        crate::integration::withdraw();
+    }
+    if let Some(status) = quiet(list.len(), fresh(&now, &state), only_new) {
         // Nothing pending forgets what was announced, unless a source could not tell.
         if list.is_empty() && complete {
             State::update(|s| s.notified = now);
@@ -296,23 +339,37 @@ fn notify(only_new: bool) -> ExitCode {
         list.len(),
         &[],
     );
-    // The script stops waiting by itself. The limit catches one that does not.
-    let shown = script::query_within(
+    // It waits for a click until the timer is due again, which then replaces it. The script stops
+    // waiting by itself, the limit catches one that does not.
+    let every = settings.every();
+    let shown = script::query_lines(
         op::DESKTOP_NOTIFY,
         &[
             t("System update"),
             &text,
             t("Update"),
-            &ANSWER.as_secs().to_string(),
+            &every.as_secs().to_string(),
+            state.notification.as_deref().unwrap_or_default(),
         ],
-        ANSWER + Duration::from_secs(60),
+        every + Duration::from_secs(60),
+        // Kept as soon as it shows, so the manager can close it while it waits.
+        |line| {
+            if let Some(handle) = Answer::parse(line).shown {
+                State::update(|s| s.notification = Some(handle));
+            }
+        },
     );
+    let answer = shown.as_deref().map(Answer::parse);
     // Remembered only once shown, so one the desktop missed comes again.
-    if shown.is_ok() {
-        State::update(|s| s.notified = now);
+    if let Ok(answer) = &answer {
+        let standing = answer.shown.clone().filter(|_| answer.standing);
+        State::update(|s| {
+            s.notified = now;
+            s.notification = standing;
+        });
     }
-    match shown {
-        Ok(action) if action.trim() == "open" => {
+    match answer {
+        Ok(answer) if answer.open => {
             let exe = crate::paths::program()
                 .unwrap_or_default()
                 .display()
@@ -386,6 +443,32 @@ mod tests {
         for command in [None, Some("init"), Some("notify")] {
             assert!(refuses_root(command), "{command:?}");
         }
+    }
+
+    #[test]
+    fn a_notification_still_standing_is_brought_up_to_date_as_if_new() {
+        let now = ["linux 7.2".to_string()];
+        let mut state = State {
+            notified: now.to_vec(),
+            ..State::default()
+        };
+        assert!(!fresh(&now, &state), "announced before");
+        state.notification = Some("bus :1.5 7".into());
+        assert!(fresh(&now, &state));
+        assert_eq!(
+            Answer::parse("shown\tbus :1.5 7\nstanding\n"),
+            Answer {
+                shown: Some("bus :1.5 7".into()),
+                open: false,
+                standing: true
+            }
+        );
+        assert!(Answer::parse("shown\tbus :1.5 7\nchosen\topen\n").open);
+        assert_eq!(
+            Answer::parse(""),
+            Answer::default(),
+            "closed without an answer"
+        );
     }
 
     #[test]

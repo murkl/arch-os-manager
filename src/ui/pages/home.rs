@@ -12,8 +12,10 @@ use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct HomePage {
     list: List<Target>,
-    /// The person moved the cursor, so arriving data no longer moves it.
+    /// The person moved the cursor, so arriving data no longer moves it until they open a row.
     touched: bool,
+    /// The row last suggested, which the cursor was put on.
+    suggested: Option<Target>,
 }
 
 impl HomePage {
@@ -21,6 +23,7 @@ impl HomePage {
         HomePage {
             list: List::filterable(),
             touched: false,
+            suggested: None,
         }
     }
 
@@ -183,10 +186,13 @@ impl Page for HomePage {
             false => instruments(area, rows.len(), buf, ctx),
         };
         self.list.set(rows);
-        if !self.touched
-            && let Some(target) = HomePage::suggested(ctx)
-        {
-            self.list.focus(&target);
+        // A row that comes to be meant takes the cursor, unless the person is moving it.
+        let now = HomePage::suggested(ctx);
+        if !self.touched && !self.list.typing() && now != self.suggested {
+            if let Some(target) = now {
+                self.list.focus(&target);
+            }
+            self.suggested = now;
         }
         self.list.draw(area, buf, ctx);
     }
@@ -224,7 +230,10 @@ impl Page for HomePage {
             self.list.set(rows);
         }
         match picked {
-            Picked::Open(target) => Flow::PushAll(target.open(ctx)),
+            Picked::Open(target) => {
+                self.touched = false;
+                Flow::PushAll(target.open(ctx))
+            }
             Picked::Used => {
                 self.touched = true;
                 Flow::Stay
@@ -402,5 +411,29 @@ mod tests {
             matches!(again, Flow::Stay),
             "a second reading waits for the first"
         );
+    }
+
+    /// The row meant takes the cursor until the person moves it, and again once they opened one.
+    #[test]
+    fn a_restart_that_comes_up_takes_the_cursor_again_after_a_row_was_opened() {
+        use crate::ui::app::tests::{app, example, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        let mut cursor = |app: &mut crate::ui::App| {
+            let shown = screen(app, &mut term);
+            let row = shown.lines().find(|l| l.contains('▶')).unwrap_or_default();
+            row.to_string()
+        };
+        assert!(cursor(&mut app).contains("Update"), "updates wait");
+        press(&mut app, &[Key::Down]);
+        assert!(cursor(&mut app).contains("News"));
+        if let Loaded::Ready(system) = &mut app.ctx.shared.system {
+            system.reboot = true;
+        }
+        assert!(cursor(&mut app).contains("News"), "the person is moving it");
+        press(&mut app, &[Key::Enter, Key::Esc]);
+        assert!(cursor(&mut app).contains("Restart"), "back from the news");
     }
 }

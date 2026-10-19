@@ -15,6 +15,8 @@ aur/                        the AUR package arch-os-manager, stamped at a releas
 
 One binary carries all of it. The scripts are written to `$XDG_RUNTIME_DIR/system-manager-<pid>/` per process, readable by the user only, and removed on exit.
 
+After the start, the thread of the interface reads and writes no file. The log and the writes of `settings.yaml` and `state.yaml` each have a thread of their own, and the end waits up to 10 s for what is still on its way. At most 1024 messages wait for the interface, so a run that prints faster waits at its terminal.
+
 ```mermaid
 flowchart LR
     R[Runtime] -->|script.sh op args| S[script.sh]
@@ -34,7 +36,7 @@ flowchart LR
 | Query | none | none | 120 s | reading state, printing lines the runtime parses |
 | Run | its own pseudo terminal | answered in the interface | none | changing the system |
 
-A query may not call `sudo`, and the runtime refuses to start one whose yaml says `root: true`.
+A query may not call `sudo`, and the runtime refuses to start one whose yaml says `root: true`. It runs at nice 10, behind the interface and the runs.
 
 ### The yaml
 
@@ -158,7 +160,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 |---|---|
 | `~/.arch-os/settings.yaml` | What was chosen, an absent key being the default |
 | `~/.arch-os/themes/<id>.yaml` | Own themes |
-| `~/.arch-os/state.yaml` | News read, updates already announced |
+| `~/.arch-os/state.yaml` | News read, updates already announced, the notification still standing |
 | `~/.arch-os/logs/system-manager.log` | The runtime and every run, rotated at 2 MiB |
 | `~/.arch-os/cache/news.xml` | The feed as last loaded, for offline |
 | `~/.local/share/applications/system-manager.desktop` | The app menu entry, opening the window |
@@ -181,9 +183,11 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `flatpak` | `all`, `cleanup`, `off` | `all` |
 | `hidden-log` | messages hidden from the system log | none |
 
-A file that does not parse is left alone and named under **Settings › About**, and the defaults apply until a setting is changed. The first start or `init` takes the settings of the `arch-os` script before 2.0 over once, where none are chosen, and removes what it left. `scripts/migrate/script.sh` says how to remove this.
+A file that does not parse is left alone and named under **Settings › About**, and the defaults apply until a setting is changed. A setting that cannot be written says so under the settings until a write succeeds. The first start or `init` takes the settings of the `arch-os` script before 2.0 over once, where none are chosen, and removes what it left. `scripts/migrate/script.sh` says how to remove this.
 
 Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now, and point the update indicator at it where installed. An installer calls `init` from its chroot as the user, through a private bus of `dbus-run-session` where none answers. The entry needs a Wayland session, as the window does, the notification a desktop and libnotify. The timer announces two minutes after login and then as often as chosen.
+
+A notification stands until it is answered, and its button works until the timer comes back. Unanswered, the next one takes its place with what is pending then. Once nothing is pending, as after an update in the manager, it closes. A dismissed one comes again only with new updates.
 
 `flatpak` leaves Flatpak to another app store, such as GNOME Software: `cleanup` only removes unused runtimes, `off` leaves Flatpak alone. The check, the notification and the update indicator follow it. The setting appears only where Flatpak is installed.
 

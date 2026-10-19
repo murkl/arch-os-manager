@@ -12,7 +12,7 @@ use ratatui::crossterm::event::{
 use crate::ui::{App, FRAME, Key, Msg, Target};
 
 pub fn run(start: Option<Target>) -> std::io::Result<()> {
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(crate::ui::QUEUE);
     let console = std::env::var("TERM").is_ok_and(|t| t == "linux");
     let keys = tx.clone();
     std::thread::spawn(move || {

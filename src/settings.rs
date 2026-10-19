@@ -71,6 +71,17 @@ impl Settings {
     }
 
     /// How often updates are announced, as one of `NOTIFY`.
+    /// The time between two announcements, which the timer keeps and a notification waits for an
+    /// answer: as `notify` says, an hour where the timer is off.
+    pub fn every(&self) -> std::time::Duration {
+        let hours = match self.notify() {
+            "daily" => 24,
+            "weekly" => 7 * 24,
+            _ => 1,
+        };
+        std::time::Duration::from_secs(hours * 3600)
+    }
+
     pub fn notify(&self) -> &'static str {
         NOTIFY
             .iter()

@@ -4,6 +4,7 @@
 use crate::data::features::Features;
 use crate::script::{self, Failure, op, query};
 use crate::settings::Settings;
+use crate::state::State;
 
 /// What is in place after `apply`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -36,6 +37,22 @@ pub fn apply(settings: &Settings, features: &Features) -> Result<Applied, Failur
         ],
     )?;
     Ok(applied)
+}
+
+/// Closes the notification still standing, now that no update is pending, and forgets it.
+pub fn withdraw() {
+    let Some(handle) = State::load().notification else {
+        return;
+    };
+    if let Err(f) = query(op::DESKTOP_CLOSE, &[&handle]) {
+        crate::warn!("notification not closed: {}", f.detail);
+    }
+    // A notification shown meanwhile stays.
+    State::update(|s| {
+        if s.notification.as_ref() == Some(&handle) {
+            s.notification = None;
+        }
+    });
 }
 
 /// What the settings ask for, as far as the system offers it. The entry opens the window, so it

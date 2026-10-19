@@ -193,12 +193,16 @@ impl Page for SettingsPage {
             buf,
             ctx,
         );
-        if let Some(e) = &self.failed {
+        let unsaved = ctx
+            .settings_unsaved
+            .as_ref()
+            .map(|e| tf("settings.yaml not saved: {error}", &[("error", e)]));
+        if let Some(e) = self.failed.clone().or(unsaved) {
             put(
                 buf,
                 area.x + 2,
                 area.y + height + 1,
-                e,
+                &e,
                 area.width.saturating_sub(2),
                 ctx.style.tone(Tone::Error),
             );
@@ -691,5 +695,31 @@ mod tests {
         press(&mut app, &[Key::Enter, Key::Esc]);
         assert_eq!(app.ctx.settings.usage, None, "on is the default");
         assert!(screen(&mut app, &mut term).contains("CPU"));
+    }
+
+    /// A setting that could not be written says so under the list, until a write succeeds.
+    #[test]
+    fn a_setting_not_written_says_so_until_a_write_succeeds() {
+        use crate::ui::app::tests::{app, open, screen};
+        use crate::ui::{Fresh, Msg};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
+        app.ctx.tx = tx;
+        open(&mut app, Box::new(SettingsPage::new(None)));
+        app.handle(Msg::Fresh(Fresh::Saved(
+            Err("Read-only file system".into()),
+        )));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("settings.yaml not saved: Read-only file system"),
+            "{shown}"
+        );
+        app.ctx.save_settings();
+        let written = rx.recv_timeout(std::time::Duration::from_secs(10));
+        app.handle(written.expect("the write reports back"));
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("not saved"), "{shown}");
     }
 }
