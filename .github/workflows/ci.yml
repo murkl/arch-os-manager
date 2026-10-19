@@ -60,7 +60,6 @@ jobs:
     environment: release
     outputs:
       version: ${{ steps.please.outputs.version }}
-      tag: ${{ steps.please.outputs.tag_name }}
     steps:
       - env:
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -91,7 +90,6 @@ jobs:
     permissions:
       contents: write  # the asset
     env:
-      TAG: ${{ needs.release.outputs.tag }}
       VERSION: ${{ needs.release.outputs.version }}
     steps:
       - run: pacman -Syu --noconfirm --needed rust git openssh github-cli
@@ -100,40 +98,18 @@ jobs:
         with:
           persist-credentials: false
 
-      # The tarball lies beside the PKGBUILD, where makepkg looks first and
-      # checks it against the sum. makepkg refuses root, which the container
-      # is; cargo needs a home of the builder's own.
-      - run: |
-          tar="arch-os-manager-${VERSION}.tar.gz"
-          curl --proto '=https' --proto-redir '=https' -fsSL -o "$tar" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
-          tools/aur.sh "$VERSION" "$tar" aur-files
-          mv "$tar" aur-files/
-          useradd --create-home builder
-          chown -R builder aur-files
-          runuser -u builder -- env HOME=/home/builder bash -c 'cd aur-files && makepkg --noconfirm'
+      - run: tools/aur.sh build "$VERSION" aur-files
 
-      # The host key as https://aur.archlinux.org names its fingerprint.
       - env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
           if [ -z "$AUR_SSH_KEY" ]; then
-            echo "::error::The environment aur has no secret AUR_SSH_KEY; tools/aur-key.sh sets it, then rerun this job."
+            echo "::error::The environment aur has no secret AUR_SSH_KEY. tools/aur.sh key sets it, then rerun this job."
             exit 1
           fi
-          ssh="${RUNNER_TEMP}/ssh"
-          install -d -m 700 "$ssh"
-          printf '%s\n' "$AUR_SSH_KEY" >"${ssh}/key"
-          chmod 600 "${ssh}/key"
-          echo 'aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN' >"${ssh}/known_hosts"
-          export GIT_SSH_COMMAND="ssh -i ${ssh}/key -o IdentitiesOnly=yes -o UserKnownHostsFile=${ssh}/known_hosts -o StrictHostKeyChecking=yes"
-          tools/aur-push.sh aur-files
+          tools/aur.sh push aur-files
 
-      # The same binary the package installs. GitHub shows its sha256 beside it.
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          bin="system-manager-${VERSION}-x86_64"
-          bsdtar -xOf aur-files/arch-os-manager-"${VERSION}"-*-x86_64.pkg.tar.zst usr/bin/system-manager >"$bin"
-          gh release upload "$TAG" "$bin" --clobber
+        run: tools/aur.sh upload "$VERSION" aur-files

@@ -6,6 +6,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier};
 
+use crate::data::cleanup::Part;
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
 use crate::ui::detail::{Act, Block, Detail, done, failure, show};
@@ -908,18 +909,18 @@ fn next_steps(done: Op, ctx: &Ctx) -> Vec<Act> {
         );
     }
     if done != op::CLEANUP_RUN
-        && let Some(plan) = s
-            .cleanup
-            .ready()
-            .filter(|p| !p.orphans.is_empty() || p.bytes() >= CLEANUP_WORTH)
+        && let Some(plan) = s.cleanup.ready()
+        && let frees = super::cleanup::frees(plan, ctx)
+        && (frees >= CLEANUP_WORTH
+            || ctx.settings.cleans(Part::Orphans) && !plan.orphans.is_empty())
     {
         step(
             Target::Cleanup,
-            crate::data::format_size(plan.bytes()),
+            crate::data::format_size(frees),
             Tone::Muted,
         );
     }
-    if done != op::UPDATE_RUN
+    if done != op::UPGRADE_RUN
         && let Some(list) = s
             .updates
             .ready()
@@ -967,7 +968,7 @@ mod tests {
         open(
             &mut after,
             Box::new(RunPage::finished(
-                Job::new(op::UPDATE_RUN, Vec::new()),
+                Job::new(op::UPGRADE_RUN, Vec::new()),
                 Ok(()),
             )),
         );
@@ -982,10 +983,8 @@ mod tests {
         press(&mut asking, &[Key::Ctrl('c')]);
         assert!(asking.done(), "ctrl+c on the password");
         let (mut starting, _) = app();
-        open(
-            &mut starting,
-            Box::new(crate::ui::pages::splash::SplashPage::new()),
-        );
+        let splash = crate::ui::pages::splash::SplashPage::new(&starting.ctx);
+        open(&mut starting, Box::new(splash));
         press(&mut starting, &[Key::Ctrl('c')]);
         assert!(starting.done(), "ctrl+c on the start screen");
     }
@@ -995,11 +994,11 @@ mod tests {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
-        app.ctx.pending.set(1);
+        let _ = app.ctx.begin(None, false);
         open(
             &mut app,
             Box::new(RunPage::finished(
-                Job::new(op::UPDATE_RUN, Vec::new()),
+                Job::new(op::UPGRADE_RUN, Vec::new()),
                 Ok(()),
             )),
         );
@@ -1020,8 +1019,8 @@ mod tests {
         let asked = format!(
             ":: There are 14 providers available for x:\r\n:: Repository extra\r\n   {providers}\r\n\r\nEnter a number (default=1): "
         );
-        let run = Run::fed(op::UPDATE_RUN, "repo", &asked);
-        let mut page = RunPage::running(Job::new(op::UPDATE_RUN, Vec::new()), run);
+        let run = Run::fed(op::UPGRADE_RUN, "repo", &asked);
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
         page.prepare();
         open(&mut app, Box::new(page));
         let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 20)).unwrap();
@@ -1039,11 +1038,11 @@ mod tests {
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         sudo::forget();
         let (mut app, mut term) = app();
-        let run = Run::fed(op::UPDATE_RUN, "repo", sudo::PROMPT);
+        let run = Run::fed(op::UPGRADE_RUN, "repo", sudo::PROMPT);
         assert_eq!(run.prompt, Some(Prompt::Password));
         open(
             &mut app,
-            Box::new(RunPage::running(Job::new(op::UPDATE_RUN, Vec::new()), run)),
+            Box::new(RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run)),
         );
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);

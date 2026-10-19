@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::{env, fs, path::Path};
 
-/// Of script.yaml, only which operations it declares.
+/// Of a script's yaml, only which operations it declares.
 #[derive(Deserialize)]
 struct Meta {
     #[serde(default)]
@@ -61,15 +61,18 @@ fn main() {
     println!("cargo::rustc-env=SM_VERSION={version}");
 }
 
-/// `script::op`: a constant per operation of every `scripts/<name>/script.yaml`, `update run`
-/// as `UPDATE_RUN`, and `ALL`.
+/// `script::op`: a constant per operation of every `scripts/<name>/<name>.yaml`, `upgrade run`
+/// as `UPGRADE_RUN`, and `ALL`.
 fn ops() -> String {
     let mut found = Vec::new();
     files(Path::new("scripts"), "", &mut found);
     let mut code = String::new();
     let mut all = Vec::new();
-    for f in found.iter().filter_map(|f| f.strip_suffix("/script.yaml")) {
-        let path = format!("scripts/{f}/script.yaml");
+    for f in found.iter().filter_map(|f| {
+        let (dir, file) = f.split_once('/')?;
+        (file == format!("{dir}.yaml")).then_some(dir)
+    }) {
+        let path = format!("scripts/{f}/{f}.yaml");
         let src = fs::read_to_string(&path).unwrap();
         let meta: Meta = serde_saphyr::from_str(&src).unwrap_or_else(|e| panic!("{path}: {e}"));
         for name in meta.ops.keys() {

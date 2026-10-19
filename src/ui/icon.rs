@@ -37,7 +37,6 @@ pub const INSTALL: &str = "\u{f0b8f}";
 pub const TAKE: &str = "\u{f0b33}";
 pub const KEEP: &str = "\u{f0e29}";
 pub const COMMAND: &str = "\u{f018d}";
-pub const CACHE: &str = "\u{f003c}";
 pub const CPU: &str = "\u{f0ee0}";
 pub const MEMORY: &str = "\u{f035b}";
 pub const DISK: &str = "\u{f02ca}";

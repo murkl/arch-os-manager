@@ -1,5 +1,5 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 data="${XDG_DATA_HOME:-$HOME/.local/share}"
 entry="${data}/applications/system-manager.desktop"

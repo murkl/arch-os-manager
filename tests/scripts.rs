@@ -31,7 +31,18 @@ impl Sandbox {
         let sandbox = Sandbox { dir };
         // sudo runs the command as it is: the sandbox has nothing to elevate.
         sandbox.stub("sudo", r#"exec "$@""#);
+        // The machine's own container engines stay out of reach, unless a test asks for one.
+        for engine in ["docker", "podman"] {
+            sandbox.absent(engine);
+        }
         sandbox
+    }
+
+    /// A command that is not there, as the shell answers for one, and nothing logged.
+    fn absent(&self, command: &str) {
+        let path = self.dir.join("bin").join(command);
+        std::fs::write(&path, "#!/bin/bash\nexit 127\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     /// A command that logs its arguments, then runs `body`.
@@ -55,7 +66,7 @@ impl Sandbox {
         let output = Command::new("bash")
             .arg("-c")
             .arg(r#"exec 3>"$SM_EVENTS"; exec bash --noprofile --norc "$0" "$@""#)
-            .arg(format!("{scripts}/{script}/script.sh"))
+            .arg(format!("{scripts}/{script}/{script}.sh"))
             .args(args)
             .env(
                 "PATH",
@@ -91,7 +102,7 @@ fn updates_lists_the_repositories_then_the_aur() {
         "echo 'linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1'",
     );
     s.stub("paru", "echo 'paru-bin 2.0.0-1 -> 2.1.0-1'; exit 1");
-    let o = s.run("update", &["list"], &[("SM_AUR", "paru")]);
+    let o = s.run("upgrade", &["list"], &[("SM_AUR", "paru")]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
@@ -118,7 +129,7 @@ fn flatpak_updates_name_both_versions_else_both_commits() {
 *) exit 1 ;;
 esac"#,
     );
-    let o = s.run("update", &["list"], &[("SM_FLATPAK", "all")]);
+    let o = s.run("upgrade", &["list"], &[("SM_FLATPAK", "on")]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
@@ -135,9 +146,9 @@ fn updates_says_nothing_when_nothing_is_pending() {
     s.stub("paru", "exit 1");
     s.stub("flatpak", "exit 0");
     let o = s.run(
-        "update",
+        "upgrade",
         &["list"],
-        &[("SM_AUR", "paru"), ("SM_FLATPAK", "all")],
+        &[("SM_AUR", "paru"), ("SM_FLATPAK", "on")],
     );
     assert_eq!((o.code, o.out.as_str()), (0, ""));
 }
@@ -146,7 +157,7 @@ fn updates_says_nothing_when_nothing_is_pending() {
 fn updates_tells_an_unreachable_server_from_a_failing_helper() {
     let s = Sandbox::new("offline");
     s.stub("checkupdates", "exit 1");
-    assert_eq!(s.run("update", &["list"], &[]).code, 10);
+    assert_eq!(s.run("upgrade", &["list"], &[]).code, 10);
     s.stub(
         "checkupdates",
         "echo 'linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1'",
@@ -154,9 +165,9 @@ fn updates_tells_an_unreachable_server_from_a_failing_helper() {
     s.stub("paru", "echo 'error: could not resolve host' >&2; exit 1");
     s.stub("flatpak", "exit 1");
     let o = s.run(
-        "update",
+        "upgrade",
         &["list"],
-        &[("SM_AUR", "paru"), ("SM_FLATPAK", "all")],
+        &[("SM_AUR", "paru"), ("SM_FLATPAK", "on")],
     );
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
@@ -181,9 +192,9 @@ remote-ls) printf 'org.gnome.Platform\tx86_64\t49\ta2\t\norg.gnome.Platform\tx86
 esac"#,
     );
     let o = s.run(
-        "update",
+        "upgrade",
         &["list"],
-        &[("SM_AUR", "paru"), ("SM_FLATPAK", "all")],
+        &[("SM_AUR", "paru"), ("SM_FLATPAK", "on")],
     );
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
@@ -215,7 +226,11 @@ fn an_unexpected_failure_names_file_line_and_command() {
     assert_eq!(o.code, 1);
     let first = o.events.lines().next().unwrap_or_default();
     let f: Vec<&str> = first.split('\t').collect();
-    assert_eq!(f[..4], ["fail", "3", "packages/script.sh", "10"], "{first}");
+    assert_eq!(
+        f[..4],
+        ["fail", "3", "packages/packages.sh", "10"],
+        "{first}"
+    );
 }
 
 /// A run holds shutdown and sleep off while it lasts, a query does not.
@@ -224,7 +239,7 @@ fn a_run_holds_shutdown_off_and_a_query_does_not() {
     let s = Sandbox::new("hold");
     s.stub("systemd-inhibit", "exit 0");
     s.stub("pacman", "exit 0");
-    let o = s.run("update", &["run"], &[("SM_RUN", "Updating the system")]);
+    let o = s.run("upgrade", &["run"], &[("SM_RUN", "Updating the system")]);
     assert_eq!(o.code, 0, "{}", o.events);
     // The lock is taken in the background, so its stand-in may log only after the run.
     let held = "systemd-inhibit --what=shutdown:sleep --mode=block --who=System Manager --why=Updating the system tail --pid=";
@@ -250,7 +265,11 @@ fn a_failure_in_a_helper_names_the_line_of_the_script() {
     let o = s.run("packages", &["search", "x"], &[]);
     let first = o.events.lines().next().unwrap_or_default();
     let f: Vec<&str> = first.split('\t').collect();
-    assert_eq!(f[..4], ["fail", "3", "packages/script.sh", "17"], "{first}");
+    assert_eq!(
+        f[..4],
+        ["fail", "3", "packages/packages.sh", "17"],
+        "{first}"
+    );
 }
 
 #[test]
@@ -436,8 +455,8 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
     for c in ["pacman", "paru", "flatpak"] {
         s.stub(c, "exit 0");
     }
-    let all = [("SM_AUR", "paru"), ("SM_FLATPAK", "all")];
-    let o = s.run("update", &["run"], &all);
+    let all = [("SM_AUR", "paru"), ("SM_FLATPAK", "on")];
+    let o = s.run("upgrade", &["run"], &all);
     assert_eq!(o.code, 0, "{}", o.events);
     let order: Vec<&str> = o.calls.lines().filter(|l| !l.starts_with("sudo")).collect();
     assert_eq!(
@@ -451,7 +470,7 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
     assert_eq!(o.events, "step\trepo\nstep\taur\nstep\tflatpak\n");
     // A failing helper leaves Flatpak still to update, then says so.
     s.stub("paru", "exit 1");
-    let o = s.run("update", &["run"], &all);
+    let o = s.run("upgrade", &["run"], &all);
     assert_eq!(o.code, 11, "{}", o.events);
     assert!(
         o.calls
@@ -463,15 +482,15 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
 
 /// Where another app store updates Flatpak, the check and the update leave it out.
 #[test]
-fn updates_leave_flatpak_out_unless_all_of_it_is_handled() {
+fn updates_leave_flatpak_out_unless_its_updates_are_on() {
     let s = Sandbox::new("flatpak-out");
     for c in ["pacman", "flatpak"] {
         s.stub(c, "exit 0");
     }
     s.stub("checkupdates", "exit 2");
-    for handled in ["cleanup", "off"] {
-        let list = s.run("update", &["list"], &[("SM_FLATPAK", handled)]);
-        let run = s.run("update", &["run"], &[("SM_FLATPAK", handled)]);
+    for handled in ["off", "all"] {
+        let list = s.run("upgrade", &["list"], &[("SM_FLATPAK", handled)]);
+        let run = s.run("upgrade", &["run"], &[("SM_FLATPAK", handled)]);
         assert_eq!((list.code, run.code), (0, 0), "{}", run.events);
         assert_eq!(run.events, "step\trepo\n");
     }
@@ -1044,7 +1063,7 @@ fn cleanup_removes_a_cached_package_with_its_signature() {
         "a signature is no package of its own: {}",
         o.out
     );
-    let o = s.run("cleanup", &["run"], &[]);
+    let o = s.run("cleanup", &["run", "cache"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert!(!cache.join(package).exists());
     assert!(
@@ -1180,13 +1199,24 @@ fn a_release_replaces_what_the_aur_has() {
         touch PKGBUILD arch-os.desktop && git add -A
         git -c user.name=old -c user.email=old@example.org commit -q -m 1.9.1
         git push -q "$REMOTE" master"#);
-    sh(r#"tools/aur.sh 2.0.0 LICENSE "$DIR/stamped" && tools/aur-push.sh "$DIR/stamped""#);
+    sh(r#"tools/aur.sh stamp 2.0.0 LICENSE "$DIR/stamped" && tools/aur.sh push "$DIR/stamped""#);
     let tree = sh(r#"git -C "$REMOTE" ls-tree --name-only master"#);
     assert_eq!(tree, ".SRCINFO\nPKGBUILD\narch-os-manager.install\n");
     let commit = sh(r#"git -C "$REMOTE" log -1 --format='%an <%ae> %s' master"#);
     assert_eq!(commit, "murkl <murkl@users.noreply.github.com> 2.0.0\n");
-    assert!(sh(r#"tools/aur-push.sh "$DIR/stamped""#).contains("there already"));
+    assert!(sh(r#"tools/aur.sh push "$DIR/stamped""#).contains("there already"));
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_aur_tool_runs_only_its_own_commands() {
+    let out = Command::new("tools/aur.sh")
+        .arg("rm")
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).starts_with("usage: "));
 }
 
 #[test]
@@ -1519,11 +1549,8 @@ fn reflector_ranks_by_speed_in_the_country_of_the_time_zone_where_it_has_mirrors
     );
 }
 
-/// Unused Flatpak runtimes go unless Flatpak is left alone.
-#[test]
-fn cleanup_drops_unused_runtimes_unless_flatpak_is_left_alone() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
-    let s = Sandbox::new("cleanup-flatpak");
+/// pacman, its cache and its configuration with nothing to clean up.
+fn nothing_of_pacman(s: &Sandbox) {
     s.stub(
         "pacman-conf",
         &format!(
@@ -1539,20 +1566,23 @@ fn cleanup_drops_unused_runtimes_unless_flatpak_is_left_alone() {
         "pacman",
         r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
     );
+}
+
+/// Unused Flatpak runtimes go only where the run is asked for them, and the plan leaves Flatpak
+/// to the probe.
+#[test]
+fn cleanup_drops_unused_runtimes_only_when_asked() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
+    let s = Sandbox::new("cleanup-flatpak");
+    nothing_of_pacman(&s);
     s.stub("flatpak", "exit 0");
-    for handled in ["all", "cleanup", "off", "unknown"] {
-        let o = s.run("cleanup", &["plan"], &[("SM_FLATPAK", handled)]);
-        assert_eq!(o.code, 0, "{}", o.events);
-        let listed = o.out.lines().any(|l| l == "flatpak");
-        assert_eq!(listed, ["all", "cleanup"].contains(&handled), "{handled}");
-    }
-    for handled in ["off", "unknown"] {
-        let o = s.run("cleanup", &["run"], &[("SM_FLATPAK", handled)]);
-        assert_eq!(o.code, 0, "{}", o.events);
-    }
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let o = s.run("cleanup", &["run", "orphans", "cache", "aur"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
     let calls = std::fs::read_to_string(s.dir.join("calls")).unwrap_or_default();
     assert!(!calls.contains("flatpak"), "{calls}");
-    let o = s.run("cleanup", &["run"], &[("SM_FLATPAK", "cleanup")]);
+    let o = s.run("cleanup", &["run", "flatpak"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert!(
         o.calls
@@ -1560,6 +1590,143 @@ fn cleanup_drops_unused_runtimes_unless_flatpak_is_left_alone() {
         "{}",
         o.calls
     );
+}
+
+/// The system's Docker is asked only while it runs, at the socket systemd listens on, and only
+/// its unused images and build cache go, never a container or a volume.
+#[test]
+fn docker_is_asked_only_while_it_runs_and_keeps_containers_and_volumes() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
+    let s = Sandbox::new("cleanup-docker");
+    nothing_of_pacman(&s);
+    let socket = s.dir.join("docker.sock");
+    let state = s.dir.join("docker-state");
+    s.stub(
+        "systemctl",
+        &format!(
+            r#"read -r unit active listen <'{}'
+case "$*" in
+"cat docker.service") [ "$unit" = yes ] ;;
+"is-active --quiet docker.service") [ "$active" = yes ] ;;
+"show --property=Listen --value docker.socket") echo "$listen (Stream)" ;;
+*) exit 1 ;;
+esac"#,
+            state.display()
+        ),
+    );
+    s.stub(
+        "docker",
+        r#"case "$*" in
+--version) echo 'Docker version 29.9.1' ;;
+*" system df --format json") [ ! -e "$HOME/broken" ] && echo '{"Type":"Images","Reclaimable":"1GB (50%)"}' ;;
+*" system df --verbose --format json") echo '{"Images":[]}' ;;
+esac"#,
+    );
+    std::fs::write(&socket, "").unwrap();
+    let plan = |unit: &str, active: &str, listen: &str| {
+        std::fs::write(&state, format!("{unit} {active} {listen}\n")).unwrap();
+        let o = s.run("cleanup", &["plan"], &[]);
+        assert_eq!(o.code, 0, "{}", o.events);
+        o
+    };
+    let sock = socket.display().to_string();
+    let gone = s.dir.join("gone.sock").display().to_string();
+    assert!(!plan("no", "no", &sock).out.contains("docker"));
+    let o = plan("yes", "no", &sock);
+    assert!(o.out.ends_with("docker\tstopped\n"), "{}", o.out);
+    assert!(
+        !o.calls.contains("--host"),
+        "a stopped Docker is not asked: {}",
+        o.calls
+    );
+    assert!(plan("yes", "yes", &gone).out.ends_with("docker\tdenied\n"));
+    let o = plan("yes", "yes", &sock);
+    assert!(
+        o.out.ends_with(concat!(
+            "docker\tready\n",
+            "docker-df\t{\"Type\":\"Images\",\"Reclaimable\":\"1GB (50%)\"}\n",
+            "docker-du\t{\"Images\":[]}\n",
+        )),
+        "{}",
+        o.out
+    );
+    assert!(
+        o.calls.contains(&format!(
+            "docker --host unix://{sock} system df --format json\n"
+        )),
+        "{}",
+        o.calls
+    );
+    std::fs::write(s.dir.join("broken"), "").unwrap();
+    assert!(plan("yes", "yes", &sock).out.ends_with("docker\tfailed\n"));
+    std::fs::remove_file(s.dir.join("broken")).unwrap();
+
+    let o = s.run("cleanup", &["run", "orphans"], &[]);
+    assert!(!o.calls.contains("prune"), "{}", o.calls);
+    let o = s.run("cleanup", &["run", "docker"], &[]);
+    assert_eq!(
+        (o.code, o.events.as_str()),
+        (0, "step\tdocker\n"),
+        "{}",
+        o.calls
+    );
+    assert!(
+        o.calls.ends_with(&format!(
+            "docker --host unix://{sock} image prune --all --force\ndocker --host unix://{sock} builder prune --all --force\n"
+        )),
+        "{}",
+        o.calls
+    );
+    assert!(!o.calls.contains("volume") && !o.calls.contains("container"));
+    std::fs::write(&state, format!("yes no {sock}\n")).unwrap();
+    let o = s.run("cleanup", &["run", "docker"], &[]);
+    assert_eq!(
+        (o.code, o.events.as_str()),
+        (0, ""),
+        "a stopped Docker is left alone"
+    );
+}
+
+/// This user's Podman lists the images no container uses, and only those go.
+#[test]
+fn podman_removes_the_images_no_container_uses() {
+    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
+    let s = Sandbox::new("cleanup-podman");
+    nothing_of_pacman(&s);
+    s.stub(
+        "podman",
+        r#"case "$*" in
+--version) echo 'podman version 6.1.4' ;;
+"system df --format {{json .}}") [ ! -e "$HOME/broken" ] && echo '{"Type":"Images","RawReclaimable":8715873}' ;;
+"images --filter containers=false --format {{.Repository}}:{{.Tag}}{{\"\t\"}}{{.ID}}") printf 'docker.io/library/alpine:latest\t320994c3b997\n' ;;
+esac"#,
+    );
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.out.ends_with(concat!(
+            "podman\tready\n",
+            "podman-df\t{\"Type\":\"Images\",\"RawReclaimable\":8715873}\n",
+            "podman-image\tdocker.io/library/alpine:latest\t320994c3b997\n",
+        )),
+        "{}",
+        o.out
+    );
+    let o = s.run("cleanup", &["run", "podman"], &[]);
+    assert_eq!(
+        (o.code, o.events.as_str()),
+        (0, "step\tpodman\n"),
+        "{}",
+        o.calls
+    );
+    assert!(
+        o.calls.ends_with("podman image prune --all --force\n"),
+        "{}",
+        o.calls
+    );
+    std::fs::write(s.dir.join("broken"), "").unwrap();
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert!(o.out.ends_with("podman\tfailed\n"), "{}", o.out);
 }
 
 #[test]
@@ -1610,7 +1777,11 @@ esac"#,
         !o.out.contains("clone/pacman"),
         "an installed package keeps its build"
     );
-    let o = s.run("cleanup", &["run"], &[]);
+    // Only the parts given: the cache has nothing, so nothing goes.
+    let o = s.run("cleanup", &["run", "cache"], &[]);
+    assert_eq!((o.code, o.events.as_str()), (0, ""), "{}", o.calls);
+    assert!(!o.calls.contains("-Rns") && builds.join("gone-pkg").exists());
+    let o = s.run("cleanup", &["run", "orphans", "aur"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
     assert!(
         o.calls.contains("pacman -Rns --noconfirm -- orphan-lib\n"),
@@ -1618,4 +1789,8 @@ esac"#,
         o.calls
     );
     assert!(!builds.join("gone-pkg").exists() && builds.join("pacman").exists());
+    // A part no plan knows stops the run before anything goes.
+    let o = s.run("cleanup", &["run", "trash"], &[]);
+    assert_eq!(o.code, 1, "{}", o.events);
+    assert!(o.events.starts_with("fail\t"), "{}", o.events);
 }

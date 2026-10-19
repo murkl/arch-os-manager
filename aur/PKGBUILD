@@ -1,5 +1,5 @@
 # Maintainer: murkl <murkl@users.noreply.github.com>
-# Stamped by tools/aur.sh at a release; the placeholders are filled there.
+# Stamped by tools/aur.sh at a release, which fills the placeholders.
 
 pkgname=arch-os-manager
 pkgver={{VERSION}}

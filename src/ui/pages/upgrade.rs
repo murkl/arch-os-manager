@@ -121,7 +121,7 @@ impl UpgradePage {
         } else {
             acts.push(
                 Act::new(t("Install now"), |ctx: &mut Ctx| {
-                    Flow::Push(start(Job::new(op::UPDATE_RUN, Vec::new()), ctx))
+                    Flow::Push(start(Job::new(op::UPGRADE_RUN, Vec::new()), ctx))
                 })
                 .icon(icon::UPDATE),
             );

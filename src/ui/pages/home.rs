@@ -12,18 +12,15 @@ use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct HomePage {
     list: List<Target>,
-    /// The person moved the cursor, so arriving data no longer moves it until they open a row.
-    touched: bool,
-    /// The row last suggested, which the cursor was put on.
-    suggested: Option<Target>,
+    /// The splash covers the page: its first draw after puts the cursor on the row meant.
+    settle: bool,
 }
 
 impl HomePage {
     pub fn new() -> HomePage {
         HomePage {
             list: List::filterable(),
-            touched: false,
-            suggested: None,
+            settle: true,
         }
     }
 
@@ -149,7 +146,11 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
             other => count(other, |_| nothing.clone(), nothing.clone(), ctx),
         },
         Target::Cleanup => match &s.cleanup {
-            Loaded::Ready(plan) => (format_size(plan.bytes()), Tone::Muted, false),
+            Loaded::Ready(plan) => (
+                format_size(super::cleanup::frees(plan, ctx)),
+                Tone::Muted,
+                false,
+            ),
             Loaded::Loading => ctx.loading(),
             Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
             Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
@@ -186,13 +187,12 @@ impl Page for HomePage {
             false => instruments(area, rows.len(), buf, ctx),
         };
         self.list.set(rows);
-        // A row that comes to be meant takes the cursor, unless the person is moving it.
-        let now = HomePage::suggested(ctx);
-        if !self.touched && !self.list.typing() && now != self.suggested {
-            if let Some(target) = now {
+        // Only here, unseen, so the cursor never moves by itself before the person's eyes.
+        if self.settle {
+            if let Some(target) = HomePage::suggested(ctx) {
                 self.list.focus(&target);
             }
-            self.suggested = now;
+            self.settle = false;
         }
         self.list.draw(area, buf, ctx);
     }
@@ -221,7 +221,8 @@ impl Page for HomePage {
                 return Flow::Stay;
             }
             ctx.reload();
-            return Flow::Push(Box::new(super::splash::SplashPage::new()));
+            self.settle = true;
+            return Flow::Push(Box::new(super::splash::SplashPage::new(ctx)));
         }
         let was_typing = self.list.typing();
         let picked = self.list.key(key);
@@ -230,14 +231,8 @@ impl Page for HomePage {
             self.list.set(rows);
         }
         match picked {
-            Picked::Open(target) => {
-                self.touched = false;
-                Flow::PushAll(target.open(ctx))
-            }
-            Picked::Used => {
-                self.touched = true;
-                Flow::Stay
-            }
+            Picked::Open(target) => Flow::PushAll(target.open(ctx)),
+            Picked::Used => Flow::Stay,
             Picked::Ignored => Flow::Ignored,
         }
     }
@@ -272,9 +267,9 @@ mod tests {
         let page = HomePage::new();
         app.ctx.usage = Some(crate::data::usage::Usage::default());
         assert!(!page.animating(&app.ctx));
-        app.ctx.pending.set(1);
+        let _ = app.ctx.begin(None, false);
         assert!(page.animating(&app.ctx));
-        app.ctx.pending.set(0);
+        app.ctx.loads.clear();
         app.ctx.usage = None;
         assert!(page.animating(&app.ctx));
     }
@@ -413,27 +408,43 @@ mod tests {
         );
     }
 
-    /// The row meant takes the cursor until the person moves it, and again once they opened one.
+    /// The row meant takes the cursor behind the splash only, never before the person's eyes.
     #[test]
-    fn a_restart_that_comes_up_takes_the_cursor_again_after_a_row_was_opened() {
-        use crate::ui::app::tests::{app, example, press, screen};
+    fn the_cursor_is_put_behind_the_splash_and_never_moves_by_itself() {
+        use crate::ui::app::tests::{app, example};
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
-        let (mut app, mut term) = app();
+        let (mut app, _) = app();
         example(&mut app);
-        let mut cursor = |app: &mut crate::ui::App| {
-            let shown = screen(app, &mut term);
-            let row = shown.lines().find(|l| l.contains('▶')).unwrap_or_default();
-            row.to_string()
+        let cursor = |page: &mut HomePage, ctx: &mut Ctx| {
+            let mut buf = Buffer::empty(Rect::new(0, 0, 80, 30));
+            page.draw(Rect::new(4, 2, 72, 26), &mut buf, ctx);
+            (0..30)
+                .map(|y| (0..80).map(|x| buf[(x, y)].symbol()).collect::<String>())
+                .find(|l| l.contains('▶'))
+                .unwrap_or_default()
         };
-        assert!(cursor(&mut app).contains("Update"), "updates wait");
-        press(&mut app, &[Key::Down]);
-        assert!(cursor(&mut app).contains("News"));
+        let mut page = HomePage::new();
+        assert!(cursor(&mut page, &mut app.ctx).contains("Update"));
         if let Loaded::Ready(system) = &mut app.ctx.shared.system {
             system.reboot = true;
         }
-        assert!(cursor(&mut app).contains("News"), "the person is moving it");
-        press(&mut app, &[Key::Enter, Key::Esc]);
-        assert!(cursor(&mut app).contains("Restart"), "back from the news");
+        assert!(
+            cursor(&mut page, &mut app.ctx).contains("Update"),
+            "a value that arrives moves nothing"
+        );
+        assert!(matches!(
+            page.key(Key::Enter, &mut app.ctx),
+            Flow::PushAll(_)
+        ));
+        assert!(
+            cursor(&mut page, &mut app.ctx).contains("Update"),
+            "nor does coming back"
+        );
+        assert!(matches!(
+            page.key(Key::Char('r'), &mut app.ctx),
+            Flow::Push(_)
+        ));
+        assert!(cursor(&mut page, &mut app.ctx).contains("Restart"));
     }
 }

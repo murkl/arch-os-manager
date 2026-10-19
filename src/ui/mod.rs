@@ -35,7 +35,7 @@ use crate::data::services::Service;
 use crate::data::system::System;
 use crate::data::updates::Pending;
 use crate::data::usage::Usage;
-use crate::script::{self, Failure};
+use crate::script::{self, Failure, Op};
 use crate::settings::Settings;
 use crate::state::State;
 use crate::theme::Theme;
@@ -181,6 +181,8 @@ pub enum Msg {
     Done(PageId),
     Run(PageId, script::Event),
     Fresh(Fresh),
+    /// A reading job sent its value: its load ends.
+    Loaded(u64),
     Usage(Usage),
     /// What the old manager left, read behind the splash.
     Legacy(crate::migrate::Legacy),
@@ -384,6 +386,15 @@ pub struct Shared {
     pub firmware: Loaded<Vec<Firmware>>,
 }
 
+/// A job reading a shared value or writing settings, until its value is in.
+struct Load {
+    id: u64,
+    /// What it runs, none for a write.
+    op: Option<Op>,
+    /// From outside the machine: the splash does not wait for it.
+    remote: bool,
+}
+
 pub struct Ctx {
     pub settings: Settings,
     /// Why settings.yaml was not used, until it is written again.
@@ -405,8 +416,10 @@ pub struct Ctx {
     /// The password was proven, or is not needed, this session.
     pub authorized: bool,
     reload: bool,
-    /// Shared values asked for and not yet arrived.
-    pending: std::cell::Cell<usize>,
+    /// Jobs reading shared values or writing settings, oldest first.
+    loads: Vec<Load>,
+    /// The id of the last load.
+    load: u64,
     tx: SyncSender<Msg>,
     wake: Arc<dyn Fn() + Send + Sync>,
     page: PageId,
@@ -437,13 +450,29 @@ impl Ctx {
         }
     }
 
-    fn fresh(&self, job: impl FnOnce() -> Fresh + Send + 'static) {
-        self.pending.set(self.pending.get() + 1);
+    /// Reads a shared value off the drawing thread.
+    fn fresh(&mut self, op: Op, job: impl FnOnce() -> Fresh + Send + 'static) {
+        let send = self.begin(Some(op), false);
+        std::thread::spawn(move || send(job()));
+    }
+
+    /// As `fresh`, for a value from outside the machine, which may take long.
+    fn remote(&mut self, op: Op, job: impl FnOnce() -> Fresh + Send + 'static) {
+        let send = self.begin(Some(op), true);
+        std::thread::spawn(move || send(job()));
+    }
+
+    /// Notes a load, and returns what sends its value and then its end.
+    fn begin(&mut self, op: Option<Op>, remote: bool) -> impl FnOnce(Fresh) + Send + 'static {
+        self.load += 1;
+        let id = self.load;
+        self.loads.push(Load { id, op, remote });
         let (tx, wake) = (self.tx.clone(), self.wake.clone());
-        std::thread::spawn(move || {
-            let _ = tx.send(Msg::Fresh(job()));
+        move |fresh| {
+            let _ = tx.send(Msg::Fresh(fresh));
+            let _ = tx.send(Msg::Loaded(id));
             wake();
-        });
+        }
     }
 
     /// Reads every shared value anew once nothing is loading any more. Asked again meanwhile,
@@ -454,7 +483,18 @@ impl Ctx {
 
     /// Something loads in the background, which the header shows.
     pub fn busy(&self) -> bool {
-        self.pending.get() > 0 || self.reload
+        !self.loads.is_empty() || self.reload
+    }
+
+    /// Something of this machine still loads, which the splash waits for.
+    pub fn settling(&self) -> bool {
+        self.loads.iter().any(|l| !l.remote) || self.reload
+    }
+
+    /// What the oldest job the splash waits for does.
+    pub fn doing(&self) -> Option<&'static str> {
+        let mut near = self.loads.iter().filter(|l| !l.remote);
+        near.find_map(|l| l.op).map(Op::title)
     }
 
     /// What a row says while its value is still being read: the spinner, in the accent colour,
@@ -464,13 +504,9 @@ impl Ctx {
     }
 
     /// Writes on the thread of `fetch::serial`, and sends what came of it as a shared value.
-    fn store(&self, job: impl FnOnce() -> Fresh + Send + 'static) {
-        self.pending.set(self.pending.get() + 1);
-        let (tx, wake) = (self.tx.clone(), self.wake.clone());
-        fetch::serial(move || {
-            let _ = tx.send(Msg::Fresh(job()));
-            wake();
-        });
+    fn store(&mut self, job: impl FnOnce() -> Fresh + Send + 'static) {
+        let send = self.begin(None, false);
+        fetch::serial(move || send(job()));
     }
 
     /// Writes the settings as they are now, behind the interface. A failure shows in Settings.

@@ -1,5 +1,5 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # Each argument is package=command, the command with its arguments: a command
 # that answers works, a function of these scripts tells by itself whether it is

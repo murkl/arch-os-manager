@@ -1,5 +1,5 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # The AUR's own interface, without a helper. https://wiki.archlinux.org/title/Aurweb_RPC_interface
 rpc=https://aur.archlinux.org/rpc/
