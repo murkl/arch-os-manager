@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style as Cell;
 
-use super::draw::{cut, put, width};
+use super::draw::{cut, cut_front, put, width};
 use super::input::Input;
 use super::{Ctx, Key, Nav, Tone};
 use crate::i18n::t;
@@ -101,14 +101,15 @@ impl<I> Row<I> {
 }
 
 /// The columns of a row, as a list and a page of facts both draw it: the lead where the page
-/// has a column for it, the label and the detail, each in pieces of their own style.
+/// has a column for it, the label and the detail, each in pieces of their own style. The detail
+/// gives way at its end, or at its front where it is a change `old → new`.
 pub fn draw_row(
     buf: &mut Buffer,
     area: Rect,
     y: u16,
     (lead, column): (Lead, bool),
     label: &[(&str, Cell)],
-    detail: &[(&str, Cell)],
+    (detail, front): (&[(&str, Cell)], bool),
     ctx: &Ctx,
 ) {
     let s = &ctx.style;
@@ -125,32 +126,43 @@ pub fn draw_row(
     // Room for an icon a font draws wider than its cell, as Nerd Fonts without Mono do.
     let x = area.x + if column { 3 } else { 0 };
     let room = area.right().saturating_sub(x) as usize;
-    // The detail gets what the label leaves, at least half the row, cut at its end across the
-    // pieces it is drawn in.
-    // Pieces cut at their end to a width, across the pieces.
-    let fit = |pieces: &[(&str, Cell)], mut left: usize| {
+    // Pieces cut to a width across the pieces, from the first at their end or from the last at
+    // their front. The detail gets what the label leaves, at least half the row.
+    let fit = |pieces: &[(&str, Cell)], mut left: usize, front: bool| {
+        let mut pieces = pieces.to_vec();
+        if front {
+            pieces.reverse();
+        }
         let mut out = Vec::new();
         for (text, style) in pieces {
-            let piece = cut(text, left, s.glyphs.ellipsis);
+            let piece = match front {
+                false => cut(text, left, s.glyphs.ellipsis),
+                true if width(text) <= left => text.to_string(),
+                // Padding gives way first, without a mark.
+                true => cut_front(text.trim_start(), left, s.glyphs.ellipsis),
+            };
             left = left.saturating_sub(width(&piece));
-            let whole = piece == *text;
-            out.push((piece, *style));
+            let whole = piece == text;
+            out.push((piece, style));
             if !whole {
                 break;
             }
+        }
+        if front {
+            out.reverse();
         }
         (out, left)
     };
     let label_width: usize = label.iter().map(|(t, _)| width(t)).sum();
     let budget = (room / 2).max(room.saturating_sub(label_width + 2));
-    let (pieces, left) = fit(detail, budget);
+    let (pieces, left) = fit(detail, budget, front);
     let detail_width = budget - left;
     let label_room = room.saturating_sub(if detail_width == 0 {
         0
     } else {
         detail_width + 2
     });
-    let (name, _) = fit(label, label_room);
+    let (name, _) = fit(label, label_room, false);
     let mut lx = x;
     for (piece, style) in &name {
         lx = put(
@@ -472,7 +484,7 @@ impl<I: Clone + Ord> List<I> {
                 ly,
                 (lead, column),
                 &[(&row.label, style)],
-                &[(&row.detail, s.tone(detail_tone))],
+                (&[(&row.detail, s.tone(detail_tone))], false),
                 ctx,
             );
             if current {
@@ -565,28 +577,36 @@ mod tests {
     #[test]
     fn a_detail_takes_the_room_a_short_label_leaves_and_half_beside_a_long_one() {
         let (app, _) = crate::ui::app::tests::app();
-        let row = |label: &str| {
+        let row = |label: &str, front: bool| {
             let area = Rect::new(0, 0, 43, 1);
             let mut buf = Buffer::empty(area);
             let style = app.ctx.style.base();
-            let detail = [("1.0.10-1  →  1.0.11-1", style)];
+            let detail = [("    1.0.10-1  →  ", style), ("1.0.11-1", style)];
             draw_row(
                 &mut buf,
                 area,
                 0,
                 (Lead::None, true),
                 &[(label, style)],
-                &detail,
+                (&detail, front),
                 &app.ctx,
             );
             (0..43).map(|x| buf[(x, 0)].symbol()).collect::<String>()
         };
-        assert!(row("package-10").ends_with("1.0.10-1  →  1.0.11-1"));
-        let long = row("a-package-with-a-really-long-name");
+        assert!(row("package-10", false).ends_with("    1.0.10-1  →  1.0.11-1"));
+        let long = "a-package-with-a-really-long-name";
+        let end = row(long, false);
         assert!(
-            long.contains("a-package-with-a-…  ") && long.ends_with("1.0.11…"),
-            "{long}"
+            end.contains("a-package-with-a-…  ") && end.ends_with("→  1.…"),
+            "{end}"
         );
+        let front = row(long, true);
+        assert!(
+            front.contains("a-package-with-a-…  ") && front.ends_with("…0.10-1  →  1.0.11-1"),
+            "{front}"
+        );
+        // Padding is not content.
+        assert!(row("package-100000", true).ends_with("  1.0.10-1  →  1.0.11-1"));
     }
 
     #[test]

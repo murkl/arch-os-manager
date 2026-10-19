@@ -385,11 +385,11 @@ mod tests {
 
     #[test]
     fn reports_the_exit_code_and_the_trap_line() {
-        let (run, _) = drive("printf 'fail\\t7\\tsystem/script.sh\\t4\\tfalse\\n' >&3; exit 1");
+        let (run, _) = drive("printf 'fail\\t7\\tsystem/system.sh\\t4\\tfalse\\n' >&3; exit 1");
         let failure = run.result().unwrap().unwrap_err();
         assert_eq!(failure.code, Some(1));
         assert!(
-            failure.detail.starts_with("system/script.sh:4:"),
+            failure.detail.starts_with("system/system.sh:4:"),
             "{}",
             failure.detail
         );

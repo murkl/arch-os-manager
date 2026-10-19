@@ -86,7 +86,10 @@ impl UpgradePage {
                     if part.is_empty() {
                         continue;
                     }
-                    body.push(Block::Heading(format!("{heading} ({})", part.len())));
+                    body.push(Block::Styled(vec![vec![
+                        (heading.to_string(), Tone::Normal, true),
+                        (format!(" ({})", part.len()), Tone::Muted, false),
+                    ]]));
                     for (u, change) in part {
                         let (was, becomes) = change.clone();
                         body.push(Block::Row(
@@ -121,7 +124,7 @@ impl UpgradePage {
         } else {
             acts.push(
                 Act::new(t("Install now"), |ctx: &mut Ctx| {
-                    Flow::Push(start(Job::new(op::UPDATE_RUN, Vec::new()), ctx))
+                    Flow::Push(start(Job::new(op::UPGRADE_RUN, Vec::new()), ctx))
                 })
                 .icon(icon::UPDATE),
             );
@@ -165,5 +168,53 @@ impl Page for UpgradePage {
 
     fn animating(&self, ctx: &Ctx) -> bool {
         matches!(ctx.shared.updates, Loaded::Loading)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::app::tests::{app, example, open, screen};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::style::Modifier;
+
+    #[test]
+    fn a_heading_counts_its_updates_in_a_quiet_tone() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, mut term) = app();
+        example(&mut app);
+        open(&mut app, Box::new(UpgradePage::new()));
+        let shown = screen(&mut app, &mut term);
+        let y = shown.lines().position(|l| l.contains("AUR (1)")).unwrap();
+        let x = shown.lines().nth(y).unwrap().find("AUR").unwrap();
+        let cell = |dx: usize| &term.backend().buffer()[((x + dx) as u16, y as u16)];
+        assert!(cell(0).modifier.contains(Modifier::BOLD));
+        let count = cell(4);
+        assert_eq!(count.symbol(), "(");
+        assert_eq!(count.fg, app.ctx.style.tone(Tone::Muted).fg.unwrap());
+        assert!(!count.modifier.contains(Modifier::BOLD));
+    }
+
+    /// The old version gives way first, at its front, and padding gives way without a mark.
+    #[test]
+    fn forty_columns_keep_every_new_version_whole() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut app, _) = app();
+        example(&mut app);
+        open(&mut app, Box::new(UpgradePage::new()));
+        let mut term = Terminal::new(TestBackend::new(40, 30)).unwrap();
+        let shown = screen(&mut app, &mut term);
+        for new in [
+            "7.2.9.zen1-1",
+            "1:26.2.4-1",
+            "144.0.1-1",
+            "258.2-1",
+            "2.4.1",
+        ] {
+            assert!(shown.contains(&format!("→  {new}")), "{new}:\n{shown}");
+        }
+        let paru = shown.lines().find(|l| l.contains("paru")).unwrap();
+        assert!(paru.ends_with("2.1.0-1  →  2.1.1-1"), "{shown}");
     }
 }

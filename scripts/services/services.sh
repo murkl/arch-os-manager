@@ -1,5 +1,5 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # system or user: the loaded units with their state, then the unit files with theirs.
 op_list() {

@@ -77,6 +77,9 @@ msgstr "Info"
 msgid "An unread news item. Read it first: it may announce a step an update needs by hand."
 msgstr "Eine ungelesene Neuigkeit. Lies sie zuerst: sie kann einen Schritt ankündigen, den ein Update von Hand braucht."
 
+msgid "Any key continues"
+msgstr "Weiter mit jeder Taste"
+
 msgid "App menu entry"
 msgstr "Eintrag im App-Menü"
 
@@ -139,10 +142,10 @@ msgstr "Aufräumen"
 
 msgid ""
 "Clean up now?\n"
-"What is listed is removed for good. Three versions of every installed package stay in the cache."
+"These go for good: {parts}."
 msgstr ""
 "Jetzt aufräumen?\n"
-"Was aufgelistet ist, wird endgültig gelöscht. Von jedem installierten Paket bleiben drei Versionen im Cache."
+"Endgültig entfernt werden: {parts}."
 
 msgid "Cleaning up"
 msgstr "Wird aufgeräumt"
@@ -172,14 +175,83 @@ msgstr "Desktop"
 msgid "Do not start by itself"
 msgstr "Nicht automatisch starten"
 
+msgid "Docker images"
+msgstr "Docker-Images"
+
+msgid "Docker is not running, and asking it would start it."
+msgstr "Docker läuft nicht, und eine Anfrage würde es starten."
+
 msgid "Done"
 msgstr "Fertig"
+
+msgid "Every image is in use."
+msgstr "Jedes Image ist in Gebrauch."
+
+msgid "Every package is still needed."
+msgstr "Jedes Paket wird noch gebraucht."
+
+msgid "Flatpak updates"
+msgstr "Flatpak-Updates"
 
 msgid "Install now"
 msgstr "Jetzt installieren"
 
 msgid "Installed from extensions.gnome.org for this user. GNOME loads it at the next login."
 msgstr "Wird von extensions.gnome.org für diesen Benutzer installiert. GNOME lädt sie bei der nächsten Anmeldung."
+
+msgid "Only members of the group docker may clean up its images."
+msgstr "Nur Mitglieder der Gruppe docker dürfen seine Images aufräumen."
+
+msgid "Podman images"
+msgstr "Podman-Images"
+
+msgid "Removes what is marked, for good."
+msgstr "Entfernt endgültig, was markiert ist."
+
+msgid "Removing unused Docker images and the build cache"
+msgstr "Ungenutzte Docker-Images und der Build-Cache werden entfernt"
+
+msgid "Removing unused Podman images"
+msgstr "Ungenutzte Podman-Images werden entfernt"
+
+msgid "Runtimes no app needs any more. Flatpak finds them only while it cleans up."
+msgstr "Runtimes, die keine App mehr braucht. Flatpak findet sie erst beim Aufräumen."
+
+msgid "The build cache goes too."
+msgstr "Der Build-Cache wird mit entfernt."
+
+msgid "The build folder of {n} package no longer installed."
+msgstr "Der Build-Ordner von {n} Paket, das nicht mehr installiert ist."
+
+msgid "The build folders of {n} packages no longer installed."
+msgstr "Die Build-Ordner von {n} Paketen, die nicht mehr installiert sind."
+
+msgid "no access"
+msgstr "kein Zugriff"
+
+msgid "not running"
+msgstr "läuft nicht"
+
+msgid "{engine} did not answer."
+msgstr "{engine} hat nicht geantwortet."
+
+msgid "{n} file from the package cache. Three versions of every installed package stay."
+msgstr "{n} Datei aus dem Paket-Cache. Von jedem installierten Paket bleiben drei Versionen."
+
+msgid "{n} files from the package cache. Three versions of every installed package stay."
+msgstr "{n} Dateien aus dem Paket-Cache. Von jedem installierten Paket bleiben drei Versionen."
+
+msgid "{n} image no container uses: {names}."
+msgstr "{n} Image, das kein Container nutzt: {names}."
+
+msgid "{n} images no container uses: {names}."
+msgstr "{n} Images, die kein Container nutzt: {names}."
+
+msgid "{n} package nothing needs any more: {names}."
+msgstr "{n} Paket, das nicht mehr gebraucht wird: {names}."
+
+msgid "{n} packages nothing needs any more: {names}."
+msgstr "{n} Pakete, die nicht mehr gebraucht werden: {names}."
 
 msgid "Downloading"
 msgstr "Wird heruntergeladen"
@@ -235,21 +307,11 @@ msgstr "Aktualisiert die Firmware des Geräts"
 msgid "Flatpak apps"
 msgstr "Flatpak-Apps"
 
-msgid "Flatpak"
-msgstr "Flatpak"
-
 msgid "Updates and cleans up Flatpak apps"
 msgstr "Aktualisiert Flatpak-Apps und räumt sie auf"
 
-msgid "Flatpak looks for unused runtimes while cleaning up."
-msgstr "Flatpak sucht beim Aufräumen ungenutzte Runtimes."
-
 msgid "Flatpak runtimes"
 msgstr "Flatpak-Runtimes"
-
-
-msgid "Frees"
-msgstr "Wird frei"
 
 msgid "From"
 msgstr "Von"
@@ -1160,24 +1222,6 @@ msgstr "stündlich"
 
 msgid "every week"
 msgstr "wöchentlich"
-
-msgid "updates and clean-up"
-msgstr "Updates und Aufräumen"
-
-msgid "clean-up only"
-msgstr "nur Aufräumen"
-
-msgid "{n} package"
-msgstr "{n} Paket"
-
-msgid "{n} packages"
-msgstr "{n} Pakete"
-
-msgid "{n} build"
-msgstr "{n} Build"
-
-msgid "{n} builds"
-msgstr "{n} Builds"
 
 msgid "Interface"
 msgstr "Oberfläche"

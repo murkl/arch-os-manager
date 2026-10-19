@@ -1,5 +1,5 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # fwupdmgr ends with 2 when nothing is to update. Old metadata is refreshed by
 # fwupd-refresh.timer, which installing fwupd here enables, and asking about it

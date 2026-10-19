@@ -6,7 +6,7 @@ set -Eeuo pipefail
 shopt -s inherit_errexit nullglob
 export LC_ALL=C.UTF-8
 
-# An unexpected failure: code, file as update/script.sh, line, command. Nested
+# An unexpected failure: code, file as upgrade/upgrade.sh, line, command. Nested
 # shells report from the inside out, so the runtime reads the first line.
 trap 'sm_failed $? "$LINENO" "$BASH_COMMAND"' ERR
 sm_failed() {

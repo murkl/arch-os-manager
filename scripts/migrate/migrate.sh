@@ -1,9 +1,10 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # The Arch OS Manager 1.x, taken over once. When no 1.x is left to take over,
-# remove this folder, the MIGRATE operations in src/script/mod.rs, and
-# src/migrate.rs with its calls in src/cli.rs and src/ui/app.rs.
+# remove this folder, src/migrate.rs with its line in src/lib.rs and its calls
+# in src/cli.rs and src/ui/app.rs, and aur/arch-os-manager.install with the
+# line install= in aur/PKGBUILD.
 
 autostart="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/arch-os.desktop"
 

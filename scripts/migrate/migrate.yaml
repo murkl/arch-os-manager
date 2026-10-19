@@ -1,4 +1,4 @@
-# The Arch OS Manager 1.x, taken over once. script.sh says how to remove this.
+# The Arch OS Manager 1.x, taken over once. migrate.sh says how to remove this.
 ops:
   read:
     title: Looking for the Arch OS Manager

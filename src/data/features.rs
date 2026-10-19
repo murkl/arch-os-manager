@@ -99,9 +99,9 @@ impl Features {
         }
     }
 
-    /// What of Flatpak scripts handle: the chosen part where it is there, else nothing.
-    pub fn flatpak(&self, chosen: &'static str) -> &'static str {
-        if self.ok("flatpak") { chosen } else { "off" }
+    /// Whether scripts update Flatpak: as chosen where it is there.
+    pub fn flatpak(&self, updates: bool) -> bool {
+        updates && self.ok("flatpak")
     }
 }
 
@@ -173,11 +173,7 @@ mod tests {
         assert_eq!(only_yay.aur_helper(Some("paru")), None);
         assert_eq!(only_yay.aur_helper(None), Some("yay"));
         let flatpak = Features::parse("flatpak\tok\t1:1.18.4-1\n");
-        assert_eq!(flatpak.flatpak("cleanup"), "cleanup");
-        assert_eq!(
-            f.flatpak("all"),
-            "off",
-            "without flatpak nothing is handled"
-        );
+        assert!(flatpak.flatpak(true) && !flatpak.flatpak(false));
+        assert!(!f.flatpak(true), "without flatpak nothing is updated");
     }
 }

@@ -209,7 +209,7 @@ fn setup() -> Result<(Settings, Features), Failure> {
     );
     let features = Features::load()?;
     script::set_aur(features.aur_helper(settings.aur_helper.as_deref()));
-    script::set_flatpak(features.flatpak(settings.flatpak()));
+    script::set_flatpak(features.flatpak(settings.flatpak.unwrap_or(true)));
     Ok((settings, features))
 }
 
@@ -236,10 +236,10 @@ fn init() -> ExitCode {
 
 /// The pending updates, with the AUR helper the settings choose.
 fn pending(features: &Features) -> Result<Pending, Failure> {
-    if let Some(p) = script::missing(op::UPDATE_LIST, features) {
-        return Err(Failure::new(op::UPDATE_LIST, format!("needs {p}")));
+    if let Some(p) = script::missing(op::UPGRADE_LIST, features) {
+        return Err(Failure::new(op::UPGRADE_LIST, format!("needs {p}")));
     }
-    Ok(updates::parse(&query(op::UPDATE_LIST, &[])?))
+    Ok(updates::parse(&query(op::UPGRADE_LIST, &[])?))
 }
 
 fn check() -> ExitCode {

@@ -7,7 +7,7 @@ use super::features::FeaturesPage;
 use super::log::HiddenPage;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
-use crate::settings::{AUR_HELPERS, FLATPAK, NOTIFY};
+use crate::settings::{AUR_HELPERS, NOTIFY};
 use crate::ui::detail::{Block, Detail};
 use crate::ui::draw::put;
 use crate::ui::fetch::Task;
@@ -66,13 +66,8 @@ impl SettingsPage {
                 (text, Tone::Muted, false)
             }
             Target::Flatpak => {
-                let handled = ctx.settings.flatpak();
-                let tone = if handled == "off" {
-                    Tone::Muted
-                } else {
-                    Tone::Ok
-                };
-                (handled_label(handled).into(), tone, false)
+                let (text, tone) = on_off(ctx.settings.flatpak.unwrap_or(true));
+                (text.into(), tone, false)
             }
             Target::Notifications => {
                 let missing = ctx.features().is_some() && !ctx.available(op::DESKTOP_NOTIFY);
@@ -137,15 +132,6 @@ fn on_off(on: bool) -> (&'static str, Tone) {
     match on {
         true => (t("on"), Tone::Ok),
         false => (t("off"), Tone::Muted),
-    }
-}
-
-/// What a value of `FLATPAK` says in a sentence.
-fn handled_label(handled: &str) -> &'static str {
-    match handled {
-        "all" => t("updates and clean-up"),
-        "cleanup" => t("clean-up only"),
-        _ => t("off"),
     }
 }
 
@@ -220,7 +206,7 @@ impl Page for SettingsPage {
             Picked::Ignored => return Flow::Ignored,
         };
         match target {
-            t @ (Target::Language | Target::Theme | Target::AurHelper | Target::Flatpak) => {
+            t @ (Target::Language | Target::Theme | Target::AurHelper) => {
                 Flow::Push(choice(t, ctx))
             }
             Target::Notifications | Target::Desktop
@@ -243,6 +229,17 @@ impl Page for SettingsPage {
             Target::Usage => {
                 let on = ctx.settings.usage.unwrap_or(true);
                 ctx.settings.usage = crate::settings::switch(!on);
+                ctx.save_settings();
+                Flow::Stay
+            }
+            // The check, the update and the notification follow at once.
+            Target::Flatpak => {
+                let on = !ctx.settings.flatpak.unwrap_or(true);
+                ctx.settings.flatpak = crate::settings::switch(on);
+                if let Some(features) = ctx.features() {
+                    script::set_flatpak(features.flatpak(on));
+                }
+                ctx.reload();
                 ctx.save_settings();
                 Flow::Stay
             }
@@ -303,13 +300,6 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
                 .collect(),
             ctx.settings.notify().into(),
         ),
-        Target::Flatpak => (
-            FLATPAK
-                .iter()
-                .map(|handled| Row::new(handled.to_string(), handled_label(handled)))
-                .collect(),
-            ctx.settings.flatpak().into(),
-        ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
             let mut rows = vec![
@@ -368,14 +358,6 @@ impl ChoicePage {
             // The timer follows at the reading, which puts it in place after the packages.
             Target::Notifications => {
                 ctx.settings.notify = (id != NOTIFY[0]).then(|| id.to_string());
-                ctx.reload();
-            }
-            // The check, the update and the clean-up follow at once.
-            Target::Flatpak => {
-                ctx.settings.flatpak = (id != FLATPAK[0]).then(|| id.to_string());
-                if let Some(features) = ctx.features() {
-                    script::set_flatpak(features.flatpak(ctx.settings.flatpak()));
-                }
                 ctx.reload();
             }
             _ => {
@@ -578,9 +560,10 @@ mod tests {
         assert!(!spinning(Target::Notifications));
     }
 
-    /// Flatpak's row shows only where Flatpak is there. Its choice is stored and read anew.
+    /// Flatpak's row shows only where Flatpak is there. Its switch is stored and the updates read
+    /// anew.
     #[test]
-    fn flatpak_is_chosen_only_where_it_is_there() {
+    fn flatpak_updates_switch_only_where_it_is_there() {
         use crate::ui::app::tests::{app, example, open, press, screen};
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(Lang::En);
@@ -593,19 +576,17 @@ mod tests {
         example(&mut app);
         let shown = screen(&mut app, &mut term);
         let row = shown.lines().find(|l| l.contains("Flatpak"));
-        assert!(
-            row.is_some_and(|r| r.ends_with("updates and clean-up")),
-            "{shown}"
-        );
+        assert!(row.is_some_and(|r| r.ends_with("on")), "{shown}");
         for page in Target::Flatpak.open(&mut app.ctx) {
             open(&mut app, page);
         }
-        press(&mut app, &[Key::Down, Key::Enter]);
-        assert_eq!(app.ctx.settings.flatpak.as_deref(), Some("cleanup"));
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.ctx.settings.flatpak, Some(false));
         assert!(app.ctx.busy(), "the updates are read anew");
         let shown = screen(&mut app, &mut term);
         let row = shown.lines().find(|l| l.contains("Flatpak"));
-        assert!(row.is_some_and(|r| r.ends_with("clean-up only")), "{shown}");
+        assert!(row.is_some_and(|r| r.ends_with("off")), "{shown}");
         app.ctx.shared.features =
             Loaded::Ready(crate::data::features::Features::parse("flatpak\tmissing\n"));
         assert!(!screen(&mut app, &mut term).contains("Flatpak"));

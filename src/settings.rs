@@ -1,6 +1,10 @@
 //! `~/.arch-os/settings.yaml`: only what someone chose. An absent key is the default.
 
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::data::cleanup::Part;
 
 #[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -20,9 +24,16 @@ pub struct Settings {
     /// How often new updates are announced, one of `NOTIFY`, hourly unless chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notify: Option<String>,
-    /// What of Flatpak this program handles, one of `FLATPAK`, all unless chosen.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub flatpak: Option<String>,
+    /// Flatpak's updates, on unless switched off.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "flatpak"
+    )]
+    pub flatpak: Option<bool>,
+    /// The parts of the clean-up taken otherwise than `Part::default` says, by id.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub cleanup: BTreeMap<String, bool>,
     /// Journal messages like one of these, numbers aside, are left out of the log page.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_log: Vec<String>,
@@ -31,13 +42,32 @@ pub struct Settings {
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
 /// How often updates are announced, `off` for never. The first is the default.
 pub const NOTIFY: [&str; 4] = ["hourly", "daily", "weekly", "off"];
-/// What of Flatpak is handled: updates and the clean-up, the clean-up only, or nothing, as where
-/// another app store updates it. The first is the default.
-pub const FLATPAK: [&str; 3] = ["all", "cleanup", "off"];
 
 /// A switch stored only as an exception: absent is on.
 pub fn switch(on: bool) -> Option<bool> {
     (!on).then_some(false)
+}
+
+/// `flatpak` as a switch, or as 2.1 and earlier wrote it: `all` for on, `cleanup` and `off` for
+/// off. Their `off` left Flatpak out of the clean-up too.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Flatpak {
+    Switch(bool),
+    Named(String),
+}
+
+fn flatpak<'de, D: Deserializer<'de>>(d: D) -> Result<Option<bool>, D::Error> {
+    match Flatpak::deserialize(d)? {
+        Flatpak::Switch(on) => Ok(switch(on)),
+        Flatpak::Named(n) => match n.as_str() {
+            "all" => Ok(None),
+            "cleanup" | "off" => Ok(Some(false)),
+            _ => Err(serde::de::Error::custom(format!(
+                "flatpak: {n} is not true or false"
+            ))),
+        },
+    }
 }
 
 impl Settings {
@@ -45,7 +75,24 @@ impl Settings {
         if src.trim().is_empty() {
             return Ok(Settings::default());
         }
-        let s: Settings = serde_saphyr::from_str(src).map_err(|e| e.to_string())?;
+        let mut s: Settings = serde_saphyr::from_str(src).map_err(|e| e.to_string())?;
+        // As text: untyped, YAML reads off as false.
+        #[derive(Deserialize)]
+        struct Before {
+            #[serde(default)]
+            flatpak: Option<String>,
+        }
+        if let Ok(Before {
+            flatpak: Some(before),
+        }) = serde_saphyr::from_str(src)
+            && before == "off"
+        {
+            s.cleanup.entry(Part::Flatpak.id().into()).or_insert(false);
+        }
+        if let Some(part) = s.cleanup.keys().find(|p| Part::from_id(p).is_none()) {
+            let ids: Vec<&str> = Part::ALL.into_iter().map(Part::id).collect();
+            return Err(format!("cleanup: {part} is not one of {}", ids.join(", ")));
+        }
         if let Some(l) = &s.language
             && crate::i18n::Lang::from_code(l).is_none()
         {
@@ -61,11 +108,6 @@ impl Settings {
             && !NOTIFY.contains(&n.as_str())
         {
             return Err(format!("notify: {n} is not one of {}", NOTIFY.join(", ")));
-        }
-        if let Some(f) = &s.flatpak
-            && !FLATPAK.contains(&f.as_str())
-        {
-            return Err(format!("flatpak: {f} is not one of {}", FLATPAK.join(", ")));
         }
         Ok(s)
     }
@@ -90,13 +132,21 @@ impl Settings {
             .unwrap_or(NOTIFY[0])
     }
 
-    /// What of Flatpak is handled, as one of `FLATPAK`.
-    pub fn flatpak(&self) -> &'static str {
-        FLATPAK
-            .iter()
+    /// Whether the clean-up takes a part, as chosen or by default.
+    pub fn cleans(&self, part: Part) -> bool {
+        self.cleanup
+            .get(part.id())
             .copied()
-            .find(|f| Some(*f) == self.flatpak.as_deref())
-            .unwrap_or(FLATPAK[0])
+            .unwrap_or(part.default())
+    }
+
+    /// Takes a part into the clean-up or out of it, stored only where that is not the default.
+    pub fn set_cleans(&mut self, part: Part, on: bool) {
+        if on == part.default() {
+            self.cleanup.remove(part.id());
+        } else {
+            self.cleanup.insert(part.id().into(), on);
+        }
     }
 
     /// The settings, or the defaults plus why the file was not usable.
@@ -140,7 +190,8 @@ mod tests {
             aur_helper: Some("yay".into()),
             app_menu: Some(false),
             notify: Some("daily".into()),
-            flatpak: Some("cleanup".into()),
+            flatpak: Some(false),
+            cleanup: BTreeMap::from([("docker".into(), true), ("flatpak".into(), false)]),
             hidden_log: vec!["ACPI Error: with space".into()],
         };
         let yaml = serde_saphyr::to_string(&s).unwrap();
@@ -154,12 +205,48 @@ mod tests {
         assert!(Settings::parse("aur-helper: pikaur").is_err());
         assert!(Settings::parse("notify: often").is_err());
         assert!(Settings::parse("flatpak: updates").is_err());
+        assert!(Settings::parse("cleanup: {trash: true}").is_err());
+        assert!(Settings::parse("cleanup: {docker: maybe}").is_err());
         assert_eq!(
             Settings::parse("notify: weekly").unwrap().notify(),
             "weekly"
         );
         assert_eq!(Settings::default().notify(), "hourly");
-        assert_eq!(Settings::parse("flatpak: off").unwrap().flatpak(), "off");
-        assert_eq!(Settings::default().flatpak(), "all");
+    }
+
+    #[test]
+    fn flatpak_as_2_1_wrote_it_keeps_its_meaning() {
+        let read = |src: &str| {
+            let s = Settings::parse(src).unwrap();
+            (s.flatpak, s.cleans(Part::Flatpak))
+        };
+        assert_eq!(read(""), (None, true));
+        assert_eq!(read("flatpak: all"), (None, true));
+        assert_eq!(read("flatpak: cleanup"), (Some(false), true));
+        assert_eq!(read("flatpak: off"), (Some(false), false));
+        assert_eq!(read("flatpak: false"), (Some(false), true));
+        assert_eq!(read("flatpak: true"), (None, true));
+        assert_eq!(
+            read("flatpak: off\ncleanup: {flatpak: true}"),
+            (Some(false), true)
+        );
+        let saved = serde_saphyr::to_string(&Settings::parse("flatpak: off").unwrap()).unwrap();
+        assert_eq!(Settings::parse(&saved).unwrap().flatpak, Some(false));
+        assert!(!saved.contains("off"), "{saved}");
+    }
+
+    #[test]
+    fn a_part_is_stored_only_where_it_is_not_the_default() {
+        let mut s = Settings::default();
+        assert!(s.cleans(Part::Orphans) && !s.cleans(Part::Docker));
+        s.set_cleans(Part::Docker, true);
+        s.set_cleans(Part::Orphans, false);
+        assert_eq!(
+            s.cleanup,
+            BTreeMap::from([("docker".into(), true), ("orphans".into(), false)])
+        );
+        s.set_cleans(Part::Docker, false);
+        s.set_cleans(Part::Orphans, true);
+        assert!(s.cleanup.is_empty());
     }
 }

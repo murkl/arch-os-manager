@@ -1,5 +1,5 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # What an update would bring: repo, aur or flatpak, the name, the version now and the
 # one to come. A source that cannot be asked is a line `failed` and its name, so the
@@ -35,7 +35,7 @@ op_list() {
     # A version is often missing or unchanged, a commit never, and read collapses empty
     # fields between tabs, so the version comes last. A name pending in two branches,
     # as a runtime may be, carries its branch.
-    if [ "$SM_FLATPAK" = all ]; then
+    if [ "$SM_FLATPAK" = on ]; then
         local installed app arch branch commit version ref old new name
         local -A versions commits pending_in
         if ! installed="$(flatpak list --columns=application,arch,branch,active,version)" ||
@@ -74,7 +74,7 @@ op_run() {
         step aur
         aur_sync -Sua || aur=$?
     fi
-    if [ "$SM_FLATPAK" = all ]; then
+    if [ "$SM_FLATPAK" = on ]; then
         step flatpak
         flatpak update --assumeyes --noninteractive
     fi

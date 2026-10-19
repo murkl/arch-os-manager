@@ -4,7 +4,7 @@ SHELL       := bash
 
 BIN := target/release/system-manager
 
-.PHONY: all build check fmt fmt-check lint test aur-check run install github clean
+.PHONY: all build check fmt fmt-check lint test aur-check run install screenshots banner github clean
 
 all: build
 
@@ -22,7 +22,7 @@ fmt-check:
 
 lint:
 	cargo clippy --all-targets --locked -- -D warnings
-	shellcheck -x scripts/lib.sh scripts/*/script.sh tools/*.sh docs/*.sh .github/settings.sh .github/release-token.sh
+	shellcheck -x scripts/*/*.sh tools/*.sh .github/*.sh
 	yamllint -s .
 	actionlint
 	zizmor --offline --quiet .github/workflows
@@ -33,7 +33,7 @@ test:
 
 # The PKGBUILD as makepkg reads it, stamped with stand-ins.
 aur-check:
-	tools/aur.sh 0.0.0 LICENSE target/aur-check
+	tools/aur.sh stamp 0.0.0 LICENSE target/aur-check
 
 # Against a throwaway configuration, the menu entry and the timer included, and
 # so the data and settings of this user that what it runs reads, such as
@@ -52,6 +52,26 @@ run:
 
 install: build
 	install -Dm755 $(BIN) "$(HOME)/.local/bin/system-manager"
+
+# The README's pictures, by hand after a visible change: the pages out of
+# example data through the window's painter, as the ignored test `screenshots`
+# in src/ui/app.rs takes them. VERSION is what the pages show, so the next
+# release can be pictured before it exists.
+screenshots:
+	rm -f docs/screenshots/*.png
+	SM_VERSION="$(VERSION)" cargo test --locked --lib ui::app::tests::screenshots -- --ignored --exact
+	ls docs/screenshots
+
+# docs/banner.png out of two screenshots, so after `make screenshots`. Of the
+# product, docs/banner.py reads the built-in theme's accent and the wordmark.
+# Needs chromium, imagemagick and FiraCode Nerd Font.
+banner:
+	mkdir -p target
+	accent="$$(sed -n 's/^ *accent: *"\(#[0-9A-Fa-f]*\)".*/\1/p' themes/nord.yaml)"; \
+	{ printf 'accent: "%s"\nlogo: |\n' "$$accent"; sed 's/^/  /' docs/wordmark.txt; } >target/product.yaml
+	python3 docs/banner.py --product target/product.yaml --logo scripts/desktop/logo.svg \
+		--card docs/screenshots/home.png --card docs/screenshots/update.png \
+		--tagline "Simply update, maintain and repair<br>Arch Linux from one place." --cell 7
 
 # The repository's settings on GitHub, out of .github/settings/. Run by hand as
 # an admin: a workflow may not change the rules it is held to.

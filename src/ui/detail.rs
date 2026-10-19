@@ -21,7 +21,7 @@ pub enum Block {
     /// Lines kept as they are, each in pieces of their own tone, bold or not.
     Styled(Vec<Vec<Span>>),
     /// A row as lists draw it: the lead column, the label and the detail on the right, both in
-    /// pieces of their own tone.
+    /// pieces of their own tone. The detail gives way at its front, where a change says least.
     Row(Lead, Vec<(String, Tone)>, Vec<(String, Tone)>),
     /// Text beside the lead column, wrapped under itself.
     Note(Lead, String, Tone),
@@ -231,7 +231,7 @@ impl Detail {
                         y,
                         (*lead, column),
                         &styled(label, s),
-                        &styled(detail, s),
+                        (&styled(detail, s), true),
                         ctx,
                     )
                 }

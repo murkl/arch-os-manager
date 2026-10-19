@@ -135,7 +135,7 @@ impl Target {
             Target::Theme => t("Theme"),
             Target::Usage => t("System usage"),
             Target::AurHelper => t("AUR helper"),
-            Target::Flatpak => t("Flatpak"),
+            Target::Flatpak => t("Flatpak updates"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
             Target::Hidden => t("Hidden messages"),
@@ -221,17 +221,13 @@ impl Target {
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
             Target::Hidden => Box::new(pages::log::HiddenPage::new()),
-            Target::Language
-            | Target::Theme
-            | Target::AurHelper
-            | Target::Flatpak
-            | Target::Notifications => {
+            Target::Language | Target::Theme | Target::AurHelper | Target::Notifications => {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),
                 ];
             }
-            Target::Usage | Target::Desktop => {
+            Target::Usage | Target::Desktop | Target::Flatpak => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };

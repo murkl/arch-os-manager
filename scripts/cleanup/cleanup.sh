@@ -1,7 +1,8 @@
-# shellcheck source=../lib.sh
-. "${BASH_SOURCE[0]%/*}/../lib.sh" || exit 1
+# shellcheck shell=bash source=../lib/lib.sh
+. "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
-# What the clean-up removes, one line each: orphan, cache, keep, aur, flatpak.
+# What the clean-up removes, one line each: orphan, cache, keep, aur, then what each container
+# engine there is says.
 op_plan() {
     local orphans names protect=() dir status key caches list file size cache base
     # Packages installed as a dependency that nothing needs any more, with their size.
@@ -62,28 +63,79 @@ op_plan() {
         fi
     done
 
-    # flatpak lists unused runtimes only while removing them.
-    case "$SM_FLATPAK" in all | cleanup) printf 'flatpak\n' ;; esac
+    docker_plan
+    podman_plan
+}
+
+# The system's Docker, asked only while it runs: its socket would start it, and with it every
+# container set to restart. The socket is where systemd listens, writable for the group docker.
+docker_plan() {
+    local socket usage images
+    if ! docker --version >/dev/null 2>&1 || ! systemctl cat docker.service >/dev/null 2>&1; then
+        return 0
+    fi
+    if ! systemctl is-active --quiet docker.service; then
+        printf 'docker\tstopped\n'
+        return 0
+    fi
+    socket="$(systemctl show --property=Listen --value docker.socket)"
+    socket="${socket%% *}"
+    if [ ! -w "$socket" ]; then
+        printf 'docker\tdenied\n'
+        return 0
+    fi
+    if ! usage="$(docker --host "unix://${socket}" system df --format json)" ||
+        ! images="$(docker --host "unix://${socket}" system df --verbose --format json)"; then
+        printf 'docker\tfailed\n'
+        return 0
+    fi
+    printf 'docker\tready\n'
+    tagged docker-df <<<"$usage"
+    tagged docker-du <<<"$images"
+}
+
+# This user's own Podman storage, which podman reads without a daemon.
+podman_plan() {
+    local usage images
+    if ! podman --version >/dev/null 2>&1; then return 0; fi
+    if ! usage="$(podman system df --format '{{json .}}')" ||
+        ! images="$(podman images --filter containers=false --format '{{.Repository}}:{{.Tag}}{{"\t"}}{{.ID}}')"; then
+        printf 'podman\tfailed\n'
+        return 0
+    fi
+    printf 'podman\tready\n'
+    tagged podman-df <<<"$usage"
+    if [ -n "$images" ]; then tagged podman-image <<<"$images"; fi
+}
+
+# Each line of standard input after a kind and a tab, as the plan's own lines are.
+tagged() {
+    local line
+    while IFS= read -r line; do printf '%s\t%s\n' "$1" "$line"; done
 }
 
 candidates() {
     paccache --dryrun --verbose --nocolor "$@" | sed -n '/^==> Candidate packages:/,/^$/{/^==>/d;/^$/d;p}'
 }
 
-# Found again right before removing, never taken from an earlier look, in a
-# shell of its own: a substitution tested by || would run the plan without errexit.
+# The parts to clean up, by id. What they remove is found again right before removing, never
+# taken from an earlier look, in a shell of its own: a substitution tested by || would run the
+# plan without errexit.
 op_run() {
-    local plan caches files builds file dir inside cache orphans
+    local plan caches files builds file dir inside cache orphans socket part taken=" $* "
+    for part; do
+        case "$part" in orphans | cache | aur | flatpak | docker | podman) ;; *) false ;; esac
+    done
     plan="$(bash "${BASH_SOURCE[0]}" plan)" || exit $?
     mapfile -t orphans < <(field orphan "$plan")
-    if [ -n "${orphans[*]}" ]; then
+    if [[ $taken == *" orphans "* ]] && [ -n "${orphans[*]}" ]; then
         step orphans
         sudo pacman -Rns --noconfirm -- "${orphans[@]}"
     fi
 
     mapfile -t caches < <(pacman-conf CacheDir)
     mapfile -t files < <(field cache "$plan")
-    if [ -n "${files[*]}" ]; then
+    if [[ $taken == *" cache "* ]] && [ -n "${files[*]}" ]; then
         step cache
         for file in "${files[@]}"; do
             inside=""
@@ -98,7 +150,7 @@ op_run() {
 
     cache="${XDG_CACHE_HOME:-$HOME/.cache}"
     mapfile -t builds < <(field aur "$plan")
-    if [ -n "${builds[*]}" ]; then
+    if [[ $taken == *" aur "* ]] && [ -n "${builds[*]}" ]; then
         step aur
         for dir in "${builds[@]}"; do
             if [[ $dir != "$cache"/paru/clone/?* && $dir != "$cache"/yay/?* ]]; then exit 11; fi
@@ -106,12 +158,25 @@ op_run() {
         rm -rf -- "${builds[@]}"
     fi
 
-    case "$SM_FLATPAK" in
-    all | cleanup)
+    # Flatpak finds unused runtimes only while removing them.
+    if [[ $taken == *" flatpak "* ]]; then
         step flatpak
         flatpak uninstall --unused --assumeyes --noninteractive
-        ;;
-    esac
+    fi
+
+    # Images first, so the build cache they shared goes free with it. Containers and volumes
+    # hold data and stay.
+    if [[ $taken == *" docker "* ]] && [ "$(field docker "$plan")" = ready ]; then
+        step docker
+        socket="$(systemctl show --property=Listen --value docker.socket)"
+        socket="${socket%% *}"
+        docker --host "unix://${socket}" image prune --all --force
+        docker --host "unix://${socket}" builder prune --all --force
+    fi
+    if [[ $taken == *" podman "* ]] && [ "$(field podman "$plan")" = ready ]; then
+        step podman
+        podman image prune --all --force
+    fi
 }
 
 # The second column of the plan's lines of one kind.

@@ -1,7 +1,7 @@
 //! The scripts in `scripts/`, the only code that touches the system, and how they run.
 //!
-//! A script is a folder: `script.sh` with one `op_<name>` function per operation, and
-//! `script.yaml` declaring them. `lib.sh` beside the folders holds what they share.
+//! A script is a folder `<name>/`: `<name>.sh` with one `op_<name>` function per operation,
+//! and `<name>.yaml` declaring them. `lib/` holds what they share.
 
 mod lines;
 mod progress;
@@ -27,7 +27,7 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::i18n::t;
 
-/// An operation of a script: `update run`, `packages install`.
+/// An operation of a script: `upgrade run`, `packages install`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Op {
     pub script: &'static str,
@@ -46,7 +46,7 @@ pub mod op {
     include!(concat!(env!("OUT_DIR"), "/ops.rs"));
 }
 
-/// `script.yaml`: the operations, and what the whole script shares.
+/// A script's yaml: the operations, and what the whole script shares.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Meta {
@@ -123,7 +123,7 @@ pub fn parse_meta(src: &[u8]) -> Result<Meta, String> {
     serde_saphyr::from_str(src).map_err(|e| e.to_string())
 }
 
-/// The yaml of a script, by its folder, `lib` being lib.yaml.
+/// The yaml of a script, by its name, `lib` being lib/lib.yaml.
 pub fn meta(script: &str) -> &'static Meta {
     static METAS: OnceLock<BTreeMap<&str, Meta>> = OnceLock::new();
     METAS
@@ -131,9 +131,10 @@ pub fn meta(script: &str) -> &'static Meta {
             crate::embedded::SCRIPTS
                 .iter()
                 .filter_map(|(path, bytes)| {
-                    let script = path
-                        .strip_suffix("/script.yaml")
-                        .or_else(|| (*path == "lib.yaml").then_some("lib"))?;
+                    let (script, file) = path.split_once('/')?;
+                    if file != format!("{script}.yaml") {
+                        return None;
+                    }
                     let meta = parse_meta(bytes).unwrap_or_else(|e| panic!("scripts/{path}: {e}"));
                     Some((script, meta))
                 })
@@ -148,7 +149,7 @@ impl Op {
         meta(self.script)
             .ops
             .get(self.name)
-            .unwrap_or_else(|| panic!("{self} is not in its script.yaml"))
+            .unwrap_or_else(|| panic!("{self} is not in its yaml"))
     }
 
     pub fn title(self) -> &'static str {
@@ -184,9 +185,9 @@ pub fn aur() -> Option<String> {
 
 static FLATPAK: Mutex<&str> = Mutex::new("off");
 
-/// What of Flatpak scripts handle, as `$SM_FLATPAK`: one of `settings::FLATPAK`.
-pub fn set_flatpak(handled: &'static str) {
-    *FLATPAK.lock().unwrap() = handled;
+/// Whether scripts update Flatpak, as `$SM_FLATPAK`: on or off.
+pub fn set_flatpak(on: bool) {
+    *FLATPAK.lock().unwrap() = if on { "on" } else { "off" };
 }
 
 static DIR: OnceLock<Result<PathBuf, String>> = OnceLock::new();
@@ -228,7 +229,7 @@ fn command(op: Op, args: &[String]) -> Result<Command, String> {
     let mut cmd = Command::new("bash");
     cmd.arg("--noprofile")
         .arg("--norc")
-        .arg(dir()?.join(op.script).join("script.sh"))
+        .arg(dir()?.join(op.script).join(format!("{}.sh", op.script)))
         .arg(op.name)
         .args(args);
     cmd.env("LC_ALL", "C.UTF-8")
@@ -358,18 +359,26 @@ impl Failure {
 mod tests {
     use super::*;
 
-    /// The folders with a script.
-    fn scripts() -> Vec<String> {
+    /// The folders that hold a file named after them with an ending, `""` for any file.
+    fn named(ending: &str) -> Vec<String> {
         let mut v: Vec<String> = crate::embedded::SCRIPTS
             .iter()
-            .filter_map(|(f, _)| f.strip_suffix("/script.sh").map(str::to_string))
+            .filter_map(|(f, _)| f.split_once('/'))
+            .filter(|(dir, file)| ending.is_empty() || *file == format!("{dir}{ending}"))
+            .map(|(dir, _)| dir.to_string())
             .collect();
         v.sort();
+        v.dedup();
         v
     }
 
+    /// The folders with operations, lib left out.
+    fn scripts() -> Vec<String> {
+        named(".sh").into_iter().filter(|s| s != "lib").collect()
+    }
+
     fn body(script: &str) -> String {
-        String::from_utf8(file(&format!("{script}/script.sh")).to_vec()).unwrap()
+        String::from_utf8(file(&format!("{script}/{script}.sh")).to_vec()).unwrap()
     }
 
     /// Each function of a script, by name, with its lines, comments left out.
@@ -393,13 +402,9 @@ mod tests {
     }
 
     #[test]
-    fn every_folder_has_both_files() {
-        let mut declared: Vec<String> = crate::embedded::SCRIPTS
-            .iter()
-            .filter_map(|(f, _)| f.strip_suffix("/script.yaml").map(str::to_string))
-            .collect();
-        declared.sort();
-        assert_eq!(scripts(), declared);
+    fn every_folder_holds_its_script_and_its_yaml() {
+        assert_eq!(named(""), named(".sh"));
+        assert_eq!(named(""), named(".yaml"));
     }
 
     #[test]
@@ -474,8 +479,8 @@ mod tests {
             assert_eq!(
                 first,
                 [
-                    "# shellcheck source=../lib.sh",
-                    ". \"${BASH_SOURCE[0]%/*}/../lib.sh\" || exit 1"
+                    "# shellcheck shell=bash source=../lib/lib.sh",
+                    ". \"${BASH_SOURCE[0]%/*}/../lib/lib.sh\" || exit 1"
                 ],
                 "{s}"
             );
@@ -528,10 +533,10 @@ mod tests {
     #[test]
     fn classify_prefers_the_declared_error_then_hints_then_the_trap() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let declared = Failure::classify(op::UPDATE_LIST, Some(10), None, vec![]);
+        let declared = Failure::classify(op::UPGRADE_LIST, Some(10), None, vec![]);
         assert!(declared.known.is_some());
         let hinted = Failure::classify(
-            op::UPDATE_RUN,
+            op::UPGRADE_RUN,
             Some(1),
             None,
             vec!["error: failed to init transaction (unable to lock database)".into()],
@@ -539,7 +544,7 @@ mod tests {
         assert!(hinted.known.unwrap().contains("locked"));
         assert_eq!(hinted.offer, Some("repair"));
         let specific = Failure::classify(
-            op::UPDATE_RUN,
+            op::UPGRADE_RUN,
             Some(1),
             None,
             vec!["error: failed to synchronize all databases (invalid or corrupted database (PGP signature))".into()],
@@ -548,13 +553,13 @@ mod tests {
         let trapped = Failure::classify(
             op::PACKAGES_INSTALLED,
             Some(1),
-            Some("fail\t3\tpackages/script.sh\t10\tsed 's/^/pkg/'"),
+            Some("fail\t3\tpackages/packages.sh\t10\tsed 's/^/pkg/'"),
             vec![],
         );
         assert_eq!(trapped.known, None);
         assert_eq!(
             trapped.detail,
-            "packages/script.sh:10: pacman -Q | sed 's/^/pkg\\t/; s/ /\\t/' (exit 3)"
+            "packages/packages.sh:10: pacman -Q | sed 's/^/pkg\\t/; s/ /\\t/' (exit 3)"
         );
     }
 }

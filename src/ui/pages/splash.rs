@@ -1,49 +1,64 @@
-//! The first three seconds of the interface and of every reload, while the values load: the
-//! Arch logo drawn line by line in a sweep of the accent, the name typed after it. Any key but
-//! **r**, which asks for the reading under way, ends it at once. Nothing waits on it.
+//! The start of the interface and of every reload, until what the machine says is in: the Arch
+//! logo drawn line by line in a sweep of the accent, the name typed after it. What comes from
+//! outside, such as the updates, loads behind the start page. A reading that takes longer turns a
+//! spinner and names what it does. Any key but **r**, which asks for the reading under way, ends it
+//! at once. Nothing waits on it.
 
 use std::time::{Duration, Instant};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
+use unicode_width::UnicodeWidthStr;
 
-use crate::ui::draw::put;
+use crate::i18n::t;
+use crate::ui::draw::{cut, geometry, put};
 use crate::ui::{Ctx, Does, Flow, Key, Nav, Page, Tone};
 
 const NAME: &str = "System Manager";
 
 /// How long each part takes, in milliseconds: a line of the logo begins every `LINE`, the name
-/// is typed a letter every `LETTER` once the last line has begun, and the whole lasts `END`.
+/// is typed a letter every `LETTER` once the last line has begun, and the whole lasts `END` at
+/// least. A reading still under way then turns a spinner, for `WAIT` at most.
 const LINE: u64 = 70;
 const FADE: u64 = 260;
 const LETTER: u64 = 28;
 pub(crate) const END: u64 = 3000;
+const WAIT: u64 = 20_000;
 
 /// Rows between the logo and the name.
 const GAP: u16 = 1;
 
 pub struct SplashPage {
     started: Instant,
+    /// The generation before the reading it covers, which begins right after it opens.
+    before: u64,
 }
 
 impl SplashPage {
-    pub fn new() -> SplashPage {
+    pub fn new(ctx: &Ctx) -> SplashPage {
         SplashPage {
             started: Instant::now(),
+            before: ctx.generation,
         }
     }
 
     /// As it looks `ms` after the start, for the screenshots.
     #[cfg(test)]
-    pub fn after(ms: u64) -> SplashPage {
+    pub fn after(ms: u64, ctx: &Ctx) -> SplashPage {
         SplashPage {
             started: Instant::now() - Duration::from_millis(ms),
+            ..SplashPage::new(ctx)
         }
     }
 
     fn at(&self) -> u64 {
         self.started.elapsed().as_millis() as u64
+    }
+
+    /// Its reading has not begun, or the machine has not said everything yet.
+    fn waiting(&self, ctx: &Ctx) -> bool {
+        ctx.generation == self.before || ctx.settling()
     }
 }
 
@@ -117,6 +132,26 @@ impl Page for SplashPage {
                 );
             }
         }
+        if at >= END && self.waiting(ctx) {
+            let share = (at - END) as f64 / FADE as f64;
+            let muted = s.base().fg(mix(s.background, s.muted, share));
+            let sx = area.x + area.width.saturating_sub(1) / 2;
+            let y = top + rows + GAP + 2 + GAP;
+            let accent = s.base().fg(mix(s.background, s.accent, share));
+            put(buf, sx, y, s.spinner(), area.width, accent);
+            let centred = |buf: &mut Buffer, y, text: &str| {
+                let text = cut(text, area.width.into(), s.glyphs.ellipsis);
+                let x = area.x + area.width.saturating_sub(text.width() as u16) / 2;
+                put(buf, x, y, &text, area.width, muted);
+            };
+            if let Some(doing) = ctx.doing() {
+                centred(buf, y + 1, doing);
+            }
+            // Where the other pages name their keys.
+            if let Some((.., bottom)) = geometry(area).filter(|g| g.3 > y + 1) {
+                centred(buf, bottom, t("Any key continues"));
+            }
+        }
     }
 
     fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
@@ -131,20 +166,34 @@ impl Page for SplashPage {
         }
     }
 
-    fn tick(&mut self, _: &mut Ctx) -> Flow {
-        if self.started.elapsed() >= Duration::from_millis(END) {
-            Flow::Pop
-        } else {
-            Flow::Stay
+    fn tick(&mut self, ctx: &mut Ctx) -> Flow {
+        let at = self.at();
+        if at < END {
+            return Flow::Stay;
         }
+        if !self.waiting(ctx) {
+            return Flow::Pop;
+        }
+        if at < WAIT {
+            return Flow::Stay;
+        }
+        crate::warn!(
+            "reading still under way after {} s, the start page shows what is in",
+            WAIT / 1000
+        );
+        Flow::Pop
     }
 
     fn animating(&self, _: &Ctx) -> bool {
         true
     }
 
+    /// Smooth until the spinner has faded in, then on the spinner's beat.
     fn pace(&self) -> Duration {
-        crate::ui::FRAME
+        match self.at() < END + FADE {
+            true => crate::ui::FRAME,
+            false => crate::ui::BEAT,
+        }
     }
 
     fn typing(&self) -> bool {
@@ -155,6 +204,64 @@ impl Page for SplashPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::Msg;
+    use crate::ui::app::tests::{app, open, screen};
+
+    #[test]
+    fn the_splash_ends_once_the_animation_has_run_and_the_machine_is_read_or_at_its_limit() {
+        let (mut app, _) = app();
+        let mut page = SplashPage::after(END, &app.ctx);
+        assert!(matches!(page.tick(&mut app.ctx), Flow::Stay), "not begun");
+        app.ctx.generation += 1;
+        app.ctx.reload = true;
+        assert!(matches!(page.tick(&mut app.ctx), Flow::Stay), "under way");
+        app.ctx.reload = false;
+        assert!(matches!(page.tick(&mut app.ctx), Flow::Pop), "in");
+
+        let mut early = SplashPage::after(0, &app.ctx);
+        app.ctx.generation += 1;
+        assert!(matches!(early.tick(&mut app.ctx), Flow::Stay), "animating");
+
+        let mut late = SplashPage::after(WAIT, &app.ctx);
+        app.ctx.generation += 1;
+        app.ctx.reload = true;
+        assert!(matches!(late.tick(&mut app.ctx), Flow::Pop), "at its limit");
+    }
+
+    #[test]
+    fn under_the_spinner_stands_the_oldest_job_of_the_machine_and_at_the_bottom_how_to_go_on() {
+        use crate::script::op;
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = SplashPage::after(END + FADE, &app.ctx);
+        app.ctx.generation += 1;
+        for (op, remote) in [
+            (op::UPGRADE_LIST, true),
+            (op::SYSTEM_STATE, false),
+            (op::SERVICES_LIST, false),
+        ] {
+            let _ = app.ctx.begin(Some(op), remote);
+        }
+        type Term = ratatui::Terminal<ratatui::backend::TestBackend>;
+        let shown = |app: &mut crate::ui::App, term: &mut Term| {
+            let drawn = SplashPage::after(END + FADE, &app.ctx);
+            open(app, Box::new(drawn));
+            screen(app, term)
+        };
+        let first = shown(&mut app, &mut term);
+        let last = first.lines().rfind(|l| !l.trim().is_empty());
+        assert!(first.contains("Reading the system state"), "{first}");
+        assert!(!first.contains("Checking for updates"), "{first}");
+        assert_eq!(last.map(str::trim), Some("Any key continues"), "{first}");
+        assert!(matches!(page.tick(&mut app.ctx), Flow::Stay), "the machine");
+        let ids: Vec<u64> = app.ctx.loads.iter().map(|l| l.id).collect();
+        app.handle(Msg::Loaded(ids[1]));
+        let next = shown(&mut app, &mut term);
+        assert!(next.contains("Listing the services"), "{next}");
+        app.handle(Msg::Loaded(ids[2]));
+        assert!(app.ctx.busy() && matches!(page.tick(&mut app.ctx), Flow::Pop));
+    }
 
     #[test]
     fn mixes_colours() {

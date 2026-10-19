@@ -58,7 +58,8 @@ impl App {
             generation: 0,
             authorized: false,
             reload: false,
-            pending: Default::default(),
+            loads: Vec::new(),
+            load: 0,
             cursor: Default::default(),
             tx: tx.clone(),
             wake: wake.clone(),
@@ -79,7 +80,8 @@ impl App {
                 app.push(page);
             }
         }
-        app.push(Box::new(pages::splash::SplashPage::new()));
+        let splash = pages::splash::SplashPage::new(&app.ctx);
+        app.push(Box::new(splash));
         app
     }
 
@@ -151,6 +153,7 @@ impl App {
             Msg::Done(id) => self.deliver(id, |page, ctx| page.done(ctx)),
             Msg::Run(id, event) => self.deliver(id, |page, ctx| page.run(event, ctx)),
             Msg::Fresh(fresh) => self.fresh(fresh),
+            Msg::Loaded(id) => self.ctx.loads.retain(|l| l.id != id),
             Msg::Usage(usage) => self.ctx.usage = Some(usage),
             Msg::Legacy(legacy) => self.legacy(legacy),
             // Elsewhere its letters would be commands, a q among them.
@@ -161,7 +164,7 @@ impl App {
             }
             Msg::Paste(_) => {}
         }
-        if self.ctx.reload && self.ctx.pending.get() == 0 {
+        if self.ctx.reload && self.ctx.loads.is_empty() {
             self.ctx.reload = false;
             self.reload();
         }
@@ -259,20 +262,22 @@ impl App {
     /// Reads every shared value anew. What is shown stays until the new value arrives.
     fn reload(&mut self) {
         self.ctx.generation += 1;
-        let ctx = &self.ctx;
-        ctx.fresh(|| Fresh::Features(Features::load()));
-        ctx.fresh(|| {
+        let ctx = &mut self.ctx;
+        ctx.fresh(op::FEATURES_PROBE, || Fresh::Features(Features::load()));
+        ctx.fresh(op::SYSTEM_STATE, || {
             Fresh::System(query(op::SYSTEM_STATE, &[]).map(|o| data::system::System::parse(&o)))
         });
-        ctx.fresh(|| Fresh::News(load_news()));
-        ctx.fresh(|| {
+        ctx.remote(op::NEWS_FETCH, || Fresh::News(load_news()));
+        ctx.fresh(op::PACKAGES_INSTALLED, || {
             Fresh::Installed(
                 query(op::PACKAGES_INSTALLED, &[]).map(|o| data::packages::parse_installed(&o)),
             )
         });
-        ctx.fresh(|| Fresh::Services(load_services()));
-        ctx.fresh(|| Fresh::Journal(query(op::LOG_ERRORS, &[]).map(|o| data::journal::parse(&o))));
-        ctx.fresh(|| {
+        ctx.fresh(op::SERVICES_LIST, || Fresh::Services(load_services()));
+        ctx.fresh(op::LOG_ERRORS, || {
+            Fresh::Journal(query(op::LOG_ERRORS, &[]).map(|o| data::journal::parse(&o)))
+        });
+        ctx.fresh(op::MIRRORS_LIST, || {
             Fresh::Mirrors(query(op::MIRRORS_LIST, &[]).map(|o| data::mirrors::Mirrors::parse(&o)))
         });
     }
@@ -280,42 +285,48 @@ impl App {
     /// The rest waits for the optional packages: which are there decides what runs.
     fn after_features(&mut self, features: &Features) {
         script::set_aur(features.aur_helper(self.ctx.settings.aur_helper.as_deref()));
-        script::set_flatpak(features.flatpak(self.ctx.settings.flatpak()));
+        script::set_flatpak(features.flatpak(self.ctx.settings.flatpak.unwrap_or(true)));
         let ctx = &mut self.ctx;
         let missing = |op| script::missing(op, features).map(str::to_string);
         macro_rules! gated {
-            ($field:ident, $script:expr, $variant:ident, $load:expr) => {
+            ($field:ident, $script:expr, $queue:ident, $variant:ident, $load:expr) => {
                 match missing($script) {
                     Some(package) => ctx.shared.$field = Loaded::Missing(package),
-                    None => ctx.fresh(move || Fresh::$variant($load)),
+                    None => ctx.$queue($script, move || Fresh::$variant($load)),
                 }
             };
         }
         gated!(
             updates,
-            op::UPDATE_LIST,
+            op::UPGRADE_LIST,
+            remote,
             Updates,
-            query(op::UPDATE_LIST, &[]).map(|o| data::updates::parse(&o))
+            query(op::UPGRADE_LIST, &[]).map(|o| data::updates::parse(&o))
         );
         gated!(
             pacnew,
             op::PACNEW_LIST,
+            fresh,
             Pacnew,
             query(op::PACNEW_LIST, &[]).map(|o| o.lines().map(str::to_string).collect())
         );
         gated!(
             cleanup,
             op::CLEANUP_PLAN,
+            fresh,
             Cleanup,
             query(op::CLEANUP_PLAN, &[]).map(|o| data::cleanup::Plan::parse(&o))
         );
-        gated!(firmware, op::FIRMWARE_LIST, Firmware, load_firmware());
+        gated!(
+            firmware,
+            op::FIRMWARE_LIST,
+            fresh,
+            Firmware,
+            load_firmware()
+        );
     }
 
     fn fresh(&mut self, fresh: Fresh) {
-        self.ctx
-            .pending
-            .set(self.ctx.pending.get().saturating_sub(1));
         let s = &mut self.ctx.shared;
         match fresh {
             Fresh::Features(r) => {
@@ -497,7 +508,8 @@ pub mod tests {
             generation: 0,
             authorized: false,
             reload: false,
-            pending: Default::default(),
+            loads: Vec::new(),
+            load: 0,
             cursor: Default::default(),
             tx,
             wake: Arc::new(|| {}),
@@ -628,7 +640,7 @@ pub mod tests {
         );
         s.pacnew = Loaded::Ready(vec!["/etc/pacman.conf.pacnew".into()]);
         s.cleanup = Loaded::Ready(Plan::parse(
-            "orphan\texample-lib\t12.00 MiB\ncache\t/var/cache/pacman/pkg/a.pkg.tar.zst\t901775360\nkeep\tlinux-zen-7.2.8.zen1-1\nflatpak\n",
+            "orphan\texample-lib\t12.00 MiB\ncache\t/var/cache/pacman/pkg/a.pkg.tar.zst\t901775360\nkeep\tlinux-zen-7.2.8.zen1-1\n",
         ));
         s.mirrors = Loaded::Ready(Mirrors {
             changed: Some(jiff::Timestamp::now() - jiff::SignedDuration::from_hours(50)),
@@ -666,7 +678,7 @@ pub mod tests {
     }
 
     /// Not a check: the screenshots in docs/, from example data through the window's painter,
-    /// twice the size it is shown at. `docs/screenshots.sh`
+    /// twice the size it is shown at. `make screenshots`
     #[test]
     #[ignore]
     fn screenshots() {
@@ -681,7 +693,8 @@ pub mod tests {
         shoot(&mut app, "home");
         press(&mut app, &[Key::Enter]);
         shoot(&mut app, "update");
-        let job = || pages::run::Job::new(op::UPDATE_RUN, Vec::new()).named(i18n::t("Install now"));
+        let job =
+            || pages::run::Job::new(op::UPGRADE_RUN, Vec::new()).named(i18n::t("Install now"));
         let output = ":: Starting full system upgrade...\r\n\
             :: Retrieving packages...\r\n\
             :: Processing package changes...\r\n\
@@ -689,7 +702,7 @@ pub mod tests {
         app.pages.truncate(1);
         app.push(Box::new(pages::run::RunPage::running(
             job(),
-            Run::fed(op::UPDATE_RUN, "repo", output),
+            Run::fed(op::UPGRADE_RUN, "repo", output),
         )));
         shoot(&mut app, "run");
         app.pages.truncate(1);
@@ -848,7 +861,7 @@ pub mod tests {
     fn every_page(app: &mut App) -> Vec<Vec<Box<dyn Page>>> {
         use crate::script::{Failure, op};
         let run = |outcome| -> Vec<Box<dyn Page>> {
-            let job = pages::run::Job::new(op::UPDATE_RUN, Vec::new());
+            let job = pages::run::Job::new(op::UPGRADE_RUN, Vec::new());
             vec![Box::new(pages::run::RunPage::finished(job, outcome))]
         };
         let locked = "error: failed to init transaction (unable to lock database)";
@@ -856,10 +869,13 @@ pub mod tests {
             .iter()
             .map(|target| target.open(&mut app.ctx))
             .collect();
-        all.push(vec![Box::new(pages::splash::SplashPage::after(2500))]);
+        all.push(vec![Box::new(pages::splash::SplashPage::after(
+            pages::splash::END + 1000,
+            &app.ctx,
+        ))]);
         all.push(run(Ok(())));
         all.push(run(Err(Failure::classify(
-            op::UPDATE_RUN,
+            op::UPGRADE_RUN,
             Some(1),
             None,
             vec![locked.into()],
@@ -918,11 +934,31 @@ pub mod tests {
     }
 
     #[test]
+    fn a_load_ends_after_its_value_and_one_from_outside_holds_no_splash() {
+        let (mut app, _) = app();
+        let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
+        app.ctx.tx = tx;
+        app.ctx.remote(op::NEWS_FETCH, || Fresh::Saved(Ok(())));
+        assert!(app.ctx.busy() && !app.ctx.settling());
+        let id = app.ctx.loads[0].id;
+        let limit = std::time::Duration::from_secs(5);
+        assert!(matches!(rx.recv_timeout(limit), Ok(Msg::Fresh(_))));
+        assert!(matches!(rx.recv_timeout(limit), Ok(Msg::Loaded(i)) if i == id));
+        app.handle(Msg::Fresh(Fresh::Saved(Ok(()))));
+        assert!(app.ctx.busy(), "a value ends no load");
+        app.handle(Msg::Loaded(id));
+        assert!(!app.ctx.busy());
+        app.ctx.fresh(op::SYSTEM_STATE, || Fresh::Saved(Ok(())));
+        assert!(app.ctx.settling());
+    }
+
+    #[test]
     fn the_splash_draws_at_every_moment() {
         let (mut app, mut term) = app();
-        for ms in 0..pages::splash::END {
+        for ms in 0..pages::splash::END + 1000 {
             app.pages.truncate(1);
-            app.push(Box::new(pages::splash::SplashPage::after(ms)));
+            let splash = pages::splash::SplashPage::after(ms, &app.ctx);
+            app.push(Box::new(splash));
             screen(&mut app, &mut term);
         }
     }

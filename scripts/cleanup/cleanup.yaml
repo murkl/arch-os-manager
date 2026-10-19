@@ -11,6 +11,8 @@ ops:
       cache: Trimming the package cache
       aur: Removing old AUR builds
       flatpak: Removing unused Flatpak runtimes
+      docker: Removing unused Docker images and the build cache
+      podman: Removing unused Podman images
 errors:
   10: |
     The snapshots cannot be read
