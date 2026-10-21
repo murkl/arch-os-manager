@@ -39,7 +39,10 @@ impl State {
         })
     }
 
+    /// Under a lock beside the file, held by the window and the timer alike: one reads,
+    /// changes and writes before the other reads, or the later write drops the earlier change.
     fn update_at(path: &Path, change: impl FnOnce(&mut State)) -> State {
+        let held = hold(&path.with_extension("lock"));
         let mut state = State::load_from(path);
         change(&mut state);
         let result = serde_saphyr::to_string(&state)
@@ -48,8 +51,28 @@ impl State {
         if let Err(e) = result {
             crate::warn!("state not saved: {e}");
         }
+        drop(held);
         state
     }
+}
+
+/// The lock file, held exclusively until it is dropped. Without one, as on a folder that cannot
+/// be written, the update goes ahead unguarded.
+fn hold(lock: &Path) -> Option<std::fs::File> {
+    if let Some(dir) = lock.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(lock)
+        .inspect_err(|e| crate::warn!("{}: {e}", lock.display()))
+        .ok()?;
+    rustix::fs::flock(&file, rustix::fs::FlockOperation::LockExclusive)
+        .inspect_err(|e| crate::warn!("{}: {e}", lock.display()))
+        .ok()?;
+    Some(file)
 }
 
 #[cfg(test)]
@@ -70,6 +93,35 @@ mod tests {
         assert_eq!(later.news_read, Some(vec!["a".into(), "b".into()]));
         std::fs::write(&path, "news-read: [unclosed").unwrap();
         assert_eq!(State::load_from(&path), State::default());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The timer and the window change the file at the same moment: the second waits for the
+    /// first and keeps its change.
+    #[test]
+    fn two_updates_at_once_keep_each_others_change() {
+        let dir = std::env::temp_dir().join(format!("sm-state-lock-{}", std::process::id()));
+        let path = dir.join("state.yaml");
+        let slow = std::thread::spawn({
+            let path = path.clone();
+            move || {
+                State::update_at(&path, |s| {
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    s.notified = vec!["linux 7.2".into()];
+                })
+            }
+        });
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let quick = State::update_at(&path, |s| s.news_read = Some(vec!["a".into()]));
+        slow.join().unwrap();
+        assert_eq!(
+            quick.notified,
+            ["linux 7.2"],
+            "read once the first was written"
+        );
+        let both = State::load_from(&path);
+        assert_eq!(both.notified, ["linux 7.2"]);
+        assert_eq!(both.news_read, Some(vec!["a".into()]));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -34,18 +34,23 @@ jobs:
     permissions:
       contents: read
     steps:
-      - run: pacman -Syu --noconfirm --needed rust shellcheck yamllint actionlint zizmor gettext pacman-contrib nodejs git
+      - run: pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      # The compiler comes from today's Arch and keys the cache with the lock
+      # file: a cache built by another one is rebuilt whole and never saved.
+      - id: rust
+        run: echo "version=$(rustc -V | cut -d' ' -f2)" >>"$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             target
-          key: cargo-${{ hashFiles('Cargo.lock') }}
+          key: cargo-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}
 
       - run: make check
 
@@ -69,7 +74,7 @@ jobs:
             exit 1
           fi
 
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7  # v5.0.0
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: please
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
@@ -94,7 +99,7 @@ jobs:
     steps:
       - run: pacman -Syu --noconfirm --needed rust git openssh github-cli
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 

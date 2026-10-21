@@ -1,9 +1,18 @@
-# The pinned actions, bumped as a pull request CI can check.
+# One pull request a week, titled as title.yml demands. A release is taken
+# after a week: a compromised one is usually pulled by then. The crates are
+# pinned by Cargo.lock and raised by hand.
+
 version: 2
+
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]

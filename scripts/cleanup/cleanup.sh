@@ -1,10 +1,10 @@
 # shellcheck shell=bash source=../lib/lib.sh
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
-# What the clean-up removes, one line each: orphan, cache, keep, aur, then what each container
+# What the clean-up removes, one line each: orphan, cache, aur, then what each container
 # engine there is says.
 op_plan() {
-    local orphans names protect=() dir status key caches list file size cache base
+    local orphans names dir caches list file size cache base
     # Packages installed as a dependency that nothing needs any more, with their size.
     orphans="$(pacman -Qdtq)" || allow 1
     if [ -n "$orphans" ]; then
@@ -12,36 +12,12 @@ op_plan() {
         pacman -Qi -- "${names[@]}" | awk -F' *: ' '/^Name /{name=$2} /^Installed Size /{print "orphan\t" name "\t" $2}'
     fi
 
-    # The Recovery rebuilds the boot files of a rolled back snapshot from the kernel
-    # package that snapshot has installed, so those stay in the cache, whatever their age.
-    if [ -d /.snapshots ]; then
-        if [ ! -r /.snapshots ] || [ ! -x /.snapshots ]; then exit 10; fi
-        for dir in /.snapshots/*/snapshot/var/lib/pacman/local/linux*/; do
-            status=0
-            grep -q -m 1 '^usr/lib/modules/[^/]*/vmlinuz$' "${dir}files" || status=$?
-            case "$status" in
-            0) protect+=("$(basename "$dir")") ;;
-            1) ;;
-            # A snapshot snapper removed meanwhile needs no kernel kept.
-            *) if [ -e "$dir" ]; then exit 10; fi ;;
-            esac
-        done
-    fi
-    mapfile -t protect < <(printf '%s\n' "${protect[@]}" | sort -u)
-    for key in "${protect[@]}"; do
-        if [ -n "$key" ]; then printf 'keep\t%s\n' "$key"; fi
-    done
-
-    # paccache's own choice, as arch-os trims by hand: three versions of what is
-    # installed, none of what is not. It lists each signature too, which goes
-    # with its package.
+    # paccache's own choice: three versions of what is installed, none of what
+    # is not. It lists each signature too, which goes with its package.
     mapfile -t caches < <(pacman-conf CacheDir)
     list="$(candidates --keep 3 && candidates --uninstalled --keep 0)"
     while read -r file; do
         if [ -z "$file" ] || [[ $file == *.sig ]]; then continue; fi
-        for key in "${protect[@]}"; do
-            if [ -n "$key" ] && [[ $file == "$key"-* ]]; then continue 2; fi
-        done
         for cache in "${caches[@]}"; do
             if [ -f "${cache%/}/$file" ]; then
                 size="$(stat -c %s "${cache%/}/$file")"

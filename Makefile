@@ -4,28 +4,41 @@ SHELL       := bash
 
 BIN := target/release/system-manager
 
-.PHONY: all build check fmt fmt-check lint test aur-check run install screenshots banner github clean
+# POSIX sh: the scripts in .github/, the same file in every project released
+# this way. Bash: the scripts the runtime runs and the tools.
+POSIX_SCRIPTS := $(wildcard .github/*.sh)
+BASH_SCRIPTS  := $(wildcard scripts/*/*.sh tools/*.sh)
+
+.PHONY: all build check secrets-check fmt fmt-check lint test aur-check run install screenshots banner github clean
 
 all: build
 
 build:
 	cargo build --release --locked
 
-# The one command that has to pass before a commit.
-check: fmt-check lint test aur-check build
+# The one command that has to pass before a commit, cheapest and loudest first.
+check: secrets-check fmt-check lint test aur-check build
+
+secrets-check:
+	gitleaks dir . --redact --no-banner
 
 fmt:
 	cargo fmt
+	shfmt -w -ln posix -i 4 $(POSIX_SCRIPTS)
+	shfmt -w -i 4 $(BASH_SCRIPTS)
 
 fmt-check:
 	cargo fmt --check
+	shfmt -d -ln posix -i 4 $(POSIX_SCRIPTS)
+	shfmt -d -i 4 $(BASH_SCRIPTS)
 
 lint:
 	cargo clippy --all-targets --locked -- -D warnings
-	shellcheck -x scripts/*/*.sh tools/*.sh .github/*.sh
+	shellcheck -s sh -S style $(POSIX_SCRIPTS)
+	shellcheck -x -S style $(BASH_SCRIPTS)
 	yamllint -s .
 	actionlint
-	zizmor --offline --quiet .github/workflows
+	zizmor --offline --persona auditor .github
 	msgfmt --check-format -o /dev/null locales/de.po
 
 test:

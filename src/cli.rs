@@ -184,7 +184,12 @@ pub fn main() -> ExitCode {
         );
     }
     script::cleanup();
-    crate::log::finish();
+    if !crate::log::finish(WRITES) {
+        eprintln!(
+            "system-manager: the log is still being written after {} s",
+            WRITES.as_secs()
+        );
+    }
     code
 }
 
