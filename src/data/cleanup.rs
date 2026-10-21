@@ -67,8 +67,6 @@ pub enum Engine {
 pub struct Plan {
     pub orphans: Vec<(String, u64)>,
     pub cache: Vec<(String, u64)>,
-    /// Kernel packages kept for a recovery from a snapshot.
-    pub kept: Vec<String>,
     pub aur: Vec<(String, u64)>,
     /// Only where it is installed.
     pub docker: Option<Engine>,
@@ -120,7 +118,6 @@ impl Plan {
                 ["cache", path, bytes] => plan
                     .cache
                     .push((path.to_string(), bytes.parse().unwrap_or(0))),
-                ["keep", key] => plan.kept.push(key.to_string()),
                 ["aur", path, bytes] => plan
                     .aur
                     .push((path.to_string(), bytes.parse().unwrap_or(0))),
@@ -291,10 +288,9 @@ mod tests {
     #[test]
     fn reads_every_part_and_sums_what_is_taken() {
         let p = Plan::parse(
-            "orphan\tfoo\t1.00 MiB\ncache\t/var/cache/pacman/pkg/a.pkg.tar.zst\t1024\nkeep\tlinux-zen-7.2.9.zen1-1\naur\t/home/u/.cache/paru/clone/x\t2048\n",
+            "orphan\tfoo\t1.00 MiB\ncache\t/var/cache/pacman/pkg/a.pkg.tar.zst\t1024\naur\t/home/u/.cache/paru/clone/x\t2048\n",
         );
         assert_eq!(p.bytes(Part::Orphans), Some(1024 * 1024));
-        assert_eq!(p.kept, ["linux-zen-7.2.9.zen1-1"]);
         assert_eq!(p.bytes(Part::Flatpak), None);
         assert_eq!(p.frees(|_| true), 1024 * 1024 + 1024 + 2048);
         assert_eq!(p.frees(|part| part == Part::Aur), 2048);

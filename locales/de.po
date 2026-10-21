@@ -827,13 +827,6 @@ msgstr ""
 "Der Pfad des Programms passt in keinen Menüeintrag\n"
 "Er enthält ein Anführungszeichen, einen Backslash, einen Backtick, ein Dollar- oder ein Prozentzeichen. Verschiebe das Programm an einen einfachen Pfad wie ~/.local/bin.\n"
 
-msgid ""
-"The snapshots cannot be read\n"
-"The package cache is trimmed only once it is known which kernels the snapshots need for a recovery. Only members of the group wheel may read /.snapshots.\n"
-msgstr ""
-"Die Snapshots sind nicht lesbar\n"
-"Der Paket-Cache wird erst bereinigt, wenn feststeht, welche Kernel die Snapshots für eine Wiederherstellung brauchen. /.snapshots lesen nur Mitglieder der Gruppe wheel.\n"
-
 msgid "The system is up to date."
 msgstr "Das System ist aktuell."
 
@@ -1161,12 +1154,6 @@ msgstr "{n} Fehler"
 
 msgid "{n} failed"
 msgstr "{n} fehlgeschlagen"
-
-msgid "{n} kernel package stays: the snapshots need it for a recovery."
-msgstr "{n} Kernel-Paket bleibt: die Snapshots brauchen es für eine Wiederherstellung."
-
-msgid "{n} kernel packages stay: the snapshots need them for a recovery."
-msgstr "{n} Kernel-Pakete bleiben: die Snapshots brauchen sie für eine Wiederherstellung."
 
 msgid "{n} open"
 msgstr "{n} offen"

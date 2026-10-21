@@ -14,9 +14,6 @@ ops:
       docker: Removing unused Docker images and the build cache
       podman: Removing unused Podman images
 errors:
-  10: |
-    The snapshots cannot be read
-    The package cache is trimmed only once it is known which kernels the snapshots need for a recovery. Only members of the group wheel may read /.snapshots.
   11: |
     A path to remove lies outside the caches
     Nothing outside the package cache and the AUR build directories is removed.

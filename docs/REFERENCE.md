@@ -292,14 +292,14 @@ A package counts when its command answers, as `probe` in `scripts/features/featu
 | `fwupd` | `fwupd-refresh.timer` enabled, so the firmware list stays current, and disabled on removal |
 | `gnome-arch-update` | The Arch Linux Updates Indicator from extensions.gnome.org in the version for this GNOME Shell, enabled for the user and loaded at the next login. Its `check-cmd`, `update-cmd` and `package-manager` run this binary. Removed with its settings, one from a package with that package |
 
-## Clean-Up and the Recovery
+## Clean-Up
 
 The clean-up page lists the parts this system has. **⏎** marks a part or takes it out, `settings.yaml` keeps the choice, and **Remove now** removes the marked parts after a question.
 
 | Part | Removes | Marked by default |
 |---|---|---|
 | `orphans` | Packages installed as a dependency that nothing needs, with `pacman -Rns` | yes |
-| `cache` | Cached package files `paccache` would remove, except kernels a snapshot needs | yes |
+| `cache` | Cached package files `paccache` would remove | yes |
 | `aur` | Build folders of paru and yay for packages no longer installed | yes |
 | `flatpak` | Runtimes no app needs, with `flatpak uninstall --unused` | yes |
 | `docker` | Images no container uses and the build cache, with `image prune --all` and `builder prune --all` | no |
@@ -307,7 +307,7 @@ The clean-up page lists the parts this system has. **⏎** marks a part or takes
 
 An image is pulled or built on purpose, as a package is installed on purpose, so neither engine is marked by default. Containers and volumes hold data and always stay.
 
-The cache keeps three versions of every installed package and none of what is gone, as `paccache -r` and `paccache -ruk0` choose. On top, every kernel package a snapshot in `/.snapshots` has installed stays: the Recovery of Arch OS rebuilds a rolled back snapshot's boot files from it. A cache it cannot judge, because `/.snapshots` is unreadable, is not trimmed.
+The cache keeps three versions of every installed package and none of what is gone, as `paccache -r` and `paccache -ruk0` choose.
 
 Docker is the system's, asked at the socket `docker.socket` listens on and only while `docker.service` runs, since asking would start it with every container set to restart. Members of the group `docker` may clean it up. Podman is this user's own storage. Each engine's sizes are its own count, from `docker system df` and `podman system df`.
 
@@ -327,7 +327,7 @@ Docker is the system's, asked at the socket `docker.socket` listens on and only 
 | `tools/aur.sh` | The AUR package: stamped, built, pushed and its binary put on the release, its key made |
 | `tools/icons.sh` | The icon font, cut from the Nerd Fonts symbols to what `src/ui/icon.rs` names |
 
-Tests run on Arch, as the CI does: the scripts against stand-ins for pacman, sudo and friends, the read-only ones against the real pacman. The kernel test of the clean-up needs root, as the CI container has.
+Tests run on Arch, as the CI does: the scripts against stand-ins for pacman, sudo and friends, the read-only ones against the real pacman.
 
 build.rs names a pre-release of the patch after the last release in `.release-please-manifest.json`, such as `1.9.2-dev`, unless `SM_VERSION` names the release, as the PKGBUILD does.
 

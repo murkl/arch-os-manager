@@ -4,13 +4,9 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Mutex;
 
 use system_manager::data::{packages, system::System};
 use system_manager::script::{op, query};
-
-/// The clean-up reads the real /.snapshots, which one test creates as root while it runs.
-static SNAPSHOTS: Mutex<()> = Mutex::new(());
 
 struct Sandbox {
     dir: PathBuf,
@@ -923,116 +919,8 @@ fn an_aur_helper_is_built_from_source_and_removed_by_its_owner() {
     );
 }
 
-/// The Recovery rebuilds a rolled back snapshot's kernel from the cache, so those files stay.
-/// Needs /.snapshots to be created, so it runs as root, as in the CI container.
-#[test]
-fn cleanup_keeps_the_kernels_the_snapshots_need() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
-    if !rustix::process::getuid().is_root() || std::path::Path::new("/.snapshots").exists() {
-        eprintln!("skipped: needs root and no /.snapshots");
-        return;
-    }
-    let local = "/.snapshots/1/snapshot/var/lib/pacman/local/linux-zen-7.2.8.zen1-1";
-    std::fs::create_dir_all(local).unwrap();
-    std::fs::write(
-        format!("{local}/files"),
-        "%FILES%\nusr/lib/modules/7.2.8-zen1-1-zen/vmlinuz\n",
-    )
-    .unwrap();
-    let s = Sandbox::new("cleanup");
-    let cache = s.dir.join("pkg");
-    std::fs::create_dir_all(&cache).unwrap();
-    let old_kernel = "linux-zen-7.2.8.zen1-1-x86_64.pkg.tar.zst";
-    let other = "foo-1.0-1-x86_64.pkg.tar.zst";
-    for f in [old_kernel, other] {
-        std::fs::write(cache.join(f), "12345").unwrap();
-    }
-    s.stub(
-        "pacman-conf",
-        &format!(
-            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
-            cache.display()
-        ),
-    );
-    s.stub(
-        "paccache",
-        &format!("echo '==> Candidate packages:'; echo '{old_kernel}'; echo '{other}'; echo"),
-    );
-    s.stub(
-        "pacman",
-        r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
-    );
-    let o = s.run("cleanup", &["plan"], &[]);
-    std::fs::remove_dir_all("/.snapshots").unwrap();
-    assert_eq!(o.code, 0, "{}", o.events);
-    assert!(
-        o.out.contains("keep\tlinux-zen-7.2.8.zen1-1\n"),
-        "{}",
-        o.out
-    );
-    assert!(
-        o.out
-            .contains(&format!("cache\t{}/{other}\t5\n", cache.display())),
-        "{}",
-        o.out
-    );
-    assert!(
-        !o.out
-            .contains(&format!("cache\t{}/{old_kernel}", cache.display())),
-        "{}",
-        o.out
-    );
-}
-
-/// A snapshot snapper removes while the clean-up reads it needs no kernel kept, and one that
-/// stays unreadable still stops the clean-up. Needs /.snapshots to be created, so it runs as
-/// root, as in the CI container.
-#[test]
-fn cleanup_passes_over_a_snapshot_removed_while_it_is_read() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
-    if !rustix::process::getuid().is_root() || std::path::Path::new("/.snapshots").exists() {
-        eprintln!("skipped: needs root and no /.snapshots");
-        return;
-    }
-    let local = "/.snapshots/1/snapshot/var/lib/pacman/local/linux-zen-7.2.8.zen1-1";
-    let s = Sandbox::new("cleanup-removed");
-    s.stub(
-        "pacman-conf",
-        &format!(
-            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
-            s.dir.join("pkg").display()
-        ),
-    );
-    s.stub(
-        "paccache",
-        "echo '==> no candidate packages found for pruning'",
-    );
-    s.stub(
-        "pacman",
-        r#"case "$1" in -Qdtq) exit 1 ;; *) exec /usr/bin/pacman "$@" ;; esac"#,
-    );
-    // grep as snapper racing it: the snapshot goes while its files are read.
-    for (grep, code) in [("rm -rf /.snapshots/1; exit 2", 0), ("exit 2", 10)] {
-        std::fs::create_dir_all(local).unwrap();
-        std::fs::write(
-            format!("{local}/files"),
-            "%FILES%\nusr/lib/modules/7.2.8-zen1-1-zen/vmlinuz\n",
-        )
-        .unwrap();
-        s.stub(
-            "grep",
-            &format!(r#"case "$*" in *"/.snapshots/"*) {grep} ;; esac; exec /usr/bin/grep "$@""#),
-        );
-        let o = s.run("cleanup", &["plan"], &[]);
-        std::fs::remove_dir_all("/.snapshots").unwrap();
-        assert_eq!(o.code, code, "{grep}: {}", o.events);
-        assert!(!o.out.contains("keep\t"), "{}", o.out);
-    }
-}
-
 #[test]
 fn cleanup_removes_a_cached_package_with_its_signature() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let s = Sandbox::new("cleanup-sig");
     let cache = s.dir.join("pkg");
     std::fs::create_dir_all(&cache).unwrap();
@@ -1572,7 +1460,6 @@ fn nothing_of_pacman(s: &Sandbox) {
 /// to the probe.
 #[test]
 fn cleanup_drops_unused_runtimes_only_when_asked() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let s = Sandbox::new("cleanup-flatpak");
     nothing_of_pacman(&s);
     s.stub("flatpak", "exit 0");
@@ -1596,7 +1483,6 @@ fn cleanup_drops_unused_runtimes_only_when_asked() {
 /// its unused images and build cache go, never a container or a volume.
 #[test]
 fn docker_is_asked_only_while_it_runs_and_keeps_containers_and_volumes() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let s = Sandbox::new("cleanup-docker");
     nothing_of_pacman(&s);
     let socket = s.dir.join("docker.sock");
@@ -1690,7 +1576,6 @@ esac"#,
 /// This user's Podman lists the images no container uses, and only those go.
 #[test]
 fn podman_removes_the_images_no_container_uses() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let s = Sandbox::new("cleanup-podman");
     nothing_of_pacman(&s);
     s.stub(
@@ -1731,7 +1616,6 @@ esac"#,
 
 #[test]
 fn cleanup_removes_orphans_and_the_builds_of_packages_gone() {
-    let _snapshots = SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner());
     let s = Sandbox::new("cleanup-builds");
     let cache = s.dir.join("pkg");
     std::fs::create_dir_all(&cache).unwrap();

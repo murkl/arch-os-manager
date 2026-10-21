@@ -24,7 +24,7 @@
 - Services of the system and the user, started, stopped or enabled
 - Errors of this boot, harmless ones hidden with one key
 - CPU, memory and disk in use, live
-- [Clean-up](REFERENCE.md#clean-up-and-the-recovery) of your choice, Docker and Podman included, that keeps what a recovery needs
+- [Clean-up](REFERENCE.md#clean-up) of your choice, Docker and Podman included
 - Config updates compared, merged or taken over
 - Mirrors ranked, firmware updated
 - A broken keyring renewed, damaged package files restored

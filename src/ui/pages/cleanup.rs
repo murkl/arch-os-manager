@@ -98,24 +98,12 @@ fn describe(plan: &Plan, item: Item, nothing: bool) -> String {
                 &[("names", &names.join(", "))],
             )
         }
-        (Part::Cache, _) => {
-            let mut text = tn(
-                "{n} file from the package cache. Three versions of every installed package stay.",
-                "{n} files from the package cache. Three versions of every installed package stay.",
-                plan.cache.len(),
-                &[],
-            );
-            if !plan.kept.is_empty() {
-                text += " ";
-                text += &tn(
-                    "{n} kernel package stays: the snapshots need it for a recovery.",
-                    "{n} kernel packages stay: the snapshots need them for a recovery.",
-                    plan.kept.len(),
-                    &[],
-                );
-            }
-            text
-        }
+        (Part::Cache, _) => tn(
+            "{n} file from the package cache. Three versions of every installed package stay.",
+            "{n} files from the package cache. Three versions of every installed package stay.",
+            plan.cache.len(),
+            &[],
+        ),
         (Part::Aur, _) => tn(
             "The build folder of {n} package no longer installed.",
             "The build folders of {n} packages no longer installed.",
@@ -280,7 +268,6 @@ mod tests {
         Plan::parse(concat!(
             "orphan\texample-lib\t12.00 MiB\n",
             "cache\t/c/a.pkg.tar.zst\t901775360\n",
-            "keep\tlinux-zen-7.2.8.zen1-1\n",
             "docker\tready\n",
             r#"docker-df	{"Type":"Images","Reclaimable":"2.1GB (60%)"}"#,
             "\n",
