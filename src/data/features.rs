@@ -124,7 +124,6 @@ mod tests {
                     .strip_prefix('\'')
                     .and_then(|l| l.split(':').next())
             })
-            .filter(|p| *p != "ttf-nerd-fonts-symbols")
             .collect();
         offered.sort();
         let mut probed: Vec<&str> = packages()

@@ -523,13 +523,13 @@ const BUS: &str = r#"case "$*" in
 *) exit 1 ;;
 esac"#;
 
-/// notify-send giving the id it replaces, else 12, on the descriptor it is told.
-const SHOWN: &str = r#"for a; do case "$a" in --id-fd=*) fd="${a#*=}" ;; --replace-id=*) id="${a#*=}" ;; esac; done
-echo "${id:-12}" >&"$fd""#;
+/// notify-send giving the id 12 on the descriptor it is told.
+const SHOWN: &str = r#"for a; do case "$a" in --id-fd=*) fd="${a#*=}" ;; esac; done
+echo 12 >&"$fd""#;
 
 #[test]
-fn a_notification_replaces_the_one_its_server_still_shows() {
-    let s = Sandbox::new("notify-replace");
+fn a_notification_closes_the_one_its_server_still_shows_first() {
+    let s = Sandbox::new("notify-close-first");
     s.stub("busctl", BUS);
     s.stub("notify-send", &format!("{SHOWN}\nexec sleep 30"));
     let notify = |handle: &str| {
@@ -545,17 +545,46 @@ fn a_notification_replaces_the_one_its_server_still_shows() {
         s.run("desktop", &args, &[])
     };
     let o = notify("bus1 :1.5 7");
-    assert_eq!(o.out, "shown\tbus1 :1.5 7\nstanding\n", "{}", o.events);
-    assert!(o.calls.contains(" --replace-id=7 "), "{}", o.calls);
+    assert_eq!(o.out, "shown\tbus1 :1.5 12\nstanding\n", "{}", o.events);
+    let shown = o.calls.find("notify-send").unwrap();
+    assert!(
+        o.calls
+            .find("CloseNotification u 7")
+            .is_some_and(|c| c < shown),
+        "{}",
+        o.calls
+    );
+    assert!(!o.calls.contains("--replace-id"), "{}", o.calls);
     // After a new login or a restarted shell, the old id names nothing of this one.
     for other in ["bus0 :1.5 7", "bus1 :1.4 7", ""] {
         let o = notify(other);
         assert_eq!(o.out, "shown\tbus1 :1.5 12\nstanding\n", "{other:?}");
-        assert!(!o.calls.contains("--replace-id"), "{other:?}: {}", o.calls);
+        assert!(
+            !o.calls.contains("CloseNotification"),
+            "{other:?}: {}",
+            o.calls
+        );
     }
-    // Without a server to name, nothing is kept to replace.
+    // A server may answer the close of one already gone with an error.
+    let refusing = BUS.replace("*CloseNotification*) ;;", "*CloseNotification*) exit 1 ;;");
+    s.stub("busctl", &refusing);
+    assert_eq!(notify("bus1 :1.5 7").out, "shown\tbus1 :1.5 12\nstanding\n");
+    // Without a server to name, nothing is kept.
     s.stub("busctl", "exit 1");
     assert_eq!(notify("bus1 :1.5 7").out, "standing\n");
+}
+
+#[test]
+fn a_notification_without_a_label_has_no_button_and_still_waits() {
+    let s = Sandbox::new("notify-plain");
+    s.stub("notify-send", "exec sleep 30");
+    let o = s.run("desktop", &["notify", "Title", "Text", "", "1"], &[]);
+    assert_eq!((o.code, o.out.as_str()), (0, "standing\n"), "{}", o.events);
+    assert!(
+        o.calls.contains(" --wait ") && !o.calls.contains("--action"),
+        "{}",
+        o.calls
+    );
 }
 
 #[test]
@@ -1094,6 +1123,58 @@ fn a_release_replaces_what_the_aur_has() {
     assert_eq!(commit, "murkl <murkl@users.noreply.github.com> 2.0.0\n");
     assert!(sh(r#"tools/aur.sh push "$DIR/stamped""#).contains("there already"));
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A release built as root, as in CI, gets what the package needs before makepkg, which builds
+/// nothing without it, as a helper installs it first.
+#[test]
+fn a_release_is_built_once_its_dependencies_are_there() {
+    let s = Sandbox::new("aur-build");
+    s.stub("id", "echo 0");
+    s.stub(
+        "curl",
+        r#"while [ "$1" != -o ]; do shift; done; echo tarball >"$2""#,
+    );
+    for command in ["pacman", "useradd", "chown"] {
+        s.stub(command, "");
+    }
+    // Only the read-back runs, as the user the test has.
+    s.stub(
+        "runuser",
+        r#"case "$*" in *--printsrcinfo*) ;; *) exit 0 ;; esac
+if [ "$(/usr/bin/id -u)" -eq 0 ]; then exec /usr/bin/runuser "$@"; fi
+while [ "$1" != -- ]; do shift; done
+shift
+exec "$@""#,
+    );
+    let built = s.dir.join("built");
+    let out = Command::new("tools/aur.sh")
+        .args(["build", "2.0.0", built.to_str().unwrap()])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("PATH", format!("{}:/usr/bin", s.dir.join("bin").display()))
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let calls = std::fs::read_to_string(s.dir.join("calls")).unwrap();
+    let srcinfo = std::fs::read_to_string(built.join(".SRCINFO")).unwrap();
+    let needed: Vec<&str> = srcinfo
+        .lines()
+        .filter_map(|l| {
+            l.strip_prefix("\tdepends = ")
+                .or_else(|| l.strip_prefix("\tmakedepends = "))
+        })
+        .collect();
+    assert!(needed.contains(&"pacman-contrib") && needed.contains(&"cargo"));
+    let install = format!("pacman -S --needed --noconfirm -- {}\n", needed.join(" "));
+    let installed = calls.find(&install);
+    assert!(
+        installed.is_some() && installed < calls.find("runuser -u builder"),
+        "{calls}"
+    );
 }
 
 #[test]

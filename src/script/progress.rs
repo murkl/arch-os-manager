@@ -14,6 +14,8 @@ pub enum Phase {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Progress {
     pub phase: Option<Phase>,
+    /// How many of `total` are through. pacman ends the line of a package at 100 %, but names
+    /// a hook as it starts.
     pub done: u32,
     pub total: u32,
     /// The package being worked on, where the line names one.
@@ -68,7 +70,10 @@ impl Progress {
             };
             *self = Progress {
                 phase: Some(phase),
-                done,
+                done: match phase {
+                    Phase::Hooks => done.saturating_sub(1),
+                    _ => done,
+                },
                 total,
                 item,
             };
@@ -132,7 +137,11 @@ mod tests {
             ":: Running post-transaction hooks...",
             "(2/9) Arming ConditionNeedsUpdate...",
         ]);
-        assert_eq!((hooks.phase, hooks.done), (Some(Phase::Hooks), 2));
+        assert_eq!(
+            (hooks.phase, hooks.done),
+            (Some(Phase::Hooks), 1),
+            "the second runs, the first is done"
+        );
         assert_eq!(
             fed(&["==> Making package: paru 2.1.0-1 (Mon)"]).item,
             "paru"

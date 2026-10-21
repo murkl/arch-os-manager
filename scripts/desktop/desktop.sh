@@ -156,20 +156,24 @@ standing() {
     printf '%s\n' "${1##* }"
 }
 
-# Title, text, the label of the one action, the seconds to wait for it, and the
-# handle of the notification still standing, which this one replaces. Prints the
-# handle of this one as soon as it shows, then the action where it was chosen, or
-# `standing` where the time ran out unanswered. GNOME takes the icon in the
-# header from the menu entry the hint names.
+# Title, text, the label of its button or nothing for none, the seconds to wait
+# for an answer, and the handle of the notification still standing, which goes
+# first. Prints the handle of this one as soon as it shows, then the action where
+# it was chosen, or `standing` where the time ran out unanswered. GNOME takes the
+# icon in the header from the menu entry the hint names.
 op_notify() {
-    local replace server id="" action waiting status=0
-    replace="$(standing "${5:-}")" || replace=""
+    local server id="" action waiting status=0
+    # Closed rather than replaced: GNOME tells only the program that showed a
+    # notification that it closed, so one replaced in its place waits for an
+    # answer that never comes. The specification answers the close of one
+    # already gone with an error.
+    op_close "${5:-}" || true
     server="$(server)" || server=""
     scratch
     mkfifo "${work}/id"
     timeout "$4" notify-send --app-name="System Manager" --icon=system-manager \
-        --hint=string:desktop-entry:system-manager ${replace:+"--replace-id=$replace"} \
-        --id-fd=4 --action="open=$3" -- "$1" "$2" 4>"${work}/id" >"${work}/action" &
+        --hint=string:desktop-entry:system-manager --wait ${3:+"--action=open=$3"} \
+        --id-fd=4 -- "$1" "$2" 4>"${work}/id" >"${work}/action" &
     waiting=$!
     # The id comes once it shows, and the handle with it, while it still waits.
     read -r id <"${work}/id" || true

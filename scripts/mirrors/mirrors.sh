@@ -11,9 +11,9 @@ op_list() {
     sed -n 's/^[[:space:]]*Server[[:space:]]*=[[:space:]]*/server\t/p' "$list"
 }
 
-# reflector.service reads /etc/xdg/reflector/reflector.conf, which arch-os writes
-# with the country of the time zone. A condition that is not met, such as being
-# offline, skips it.
+# reflector.service reads /etc/xdg/reflector/reflector.conf, as installing
+# reflector here writes it or as the person keeps it. A condition that is not
+# met, such as being offline, skips it.
 op_rank() {
     sudo systemctl start reflector.service || exit 11
     if [ "$(systemctl show --property=ConditionResult --value reflector.service)" = no ]; then exit 10; fi

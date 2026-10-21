@@ -184,7 +184,7 @@ impl Page for FeaturePage {
         if state == Status::Missing && AUR_HELPERS.contains(&self.package.as_str()) {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Built from source with makepkg, as Arch OS does. git and base-devel are installed along.").into(),
+                t("Built from source with makepkg. git and base-devel are installed along.").into(),
                 Tone::Muted,
             ));
         }

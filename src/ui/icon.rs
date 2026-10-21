@@ -1,5 +1,6 @@
 //! Nerd Font icons from Material Design, by what they stand for. The window carries the font.
-//! A terminal needs a Nerd Font, as Arch OS sets one. The Linux console shows none.
+//! A terminal finds them in ttf-nerd-fonts-symbols, which the package depends on. The Linux
+//! console shows none.
 
 pub const ARCH: &str = "\u{f08c7}";
 pub const UPDATE: &str = "\u{f06b0}";

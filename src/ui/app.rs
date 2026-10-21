@@ -578,7 +578,7 @@ pub mod tests {
         use crate::data::{packages::Installed, services::Service, system::System, updates};
         let s = &mut app.ctx.shared;
         s.features = Loaded::Ready(Features::parse(
-            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\npacman-contrib\tok\t1.13.1-1\nfakeroot\tok\t1.37.1.2-1\nreflector\tok\t2023-2\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\nreflector\tok\t2023-2\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {

@@ -13,7 +13,7 @@ pub struct State {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notified: Vec<String>,
     /// The notification still standing unanswered, as its server and id, which the next one
-    /// replaces.
+    /// closes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification: Option<String>,
 }

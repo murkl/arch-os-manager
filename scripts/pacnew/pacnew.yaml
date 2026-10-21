@@ -1,7 +1,6 @@
 ops:
   list:
     title: Finding configuration updates
-    needs: [pacman-contrib]
   diff:
     title: Comparing the configuration
   take:

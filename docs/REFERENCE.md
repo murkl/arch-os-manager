@@ -188,9 +188,9 @@ Asked once per session, before the first run that elevates, and proven with `sud
 
 A file that does not parse is left alone and named under **Settings › About**, and the defaults apply until a setting is changed. A setting that cannot be written says so under the settings until a write succeeds. The first start or `init` takes the settings of the `arch-os` script before 2.0 over once, where none are chosen, and removes what it left. `scripts/migrate/migrate.sh` says how to remove this.
 
-Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now, and point the update indicator at it where installed. An installer calls `init` from its chroot as the user, through a private bus of `dbus-run-session` where none answers. The entry needs a Wayland session, as the window does, the notification a desktop and libnotify. The timer announces two minutes after login and then as often as chosen.
+Every start and `system-manager init` put the app menu entry and the update notification in place as `app-menu` and `notify` say, for the binary where it lies now, and point the update indicator at it where installed. An installer calls `init` from its chroot as the user, through a private bus of `dbus-run-session` where none answers. The entry needs a Wayland session, as the window does, the notification a desktop and libnotify, and its button a Wayland display. The timer announces two minutes after login and then as often as chosen.
 
-A notification stands until it is answered, and its button works until the timer comes back. Unanswered, the next one takes its place with what is pending then. Once nothing is pending, as after an update in the manager, it closes. A dismissed one comes again only with new updates.
+A notification stands until it is answered, and its button works until the timer comes back. Unanswered, it closes and the next one shows what is pending then. Once nothing is pending, as after an update in the manager, it closes. A dismissed one comes again only with new updates.
 
 `flatpak` switched off leaves Flatpak's updates to another app store, such as GNOME Software. The check, the notification and the update indicator follow it. The setting appears only where Flatpak is installed, and `all`, `cleanup` and `off` of 2.1 are read as before.
 
@@ -224,7 +224,7 @@ colors:
 
 The built-in themes are the files in [`themes/`](../themes), listed by name. Each reads on its background at WCAG AA: 4.5 for `text`, 3 for `accent` and the states, and a test holds them to it. A file in `~/.arch-os/themes/` with the id of a built-in replaces it. One that does not parse is skipped and named under **Settings › About**.
 
-The icons are Material Design symbols of the Nerd Fonts. The window carries them, a terminal shows them with a Nerd Font such as `ttf-nerd-fonts-symbols`. The Linux console, told by `TERM=linux`, gets sixteen colours and ASCII in place of every glyph: no icons, `#` for the logo, `>` for the cursor, `*` for a dot, `+` for a mark, the keys named in words in the footer.
+The icons are Material Design symbols of the Nerd Fonts. The window carries them, a terminal finds them in `ttf-nerd-fonts-symbols`, which the package depends on. The Linux console, told by `TERM=linux`, gets sixteen colours and ASCII in place of every glyph: no icons, `#` for the logo, `>` for the cursor, `*` for a dot, `+` for a mark, the keys named in words in the footer.
 
 ## Keys
 
@@ -266,8 +266,6 @@ It runs as the user and asks for the sudo password itself. As root it only answe
 | Group | Package | Adds |
 |---|---|---|
 | `packages` | `paru` or `yay` | Builds and updates packages from the AUR |
-| `packages` | `pacman-contrib` | Lists updates, trims the cache and finds configuration updates |
-| `packages` | `fakeroot` | Lets pacman-contrib list updates without root |
 | `packages` | `reflector` | Ranks the mirrors by speed |
 | `packages` | `flatpak` | Updates and cleans up Flatpak apps |
 | `packages` | `fwupd` | Updates the firmware of the device |
@@ -287,7 +285,7 @@ A package counts when its command answers, as `probe` in `scripts/features/featu
 
 | Package | Beyond pacman |
 |---|---|
-| `paru`, `yay` | Built from source with makepkg, as Arch OS does, after `git` and `base-devel`, and the build dependencies go again. Removed is whichever package owns the command, such as `paru-bin` |
+| `paru`, `yay` | Built from source with makepkg, after `git` and `base-devel`, and the build dependencies go again. Removed is whichever package owns the command, such as `paru-bin` |
 | `reflector` | `/etc/xdg/reflector/reflector.conf`: https, synced within 12 hours, the 10 latest, by speed, the country of the time zone where Arch has a mirror there. `reflector.timer` enabled, and disabled on removal. **Refresh now** starts `reflector.service` with the same configuration |
 | `fwupd` | `fwupd-refresh.timer` enabled, so the firmware list stays current, and disabled on removal |
 | `gnome-arch-update` | The Arch Linux Updates Indicator from extensions.gnome.org in the version for this GNOME Shell, enabled for the user and loaded at the next login. Its `check-cmd`, `update-cmd` and `package-manager` run this binary. Removed with its settings, one from a package with that package |
