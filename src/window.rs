@@ -36,6 +36,26 @@ const FONT: f32 = 15.0;
 const MARGIN: f64 = 24.0;
 const EDGE: f64 = 6.0;
 
+/// Whether a window can open here. winit takes Wayland only, at the display WAYLAND_DISPLAY
+/// names, and the name outlives the session that made it.
+pub fn can_open() -> bool {
+    use std::env::var_os;
+    reachable(var_os("WAYLAND_DISPLAY"), var_os("XDG_RUNTIME_DIR"))
+}
+
+/// The socket a display name points at, in the runtime folder unless it is a path, as libwayland
+/// finds it.
+fn reachable(display: Option<std::ffi::OsString>, runtime: Option<std::ffi::OsString>) -> bool {
+    let Some(display) = display.filter(|d| !d.is_empty()) else {
+        return false;
+    };
+    let path = runtime.map_or_else(
+        || std::path::PathBuf::from(&display),
+        |r| std::path::Path::new(&r).join(&display),
+    );
+    path.is_absolute() && path.exists()
+}
+
 pub fn run(start: Option<Target>) -> io::Result<()> {
     let faces = Faces::new();
     let event_loop = EventLoop::<()>::with_user_event()
@@ -915,6 +935,26 @@ impl Canvas<'_> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    #[test]
+    fn a_window_opens_only_where_a_wayland_display_answers() {
+        let dir = std::env::temp_dir().join(format!("sm-wayland-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let _display = std::os::unix::net::UnixListener::bind(dir.join("wayland-1")).unwrap();
+        let runtime = || Some(dir.clone().into_os_string());
+        assert!(reachable(Some("wayland-1".into()), runtime()));
+        let path = dir.join("wayland-1").into_os_string();
+        assert!(reachable(Some(path.clone()), None), "a path of its own");
+        assert!(reachable(Some(path), runtime()));
+        assert!(
+            !reachable(Some("wayland-0".into()), runtime()),
+            "the session ended"
+        );
+        assert!(!reachable(Some("".into()), runtime()), "X11");
+        assert!(!reachable(None, runtime()), "X11");
+        assert!(!reachable(Some("wayland-1".into()), None));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     /// The grid keeps the cursor where ratatui puts it, and forgets it when hidden.
     #[test]

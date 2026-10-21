@@ -9,11 +9,11 @@ arch=('x86_64')
 url='https://github.com/murkl/arch-os-manager'
 # The program, then Fira Code and the Nerd Fonts symbols it carries.
 license=('GPL-3.0-or-later' 'OFL-1.1' 'MIT')
-depends=('glibc' 'libgcc' 'sudo')
+# checkupdates needs fakeroot, which pacman-contrib only suggests, and a terminal finds the
+# icons in ttf-nerd-fonts-symbols.
+depends=('glibc' 'libgcc' 'sudo' 'pacman-contrib' 'fakeroot' 'ttf-nerd-fonts-symbols')
 makedepends=('cargo')
 optdepends=(
-    'pacman-contrib: lists updates, trims the cache and finds configuration updates'
-    'fakeroot: lets pacman-contrib list updates without root'
     'paru: builds and updates packages from the AUR'
     'yay: builds and updates packages from the AUR'
     'flatpak: updates and cleans up Flatpak apps'
@@ -21,7 +21,6 @@ optdepends=(
     'fwupd: updates the firmware of the device'
     'libnotify: desktop notifications about new updates'
     'meld: merges configuration updates side by side'
-    'ttf-nerd-fonts-symbols: icons in a terminal without a Nerd Font'
 )
 provides=('system-manager')
 conflicts=('system-manager')

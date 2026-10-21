@@ -1,7 +1,6 @@
 ops:
   list:
     title: Checking for updates
-    needs: [pacman-contrib, fakeroot]
   run:
     title: Updating the system
     root: true

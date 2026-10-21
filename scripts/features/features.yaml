@@ -33,12 +33,6 @@ probe:
     yay:
       command: [yay, --version]
       adds: Builds and updates packages from the AUR
-    pacman-contrib:
-      command: [checkupdates, --version]
-      adds: Lists updates, trims the cache and finds configuration updates
-    fakeroot:
-      command: [fakeroot, --version]
-      adds: Lets pacman-contrib list updates without root
     reflector:
       command: [reflector, --help]
       adds: Ranks the mirrors by speed

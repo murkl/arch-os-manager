@@ -55,7 +55,7 @@ hints:
   is not in the sudoers file:
     text: |
       This user may not use sudo
-      As root, add it to the wheel group, then log in again.
+      As root, add it to the group wheel and allow that group with visudo, then log in again.
   incorrect password attempt:
     text: |
       The password was wrong three times

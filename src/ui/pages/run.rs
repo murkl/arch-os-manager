@@ -10,7 +10,7 @@ use crate::data::cleanup::Part;
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
 use crate::ui::detail::{Act, Block, Detail, done, failure, show};
-use crate::ui::draw::{card, center, cut, put, waiting, wrap};
+use crate::ui::draw::{card, center, cut, cut_front, put, waiting, wrap};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::Lead;
@@ -465,10 +465,13 @@ impl RunPage {
         });
         if let Some(phase) = phase {
             let text = if progress.total > 0 {
-                format!(
-                    "{phase} {} {}/{}",
-                    s.glyphs.separator, progress.done, progress.total
-                )
+                let through = tf(
+                    "{done} of {total} done",
+                    &[("done", &progress.done), ("total", &progress.total)],
+                );
+                // Short of room the count stays, as a progress bar keeps its end.
+                let text = format!("{phase} {} {through}", s.glyphs.separator);
+                cut_front(&text, area.width as usize, s.glyphs.ellipsis)
             } else {
                 phase.to_string()
             };
@@ -1030,6 +1033,47 @@ mod tests {
         let footer = shown.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
         assert!(footer.contains("choose"), "{shown}");
         assert!(shown.contains("provider-14"), "{shown}");
+    }
+
+    #[test]
+    fn the_count_under_the_bar_says_how_many_are_through() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for (lang, total, through) in [
+            (
+                crate::i18n::Lang::En,
+                "( 4/30)",
+                "Downloading · 4 of 30 done",
+            ),
+            (crate::i18n::Lang::En, "(1/1)", "Downloading · 1 of 1 done"),
+            (
+                crate::i18n::Lang::De,
+                "( 4/30)",
+                "Wird heruntergeladen · 4 von 30 fertig",
+            ),
+        ] {
+            crate::i18n::set(lang);
+            let (mut app, mut term) = app();
+            let fed =
+                format!(":: Retrieving packages...\r\n Total {total}  1.5 MiB  [##--]  40%\r\n");
+            let run = Run::fed(op::UPGRADE_RUN, "repo", &fed);
+            let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+            open(&mut app, Box::new(page));
+            let shown = screen(&mut app, &mut term);
+            assert!(shown.contains(through), "{shown}");
+        }
+        // The narrowest window keeps the count whole.
+        let (mut app, _) = app();
+        let fed = "(45/45) checking package integrity  [####] 100%\r\n";
+        let run = Run::fed(op::UPGRADE_RUN, "repo", fed);
+        let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        open(&mut app, Box::new(page));
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(40, 12)).unwrap();
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("…e werden geprüft · 45 von 45 fertig"),
+            "{shown}"
+        );
+        crate::i18n::set(crate::i18n::Lang::En);
     }
 
     #[test]

@@ -39,7 +39,7 @@ stamp() {
 # against the sum. As root, the container's, makepkg runs as a builder with a
 # home of its own for cargo.
 build() {
-    local version="$1" out="$2" name url tar
+    local version="$1" out="$2" name url tar needed
     name="$(sed -n 's/^pkgname=//p' aur/PKGBUILD)"
     url="$(sed -n "s/^url='\(.*\)'$/\1/p" aur/PKGBUILD)"
     tar="${out}/${name}-${version}.tar.gz"
@@ -47,6 +47,9 @@ build() {
     curl --proto '=https' --proto-redir '=https' -fsSL -o "$tar" "${url}/archive/refs/tags/${version}.tar.gz"
     stamp "$version" "$tar" "$out"
     if [ "$(id -u)" -eq 0 ]; then
+        # makepkg builds only where its dependencies are, which a helper installs first.
+        mapfile -t needed < <(sed -n 's/^\t\(make\)\?depends = //p' "${out}/.SRCINFO")
+        pacman -S --needed --noconfirm -- "${needed[@]}"
         useradd --create-home builder
         chown -R builder "$out"
         (cd "$out" && runuser -u builder -- env HOME=/home/builder makepkg --noconfirm)

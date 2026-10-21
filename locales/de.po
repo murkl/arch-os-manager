@@ -104,8 +104,8 @@ msgstr "Wird gebaut"
 msgid "Built"
 msgstr "Gebaut"
 
-msgid "Built from source with makepkg, as Arch OS does. git and base-devel are installed along."
-msgstr "Wird mit makepkg aus den Quellen gebaut, wie Arch OS es tut. git und base-devel werden mitinstalliert."
+msgid "Built from source with makepkg. git and base-devel are installed along."
+msgstr "Wird mit makepkg aus den Quellen gebaut. git und base-devel werden mitinstalliert."
 
 msgid "Changed"
 msgstr "Geändert"
@@ -776,9 +776,6 @@ msgstr ""
 msgid "The list of updates needs {package}."
 msgstr "Die Liste der Updates braucht {package}."
 
-msgid "Lists updates, trims the cache and finds configuration updates"
-msgstr "Listet Updates, räumt den Cache auf und findet Konfigurationsupdates"
-
 msgid ""
 "The mirrors were not ranked\n"
 "reflector runs only while the machine is online. Check the internet connection.\n"
@@ -868,10 +865,10 @@ msgstr "Dafür braucht es {package}, siehe Einstellungen, Optionale Pakete."
 
 msgid ""
 "This user may not use sudo\n"
-"As root, add it to the wheel group, then log in again.\n"
+"As root, add it to the group wheel and allow that group with visudo, then log in again.\n"
 msgstr ""
 "Dieser Benutzer darf sudo nicht nutzen\n"
-"Füge ihn als root der Gruppe wheel hinzu und melde dich dann neu an.\n"
+"Füge ihn als root der Gruppe wheel hinzu, erlaube die Gruppe mit visudo und melde dich dann neu an.\n"
 
 msgid "Time"
 msgstr "Zeit"
@@ -1140,6 +1137,9 @@ msgstr "gestern"
 msgid "{a} and {b} cannot be installed together. Remove {remove}?"
 msgstr "{a} und {b} lassen sich nicht gemeinsam installieren. {remove} entfernen?"
 
+msgid "{done} of {total} done"
+msgstr "{done} von {total} fertig"
+
 msgid "{helper}, automatic"
 msgstr "{helper}, automatisch"
 
@@ -1267,9 +1267,6 @@ msgid ""
 msgstr ""
 "Die Dateien konnten nicht geprüft werden\n"
 "pacman kam nicht zum Vergleichen. Die Details zeigen, was es gemeldet hat.\n"
-
-msgid "Lets pacman-contrib list updates without root"
-msgstr "Lässt pacman-contrib Updates ohne root auflisten"
 
 msgid ""
 "The merged configuration does not parse\n"

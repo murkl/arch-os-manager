@@ -1,11 +1,9 @@
 ops:
   plan:
     title: Finding what to clean up
-    needs: [pacman-contrib]
   run:
     title: Cleaning up
     root: true
-    needs: [pacman-contrib]
     steps:
       orphans: Removing unneeded packages
       cache: Trimming the package cache

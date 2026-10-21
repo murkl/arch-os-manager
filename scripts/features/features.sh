@@ -43,8 +43,8 @@ fact_gnome() {
 }
 
 # An optional package, set up as recommended. An AUR helper cannot come from itself:
-# it is built here from source, as Arch OS does, since a -bin build breaks at the
-# next libalpm soname. Its build dependencies go again.
+# it is built here from source, since a -bin build breaks at the next libalpm
+# soname. Its build dependencies go again.
 op_install() {
     local package="$1" zone country
     case "$package" in
@@ -59,8 +59,8 @@ op_install() {
     esac
 
     # reflector's own configuration ranks by age, this one by speed, within the
-    # country of the time zone, as Arch OS reads it from zone.tab, where Arch has
-    # a mirror there, and weekly.
+    # country zone.tab names for the time zone, where Arch has a mirror there, and
+    # weekly.
     if [ "$package" = reflector ]; then
         zone="$(readlink /etc/localtime)" || zone=""
         country="$(awk -v zone="${zone#*zoneinfo/}" '!/^#/ && $3 == zone { print $1 }' /usr/share/zoneinfo/zone.tab)"

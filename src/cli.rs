@@ -293,6 +293,17 @@ impl Answer {
         }
         answer
     }
+
+    /// What it leaves in the state: the updates it announced, and itself where it still stands.
+    /// One another run showed meanwhile stays.
+    fn settle(&self, state: &mut State, now: Vec<String>) {
+        state.notified = now;
+        match &self.shown {
+            Some(handle) if self.standing => state.notification = Some(handle.clone()),
+            shown if state.notification == *shown => state.notification = None,
+            _ => {}
+        }
+    }
 }
 
 /// What `notify` prints instead of a notification, when it shows none.
@@ -344,15 +355,20 @@ fn notify(only_new: bool) -> ExitCode {
         list.len(),
         &[],
     );
-    // It waits for a click until the timer is due again, which then replaces it. The script stops
-    // waiting by itself, the limit catches one that does not.
+    // It waits for a click until the timer is due again, which then takes its place. The script
+    // stops waiting by itself, the limit catches one that does not.
     let every = settings.every();
     let shown = script::query_lines(
         op::DESKTOP_NOTIFY,
         &[
             t("System update"),
             &text,
-            t("Update"),
+            // The button opens the window.
+            if crate::window::can_open() {
+                t("Update")
+            } else {
+                ""
+            },
             &every.as_secs().to_string(),
             state.notification.as_deref().unwrap_or_default(),
         ],
@@ -367,11 +383,7 @@ fn notify(only_new: bool) -> ExitCode {
     let answer = shown.as_deref().map(Answer::parse);
     // Remembered only once shown, so one the desktop missed comes again.
     if let Ok(answer) = &answer {
-        let standing = answer.shown.clone().filter(|_| answer.standing);
-        State::update(|s| {
-            s.notified = now;
-            s.notification = standing;
-        });
+        State::update(|s| answer.settle(s, now));
     }
     match answer {
         Ok(answer) if answer.open => {
@@ -474,6 +486,35 @@ mod tests {
             Answer::default(),
             "closed without an answer"
         );
+    }
+
+    #[test]
+    fn a_notification_that_ends_forgets_only_itself() {
+        let now = vec!["linux 7.2".to_string()];
+        let answered = Answer {
+            shown: Some("bus :1.5 7".into()),
+            ..Answer::default()
+        };
+        let mut state = State {
+            notification: Some("bus :1.5 8".into()),
+            ..State::default()
+        };
+        answered.settle(&mut state, now.clone());
+        assert_eq!(
+            state.notification.as_deref(),
+            Some("bus :1.5 8"),
+            "shown meanwhile by another run"
+        );
+        state.notification = Some("bus :1.5 7".into());
+        answered.settle(&mut state, now.clone());
+        assert_eq!((state.notification, state.notified), (None, now.clone()));
+        let standing = Answer {
+            standing: true,
+            ..answered
+        };
+        let mut state = State::default();
+        standing.settle(&mut state, now);
+        assert_eq!(state.notification.as_deref(), Some("bus :1.5 7"));
     }
 
     #[test]
