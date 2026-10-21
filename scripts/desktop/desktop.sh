@@ -95,7 +95,8 @@ ENTRY
 
     if [ -n "$every" ]; then
         changed=""
-        changed+="$(put "$service" <<UNIT
+        changed+="$(
+            put "$service" <<UNIT
 [Unit]
 Description=Announce system updates
 
@@ -103,8 +104,9 @@ Description=Announce system updates
 Type=oneshot
 ExecStart="${program}" notify --new
 UNIT
-)"
-        changed+="$(put "$timer" <<UNIT
+        )"
+        changed+="$(
+            put "$timer" <<UNIT
 [Unit]
 Description=Announce system updates
 
@@ -115,7 +117,7 @@ OnUnitActiveSec=${every}
 [Install]
 WantedBy=timers.target
 UNIT
-)"
+        )"
         # Enabled as systemctl enables it, which needs no running manager.
         mkdir -p "${wants%/*}"
         ln -sfn ../system-manager-notify.timer "$wants"
@@ -137,8 +139,8 @@ UNIT
 # or a restarted shell counts anew.
 server() {
     local bus owner
-    bus="$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetId)" || return 1
-    owner="$(busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus \
+    bus="$(busctl --user --timeout=5s call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetId)" || return 1
+    owner="$(busctl --user --timeout=5s call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus \
         GetNameOwner s org.freedesktop.Notifications)" || return 1
     bus="${bus#s \"}" owner="${owner#s \"}"
     printf '%s %s\n' "${bus%\"}" "${owner%\"}"
@@ -180,11 +182,12 @@ op_notify() {
     esac
 }
 
-# Closes the notification a handle names, where its server still runs.
+# Closes the notification a handle names, where its server still runs. A server that does
+# not answer, as a frozen shell, holds the call for the limit and no longer.
 op_close() {
     local id
     id="$(standing "$1")" || return 0
-    busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications \
+    busctl --user --timeout=5s call org.freedesktop.Notifications /org/freedesktop/Notifications \
         org.freedesktop.Notifications CloseNotification u "$id"
 }
 

@@ -162,6 +162,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `~/.arch-os/settings.yaml` | What was chosen, an absent key being the default |
 | `~/.arch-os/themes/<id>.yaml` | Own themes |
 | `~/.arch-os/state.yaml` | News read, updates already announced, the notification still standing |
+| `~/.arch-os/state.lock` | Held while the interface or the timer changes `state.yaml` |
 | `~/.arch-os/logs/system-manager.log` | The runtime and every run, rotated at 2 MiB |
 | `~/.arch-os/cache/news.xml` | The feed as last loaded, for offline |
 | `~/.local/share/applications/system-manager.desktop` | The app menu entry, opening the window |
@@ -316,7 +317,8 @@ Docker is the system's, asked at the socket `docker.socket` listens on and only 
 
 | Target | Does |
 |---|---|
-| `make check` | Format, clippy, shellcheck, yamllint, actionlint, zizmor, msgfmt, tests, release build, before every commit |
+| `make check` | gitleaks, format, clippy, shellcheck, yamllint, actionlint, zizmor, msgfmt, tests, release build, before every commit |
+| `make fmt` | Every file formatted, by cargo fmt and shfmt |
 | `make run` | The interface against a throwaway `target/home` |
 | `make install` | `~/.local/bin/system-manager` |
 | `make aur-check` | `aur/PKGBUILD` stamped with stand-ins and read by makepkg |

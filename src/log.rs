@@ -5,9 +5,9 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::time::Duration;
 
 static LOG: Mutex<Option<Writer>> = Mutex::new(None);
 
@@ -36,7 +36,8 @@ struct Writer {
     tx: SyncSender<Entry>,
     /// Messages the full queue turned away since the last write.
     dropped: Arc<AtomicUsize>,
-    thread: JoinHandle<()>,
+    /// Closed by the thread as it ends.
+    done: Receiver<()>,
 }
 
 impl Log {
@@ -113,17 +114,22 @@ impl Writer {
         let (tx, rx) = mpsc::sync_channel::<Entry>(QUEUE);
         let dropped = Arc::new(AtomicUsize::new(0));
         let counted = dropped.clone();
-        let thread = std::thread::spawn(move || write_out(rx, &counted, log, zone));
-        Writer {
-            tx,
-            dropped,
-            thread,
-        }
+        let (ended, done) = mpsc::channel();
+        std::thread::spawn(move || {
+            write_out(rx, &counted, log, zone);
+            drop(ended);
+        });
+        Writer { tx, dropped, done }
     }
 
-    fn finish(self) {
+    /// Waits for what is still on its way, at most `limit`: a disk that does not answer holds
+    /// the thread, not the end of the program. Whether it all reached the disk.
+    fn finish(self, limit: Duration) -> bool {
         drop(self.tx);
-        let _ = self.thread.join();
+        matches!(
+            self.done.recv_timeout(limit),
+            Err(RecvTimeoutError::Disconnected)
+        )
     }
 }
 
@@ -144,11 +150,13 @@ pub fn write(level: &'static str, msg: &str) {
     }
 }
 
-/// Writes what is still on its way, before the program ends.
-pub fn finish() {
+/// Writes what is still on its way before the program ends, waiting at most `limit` for the
+/// disk. Whether it all got there.
+pub fn finish(limit: Duration) -> bool {
     let writer = LOG.lock().unwrap_or_else(|e| e.into_inner()).take();
-    if let Some(writer) = writer {
-        writer.finish();
+    match writer {
+        Some(writer) => writer.finish(limit),
+        None => true,
     }
 }
 
@@ -232,7 +240,7 @@ mod tests {
         for n in 0..1000 {
             let _ = writer.tx.send(entry("OUT", &format!("line {n}")));
         }
-        writer.finish();
+        assert!(writer.finish(Duration::from_secs(10)));
         let text = std::fs::read_to_string(&path).unwrap();
         let numbers: Vec<usize> = text
             .lines()
@@ -240,6 +248,27 @@ mod tests {
             .collect();
         assert_eq!(numbers, (0..1000).collect::<Vec<_>>());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A disk that does not answer, here a pipe nobody reads: the end gives up at its limit
+    /// rather than wait for the thread stuck in the write.
+    #[test]
+    fn the_end_gives_up_on_a_disk_that_does_not_answer() {
+        let (reader, stuck) = rustix::pipe::pipe().unwrap();
+        let log = Log {
+            path: PathBuf::from("/nowhere/system-manager.log"),
+            file: File::from(stuck),
+        };
+        let writer = Writer::spawn(log, jiff::tz::TimeZone::UTC);
+        // More than a pipe holds, so the thread blocks in its write.
+        let long = "x".repeat(4096);
+        for _ in 0..64 {
+            let _ = writer.tx.send(entry("OUT", &long));
+        }
+        let started = std::time::Instant::now();
+        assert!(!writer.finish(Duration::from_millis(300)));
+        assert!(started.elapsed() < Duration::from_secs(5));
+        drop(reader);
     }
 
     /// A full queue keeps the interface going: the message is counted, and the count written.

@@ -6,13 +6,14 @@
 
 ```
 make check      # the whole gate, as CI runs it
+make fmt        # every file formatted, by cargo fmt and shfmt
 make run        # the interface against a throwaway target/home
 make build      # the release binary
 make install    # ~/.local/bin/system-manager
 ```
 
 ```
-sudo pacman -S --needed rust shellcheck yamllint actionlint zizmor gettext pacman-contrib
+sudo pacman -S --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib
 ```
 
 **Note:** _CI installs the same packages and runs the same commands in an Arch container. There is no second definition of green._
