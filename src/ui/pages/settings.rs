@@ -115,10 +115,14 @@ impl SettingsPage {
                 Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
                 Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
             },
-            Target::UseHomelab => {
-                let (text, tone) = on_off(ctx.settings.homelab());
-                (text.into(), tone, false)
-            }
+            // Whether there is a homelab to switch on comes with the dotfiles.
+            Target::UseHomelab => match (ctx.settings.homelab(), &ctx.shared.dotfiles) {
+                (false, Loaded::Loading) => ctx.loading(),
+                (on, _) => {
+                    let (text, tone) = on_off(on);
+                    (text.into(), tone, false)
+                }
+            },
             Target::Profile => {
                 match (&ctx.settings.dotfiles_profile, ctx.shared.dotfiles.ready()) {
                     (Some(chosen), _) => (chosen.clone(), Tone::Muted, false),
@@ -367,6 +371,8 @@ impl Page for SettingsPage {
                 let there = ctx.shared.dotfiles.ready().is_some_and(|d| d.state.homelab);
                 if ctx.settings.homelab() {
                     ctx.settings.homelab = None;
+                } else if matches!(ctx.shared.dotfiles, Loaded::Loading) {
+                    return Flow::Stay;
                 } else if there {
                     ctx.settings.homelab = Some(true);
                     ctx.reload();
@@ -962,6 +968,39 @@ mod tests {
         press(&mut app, &[Key::Enter, Key::Esc]);
         assert_eq!(app.ctx.settings.dotfiles, None);
         assert!(!screen(&mut app, &mut term).contains("Dotfiles"));
+    }
+
+    /// Whether the homelab is there comes from the dotfiles: until they are read, its row spins and
+    /// Enter asks nothing.
+    #[test]
+    fn the_homelab_switch_waits_until_the_dotfiles_are_read() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        app.ctx.settings.dotfiles = Some(true);
+        app.ctx.shared.dotfiles = Loaded::Loading;
+        for page in Target::UseHomelab.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let row = |shown: &str| {
+            let line = shown.lines().find(|l| l.contains("Homelab"));
+            line.unwrap_or_default().trim_end().to_string()
+        };
+        let shown = screen(&mut app, &mut term);
+        let spinner = app.ctx.style.glyphs.spinner;
+        assert!(spinner.iter().any(|f| row(&shown).ends_with(f)), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Make a homelab"), "{shown}");
+        assert_eq!(app.ctx.settings.homelab, None);
+        let mut dotfiles = crate::data::dotfiles::example();
+        dotfiles.state.homelab = true;
+        app.ctx.shared.dotfiles = Loaded::Ready(dotfiles);
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.ctx.settings.homelab, Some(true));
+        assert!(row(&screen(&mut app, &mut term)).ends_with("on"));
     }
 
     /// The address is asked with what is there, and the question before the run says what happens.
