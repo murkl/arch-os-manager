@@ -76,6 +76,7 @@ Every sentence is English and translated in `locales/de.po`.
 | `SM_AUR` | The AUR helper of the settings, empty for none |
 | `SM_FLATPAK` | `on` where Flatpak is installed and its updates are on, else `off` |
 | `SM_RUN` | The title of a run, unset in a query |
+| `SM_TERMINAL` | `on` in a run shown in the terminal, else unset |
 | `SUDO_PROMPT` | A fixed prompt the runtime recognises |
 | `TERM` | `xterm-256color` in a run |
 
@@ -89,7 +90,8 @@ Every sentence is English and translated in `locales/de.po`.
 | `scratch` | A folder of the operation's own as `$work`, removed when it ends |
 | `fetch` | curl bound to https, redirects too, with time limits |
 | `aur` | The helper of `$SM_AUR` |
-| `aur_sync` | The helper without the review and menus a run cannot answer |
+| `aur_sync` | The helper without the review and menus a run cannot answer, in the terminal with them |
+| `asks` | Whether the tools ask, the person answering in the terminal. Else the script gives each tool its flag |
 
 A function more than one script needs goes into `lib.sh`.
 
@@ -151,6 +153,10 @@ Back after a success also closes the page the action was chosen on, so a package
 
 **Note:** _A question in another shape still waits in the terminal view, which tab reaches._
 
+### The Terminal
+
+`runs: terminal` shows a run in the terminal only, and tab does nothing. Every program is echoed as `$ sudo pacman -Syu` before it runs, a pipe as its parts and without its redirections, as bash traces it. No tool is told yes: pacman asks before each transaction, paru shows its review and yay its menus, Flatpak, fwupd, Docker and Podman ask as well, and the answers are typed. The password is still asked once before the run. The outcome lies on a card over the last output.
+
 ### The Password
 
 Asked once per session, before the first run that elevates, and proven with `sudo --validate`. `sudo --non-interactive --validate` tells beforehand whether it is needed at all, so with `NOPASSWD` it is never asked. sudo never gets an empty password: pam_faillock counts an unanswered prompt and an empty password as failed attempts, and locks the account after three. It is held in memory only, answers every later sudo prompt of every run, also those of an AUR helper, and is written only while the terminal does not echo. A wrong one is forgotten and asked again.
@@ -184,6 +190,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `theme` | a theme id | `nord` |
 | `usage` | `true`, `false` | `true` |
 | `aur-helper` | `paru`, `yay`, `none` | paru, else yay |
+| `runs` | `overview`, `terminal` | `overview` |
 | `app-menu` | `true`, `false` | `true` |
 | `notify` | `hourly`, `daily`, `weekly`, `off` | `hourly` |
 | `flatpak` | `true`, `false` | `true` |
@@ -244,7 +251,7 @@ The icons are Material Design symbols of the Nerd Fonts. The window carries them
 | **g**, **G** | First, last | typed |
 | **q** | Quit | typed |
 | **ctrl+c** | Quit, in a run ask to stop | the same |
-| **tab** | In a run overview or terminal, on the packages page mark | the same |
+| **tab** | In a run overview or terminal, except with `runs: terminal`, on the packages page mark | the same |
 | **space** | On the news, read or unread | typed |
 | **r** | On the start page, read every value anew | typed |
 

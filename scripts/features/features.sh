@@ -46,14 +46,15 @@ fact_gnome() {
 # it is built here from source, since a -bin build breaks at the next libalpm
 # soname. Its build dependencies go again.
 op_install() {
-    local package="$1" zone country
+    local package="$1" zone country yes
     case "$package" in
     paru | yay)
         sudo pacman -S --needed git base-devel
         scratch
         fetch "https://aur.archlinux.org/cgit/aur.git/snapshot/${package}.tar.gz" >"${work}/snapshot.tar.gz" || exit 10
         tar -xzf "${work}/snapshot.tar.gz" -C "$work"
-        (cd "${work}/${package}" && makepkg --syncdeps --install --rmdeps --noconfirm)
+        if asks; then yes=(); else yes=(--noconfirm); fi
+        (cd "${work}/${package}" && makepkg --syncdeps --install --rmdeps "${yes[@]}")
         ;;
     *) sudo pacman -S --needed -- "$package" ;;
     esac

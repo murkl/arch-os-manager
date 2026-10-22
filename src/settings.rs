@@ -18,6 +18,9 @@ pub struct Settings {
     pub usage: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aur_helper: Option<String>,
+    /// How a run shows, one of `RUNS`, the overview unless chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runs: Option<String>,
     /// The entry in the app menu, which opens the window, on unless switched off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_menu: Option<bool>,
@@ -42,6 +45,9 @@ pub struct Settings {
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
 /// How often updates are announced, `off` for never. The first is the default.
 pub const NOTIFY: [&str; 4] = ["hourly", "daily", "weekly", "off"];
+/// How a run shows: as the overview, or in the terminal only, where the person answers every
+/// question. The first is the default.
+pub const RUNS: [&str; 2] = ["overview", "terminal"];
 
 /// A switch stored only as an exception: absent is on.
 pub fn switch(on: bool) -> Option<bool> {
@@ -109,6 +115,11 @@ impl Settings {
         {
             return Err(format!("notify: {n} is not one of {}", NOTIFY.join(", ")));
         }
+        if let Some(r) = &s.runs
+            && !RUNS.contains(&r.as_str())
+        {
+            return Err(format!("runs: {r} is not one of {}", RUNS.join(", ")));
+        }
         Ok(s)
     }
 
@@ -130,6 +141,19 @@ impl Settings {
             .copied()
             .find(|n| Some(*n) == self.notify.as_deref())
             .unwrap_or(NOTIFY[0])
+    }
+
+    /// How a run shows, as one of `RUNS`.
+    pub fn runs(&self) -> &'static str {
+        RUNS.iter()
+            .copied()
+            .find(|r| Some(*r) == self.runs.as_deref())
+            .unwrap_or(RUNS[0])
+    }
+
+    /// Whether a run shows in the terminal only, where the person answers every question.
+    pub fn terminal(&self) -> bool {
+        self.runs() == "terminal"
     }
 
     /// Whether the clean-up takes a part, as chosen or by default.
@@ -188,6 +212,7 @@ mod tests {
             theme: Some("nord".into()),
             usage: Some(false),
             aur_helper: Some("yay".into()),
+            runs: Some("terminal".into()),
             app_menu: Some(false),
             notify: Some("daily".into()),
             flatpak: Some(false),
@@ -204,6 +229,7 @@ mod tests {
         assert!(Settings::parse("language: fr").is_err());
         assert!(Settings::parse("aur-helper: pikaur").is_err());
         assert!(Settings::parse("notify: often").is_err());
+        assert!(Settings::parse("runs: console").is_err());
         assert!(Settings::parse("flatpak: updates").is_err());
         assert!(Settings::parse("cleanup: {trash: true}").is_err());
         assert!(Settings::parse("cleanup: {docker: maybe}").is_err());
@@ -212,6 +238,8 @@ mod tests {
             "weekly"
         );
         assert_eq!(Settings::default().notify(), "hourly");
+        assert!(Settings::parse("runs: terminal").unwrap().terminal());
+        assert!(!Settings::default().terminal());
     }
 
     #[test]

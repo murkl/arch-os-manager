@@ -7,7 +7,7 @@ use super::features::FeaturesPage;
 use super::log::HiddenPage;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
-use crate::settings::{AUR_HELPERS, NOTIFY};
+use crate::settings::{AUR_HELPERS, NOTIFY, RUNS};
 use crate::ui::detail::{Block, Detail};
 use crate::ui::draw::put;
 use crate::ui::fetch::Task;
@@ -65,6 +65,7 @@ impl SettingsPage {
                 };
                 (text, Tone::Muted, false)
             }
+            Target::Runs => (runs_label(ctx.settings.runs()).0.into(), Tone::Muted, false),
             Target::Flatpak => {
                 let (text, tone) = on_off(ctx.settings.flatpak.unwrap_or(true));
                 (text.into(), tone, false)
@@ -145,6 +146,17 @@ fn label(every: &str) -> &'static str {
     }
 }
 
+/// What a way of `RUNS` is called, and what it does.
+fn runs_label(way: &str) -> (&'static str, &'static str) {
+    match way {
+        "terminal" => (
+            t("Terminal"),
+            t("every command shown, every question yours"),
+        ),
+        _ => (t("Overview"), t("the steps, questions answered for you")),
+    }
+}
+
 impl Page for SettingsPage {
     fn title(&self) -> String {
         t("Settings").into()
@@ -206,7 +218,7 @@ impl Page for SettingsPage {
             Picked::Ignored => return Flow::Ignored,
         };
         match target {
-            t @ (Target::Language | Target::Theme | Target::AurHelper) => {
+            t @ (Target::Language | Target::Theme | Target::AurHelper | Target::Runs) => {
                 Flow::Push(choice(t, ctx))
             }
             Target::Notifications | Target::Desktop
@@ -300,6 +312,15 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
                 .collect(),
             ctx.settings.notify().into(),
         ),
+        Target::Runs => (
+            RUNS.iter()
+                .map(|way| {
+                    let (name, does) = runs_label(way);
+                    Row::new(way.to_string(), name).detail(does, Tone::Muted)
+                })
+                .collect(),
+            ctx.settings.runs().into(),
+        ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
             let mut rows = vec![
@@ -359,6 +380,10 @@ impl ChoicePage {
             Target::Notifications => {
                 ctx.settings.notify = (id != NOTIFY[0]).then(|| id.to_string());
                 ctx.reload();
+            }
+            Target::Runs => {
+                ctx.settings.runs = (id != RUNS[0]).then(|| id.to_string());
+                script::set_terminal(ctx.settings.terminal());
             }
             _ => {
                 ctx.settings.aur_helper = (id != "auto").then(|| id.to_string());
@@ -620,6 +645,37 @@ mod tests {
         screen(&mut app, &mut term);
         press(&mut app, &[Key::Up, Key::Enter]);
         assert_eq!(app.ctx.settings.notify, None);
+    }
+
+    /// The way a run shows is chosen from a list, the overview being the default, and the
+    /// scripts follow at once.
+    #[test]
+    fn the_runs_are_chosen_from_a_list_and_the_overview_is_the_default() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        for page in Target::Runs.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Overview") && shown.contains("every question yours"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Down, Key::Enter]);
+        assert_eq!(app.ctx.settings.runs.as_deref(), Some("terminal"));
+        assert!(script::terminal());
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("Runs"));
+        assert!(row.is_some_and(|r| r.ends_with("Terminal")), "{shown}");
+        for page in Target::Runs.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Up, Key::Enter]);
+        assert_eq!(app.ctx.settings.runs, None);
+        assert!(!script::terminal());
     }
 
     #[test]

@@ -67,7 +67,7 @@ op_list() {
 # Repositories first, then what is built on top of them. A failing AUR helper
 # leaves Flatpak still to update.
 op_run() {
-    local aur=0
+    local aur=0 yes
     step repo
     sudo pacman -Syu
     if [ -n "$SM_AUR" ]; then
@@ -76,7 +76,8 @@ op_run() {
     fi
     if [ "$SM_FLATPAK" = on ]; then
         step flatpak
-        flatpak update --assumeyes --noninteractive
+        if asks; then yes=(); else yes=(--assumeyes --noninteractive); fi
+        flatpak update "${yes[@]}"
     fi
     if [ "$aur" -ne 0 ]; then exit 11; fi
 }

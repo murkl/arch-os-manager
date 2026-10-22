@@ -33,6 +33,7 @@ impl App {
         if let Some(e) = &settings_error {
             crate::warn!("settings.yaml not used: {e}");
         }
+        script::set_terminal(settings.terminal());
         i18n::set(
             settings
                 .language

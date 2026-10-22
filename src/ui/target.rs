@@ -24,6 +24,7 @@ pub enum Target {
     Theme,
     Usage,
     AurHelper,
+    Runs,
     Flatpak,
     Notifications,
     Desktop,
@@ -51,6 +52,7 @@ pub const SETTINGS: &[Target] = &[
     Target::Theme,
     Target::Usage,
     Target::AurHelper,
+    Target::Runs,
     Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
@@ -76,6 +78,7 @@ pub const ALL: &[Target] = &[
     Target::Theme,
     Target::Usage,
     Target::AurHelper,
+    Target::Runs,
     Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
@@ -104,6 +107,7 @@ impl Target {
             Target::Theme => "theme",
             Target::Usage => "usage",
             Target::AurHelper => "aur-helper",
+            Target::Runs => "runs",
             Target::Flatpak => "flatpak",
             Target::Notifications => "notifications",
             Target::Desktop => "desktop",
@@ -135,6 +139,7 @@ impl Target {
             Target::Theme => t("Theme"),
             Target::Usage => t("System usage"),
             Target::AurHelper => t("AUR helper"),
+            Target::Runs => t("Runs"),
             Target::Flatpak => t("Flatpak updates"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
@@ -163,6 +168,7 @@ impl Target {
             Target::Theme => icon::THEME,
             Target::Usage => icon::USAGE,
             Target::AurHelper => icon::ARCH,
+            Target::Runs => icon::COMMAND,
             Target::Flatpak => icon::APP,
             Target::Notifications => icon::NOTIFICATION,
             Target::Desktop => icon::APP_MENU,
@@ -221,7 +227,11 @@ impl Target {
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
             Target::Hidden => Box::new(pages::log::HiddenPage::new()),
-            Target::Language | Target::Theme | Target::AurHelper | Target::Notifications => {
+            Target::Language
+            | Target::Theme
+            | Target::AurHelper
+            | Target::Runs
+            | Target::Notifications => {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),

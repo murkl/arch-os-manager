@@ -25,6 +25,8 @@ pub struct Run {
     pub prompt: Option<Prompt>,
     /// sudo refused the last password.
     pub rejected: bool,
+    /// Shown in the terminal only, where the person answers every question.
+    terminal: bool,
     fail: Option<String>,
     exit: Option<(i32, Instant)>,
     /// The unfinished line last answered, so it is answered once.
@@ -40,7 +42,9 @@ impl Run {
     ) -> Result<Run, Failure> {
         crate::info!("run {op} {args:?}");
         let session = Session::start(op, args, size, sink).map_err(|e| Failure::new(op, e))?;
-        Ok(Run::with(op, session, size))
+        let mut run = Run::with(op, session, size);
+        run.terminal = super::terminal();
+        Ok(run)
     }
 
     /// A run that has printed `output` after announcing `step`, for pictures of its page. The
@@ -66,6 +70,7 @@ impl Run {
             step: None,
             prompt: None,
             rejected: false,
+            terminal: false,
             fail: None,
             exit: None,
             answered: None,
@@ -142,13 +147,13 @@ impl Run {
                     self.send(&password, current);
                 }
             }
-            Some(p) => {
+            Some(p) if !self.terminal => {
                 if let Some(answer) = p.automatic() {
                     crate::info!("{}: answered {answer:?} to {current:?}", self.op);
                     self.send(answer, current);
                 }
             }
-            None => {}
+            _ => {}
         }
     }
 
@@ -251,6 +256,34 @@ mod tests {
             drive(r#"read -r -p ":: Proceed with installation? [Y/n] " a; echo "answer=$a""#);
         assert!(out.contains("answer=y"), "{out}");
         assert_eq!(run.result(), Some(Ok(())));
+    }
+
+    /// In the terminal the person answers, also what was confirmed before the run.
+    #[test]
+    fn in_the_terminal_leaves_every_question_to_the_person() {
+        let (tx, rx) = mpsc::channel();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg("-c").arg(
+            r#"read -r -t 2 -p ":: Proceed with installation? [Y/n] " a || { echo; echo unanswered; }"#,
+        );
+        let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
+        let mut run = Run::with(crate::script::op::UPGRADE_RUN, session, (24, 80));
+        run.terminal = true;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut asked = false;
+        while run.result().is_none() && Instant::now() < deadline {
+            if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
+                run.on_event(e);
+            }
+            run.check_prompt();
+            asked |= matches!(run.prompt, Some(Prompt::YesNo { yes: true, .. }));
+        }
+        assert!(asked, "the question is still seen: {:?}", run.recent);
+        assert!(
+            run.recent.iter().any(|l| l == "unanswered"),
+            "{:?}",
+            run.recent
+        );
     }
 
     #[test]
