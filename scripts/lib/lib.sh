@@ -7,8 +7,9 @@ shopt -s inherit_errexit nullglob
 export LC_ALL=C.UTF-8
 
 # An unexpected failure: code, file as upgrade/upgrade.sh, line, command. Nested
-# shells report from the inside out, so the runtime reads the first line.
-trap 'sm_failed $? "$LINENO" "$BASH_COMMAND"' ERR
+# shells report from the inside out, so the runtime reads the first line. Quiet
+# on stderr, where the terminal would echo it as a program.
+trap '{ sm_failed $? "$LINENO" "$BASH_COMMAND"; } 2>/dev/null' ERR
 sm_failed() {
     local frame=1 line="$2" file dir
     # Within a helper of this file, the line is the script's that called it.
@@ -32,7 +33,15 @@ operation() {
     fi
     shift
     sm_hold
+    if asks; then sm_terminal; fi
     "op_${name//-/_}" "$@"
+}
+
+# Whether the tools ask, the person answering in the terminal. Else a script
+# spares each question with the tool's flag:
+# `if asks; then yes=(); else yes=(--noconfirm); fi`.
+asks() {
+    [ "${SM_TERMINAL:-}" = on ]
 }
 
 # A closed terminal stops no run: sudo, on a terminal of its own by default,
@@ -43,6 +52,27 @@ sm_hold() {
     if [ -z "${SM_RUN:-}" ] || ! systemd-inhibit --list >/dev/null 2>&1; then return 0; fi
     systemd-inhibit --what=shutdown:sleep --mode=block --who="System Manager" --why="$SM_RUN" \
         tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
+}
+
+# In the terminal the person sees every program before it runs, as
+# `$ sudo pacman -Syu`: xtrace, which sm_trace turns on for a program alone.
+# The space first, as bash repeats the first character of PS4 for a subshell.
+sm_terminal() {
+    PS4=$' \e[90m$\e[0m '
+    set -o functrace
+    trap '{ sm_trace; } 2>/dev/null' DEBUG
+}
+
+# Before every command: xtrace on for a program on the PATH, off for a builtin, a
+# function or the script's own logic. A program named through one variable, as
+# the AUR helper is, is read through it.
+sm_trace() {
+    local word="${BASH_COMMAND%% *}" name
+    if [[ $word =~ ^\"\$([A-Za-z_][A-Za-z0-9_]*)\"$ ]]; then
+        name="${BASH_REMATCH[1]}"
+        word="${!name:-}"
+    fi
+    if [ "$(type -t "$word" || true)" = file ]; then set -x; else set +x; fi
 }
 
 # The phase a run is in. The sentence for it is in the operation's steps.
@@ -77,7 +107,12 @@ aur() {
 }
 
 # The helper on AUR packages, without the review and menus a run cannot answer.
+# In the terminal the person answers them.
 aur_sync() {
+    if asks; then
+        aur "$@"
+        return
+    fi
     case "$SM_AUR" in
     paru) aur --skipreview "$@" ;;
     yay) aur --answerclean None --answerdiff None --answeredit None "$@" ;;

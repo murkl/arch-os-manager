@@ -29,6 +29,7 @@
 - Mirrors ranked, firmware updated
 - A broken keyring renewed, damaged package files restored
 - Terminal, Linux console or a window of its own
+- Runs in the terminal if you like, every command shown and every question yours
 - English and German
 - [Themes](REFERENCE.md#themes) such as Nord, Catppuccin, Tokyo Night and Gruvbox, or your own
 

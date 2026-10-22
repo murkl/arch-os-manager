@@ -670,6 +670,14 @@ impl RunPage {
             }
         };
         self.result.set(body, acts);
+        // In the terminal it lies on a card over the last output, which stays readable around it.
+        let area = if ctx.settings.terminal() {
+            let w = area.width.min(68);
+            let h = self.result.height(w.saturating_sub(6), ctx) + 2;
+            card(area, buf, w, h, ctx)
+        } else {
+            area
+        };
         self.result.draw(area, buf, ctx);
     }
 
@@ -694,8 +702,12 @@ impl Page for RunPage {
                 Err(f) => self.outcome = Some((Err(f), Instant::now())),
             }
         }
-        if self.details && self.run.is_some() {
+        let terminal = ctx.settings.terminal();
+        if (self.details || terminal) && self.run.is_some() {
             self.draw_details(area, buf, ctx);
+            if terminal && self.outcome.is_some() {
+                self.draw_outcome(area, buf, ctx);
+            }
         } else if self.outcome.is_some() {
             self.draw_outcome(area, buf, ctx);
         } else if self.prompt().is_some() {
@@ -732,12 +744,14 @@ impl Page for RunPage {
         }
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
         let details = if self.details {
             Does::Overview
         } else {
             Does::Details
         };
+        // In the terminal there is no overview to switch to.
+        let terminal = ctx.settings.terminal();
         if self.cancel.is_some() {
             return vec![("↑↓", Does::Choose), ("⏎", Does::Answer)];
         }
@@ -745,11 +759,16 @@ impl Page for RunPage {
             // The keys of what is offered, none while the system is read again.
             return if self.settled() {
                 let mut h = self.result.hints();
-                h.insert(h.len() - 1, ("tab", details));
+                if !terminal {
+                    h.insert(h.len() - 1, ("tab", details));
+                }
                 h
             } else {
                 Vec::new()
             };
+        }
+        if terminal {
+            return vec![("ctrl+c", Does::Stop)];
         }
         if self.details {
             return vec![("tab", details), ("ctrl+c", Does::Stop)];
@@ -777,7 +796,8 @@ impl Page for RunPage {
             }
             return Flow::Stay;
         }
-        if key == Key::Tab {
+        let terminal = ctx.settings.terminal();
+        if key == Key::Tab && !terminal {
             self.details = !self.details;
             return Flow::Stay;
         }
@@ -791,9 +811,10 @@ impl Page for RunPage {
                 flow => flow,
             };
         }
+        let details = self.details || terminal;
         let typing = matches!(self.prompt(), Some(Prompt::Password | Prompt::Text { .. }));
         let asks_to_stop = key == Key::Ctrl('c')
-            || (!self.details && (key == Key::Esc || (key == Key::Char('q') && !typing)));
+            || (!details && (key == Key::Esc || (key == Key::Char('q') && !typing)));
         if asks_to_stop {
             self.cancel = Some(List::new(vec![
                 Row::new(false, t("No")),
@@ -801,7 +822,7 @@ impl Page for RunPage {
             ]));
             return Flow::Stay;
         }
-        if self.details {
+        if details {
             if let Some(run) = &self.run {
                 run.type_bytes(&key.bytes());
             }
@@ -1028,6 +1049,57 @@ mod tests {
             footer.contains("tab details") && !footer.contains("choose"),
             "{footer}"
         );
+    }
+
+    /// In the terminal the run shows as it is from the start, its question typed rather than
+    /// chosen, tab changes nothing, and the outcome lies on a card over the last output.
+    #[test]
+    fn in_the_terminal_the_run_shows_as_it_is_and_the_outcome_lies_over_it() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        app.ctx.settings.runs = Some("terminal".into());
+        let asked = ":: Proceed with installation? [Y/n] ";
+        let footer = |shown: &str| {
+            shown
+                .lines()
+                .rfind(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .to_string()
+        };
+        let run = Run::fed(op::UPGRADE_RUN, "repo", asked);
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.prepare();
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains(asked.trim_end()) && !shown.contains("Yes"),
+            "{shown}"
+        );
+        let keys = footer(&shown);
+        assert!(
+            keys.contains("ctrl+c stop") && !keys.contains("tab"),
+            "{keys}"
+        );
+        press(&mut app, &[Key::Tab]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains(asked.trim_end()), "{shown}");
+        let run = Run::fed(
+            op::UPGRADE_RUN,
+            "repo",
+            " \x1b[90m$\x1b[0m sudo pacman -Syu\r\nupgrading firefox\r\n",
+        );
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.outcome = Some((Ok(()), Instant::now() - SETTLE));
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains(" $ sudo pacman -Syu")
+                && shown.contains("upgrading firefox")
+                && shown.contains("Done"),
+            "{shown}"
+        );
+        assert!(!footer(&shown).contains("tab"), "{shown}");
     }
 
     #[test]

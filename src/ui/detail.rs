@@ -161,9 +161,18 @@ impl Detail {
         Flow::Stay
     }
 
-    /// The lines the facts take at this width.
+    /// The lines the facts and the actions take at this width.
     pub fn height(&self, width: u16, ctx: &Ctx) -> u16 {
-        render(&self.body, width as usize, ctx).len() as u16
+        render(&self.body, width as usize, ctx).len() as u16 + self.acts_height()
+    }
+
+    /// The lines of the actions, with the blank above them.
+    fn acts_height(&self) -> u16 {
+        if self.acts.is_empty() {
+            0
+        } else {
+            self.acts.len() as u16 + 1
+        }
     }
 
     pub fn hints(&self) -> Vec<(&'static str, Does)> {
@@ -185,12 +194,7 @@ impl Detail {
 
     pub fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &Ctx) {
         let s = &ctx.style;
-        let acts_height = if self.acts.is_empty() {
-            0
-        } else {
-            self.acts.len() as u16 + 1
-        };
-        let body_height = area.height.saturating_sub(acts_height) as usize;
+        let body_height = area.height.saturating_sub(self.acts_height()) as usize;
         let pinned = self.pinned.min(self.body.len());
         // One column for the labels of the head and the rest.
         let labels = label_width(&self.body, area.width as usize);

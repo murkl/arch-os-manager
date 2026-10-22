@@ -23,6 +23,7 @@ use std::os::fd::{BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use crate::i18n::t;
@@ -188,6 +189,18 @@ static FLATPAK: Mutex<&str> = Mutex::new("off");
 /// Whether scripts update Flatpak, as `$SM_FLATPAK`: on or off.
 pub fn set_flatpak(on: bool) {
     *FLATPAK.lock().unwrap() = if on { "on" } else { "off" };
+}
+
+static TERMINAL: AtomicBool = AtomicBool::new(false);
+
+/// Whether a run shows in the terminal only, where the person answers every question: the
+/// runtime answers none, and the script gets `$SM_TERMINAL`.
+pub fn set_terminal(on: bool) {
+    TERMINAL.store(on, Ordering::Relaxed);
+}
+
+pub fn terminal() -> bool {
+    TERMINAL.load(Ordering::Relaxed)
 }
 
 static DIR: OnceLock<Result<PathBuf, String>> = OnceLock::new();

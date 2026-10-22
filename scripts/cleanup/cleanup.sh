@@ -98,7 +98,7 @@ candidates() {
 # taken from an earlier look, in a shell of its own: a substitution tested by || would run the
 # plan without errexit.
 op_run() {
-    local plan caches files builds file dir inside cache orphans socket part taken=" $* "
+    local plan caches files builds file dir inside cache orphans socket part yes taken=" $* "
     for part; do
         case "$part" in orphans | cache | aur | flatpak | docker | podman) ;; *) false ;; esac
     done
@@ -106,7 +106,8 @@ op_run() {
     mapfile -t orphans < <(field orphan "$plan")
     if [[ $taken == *" orphans "* ]] && [ -n "${orphans[*]}" ]; then
         step orphans
-        sudo pacman -Rns --noconfirm -- "${orphans[@]}"
+        if asks; then yes=(); else yes=(--noconfirm); fi
+        sudo pacman -Rns "${yes[@]}" -- "${orphans[@]}"
     fi
 
     mapfile -t caches < <(pacman-conf CacheDir)
@@ -137,21 +138,23 @@ op_run() {
     # Flatpak finds unused runtimes only while removing them.
     if [[ $taken == *" flatpak "* ]]; then
         step flatpak
-        flatpak uninstall --unused --assumeyes --noninteractive
+        if asks; then yes=(); else yes=(--assumeyes --noninteractive); fi
+        flatpak uninstall --unused "${yes[@]}"
     fi
 
     # Images first, so the build cache they shared goes free with it. Containers and volumes
     # hold data and stay.
+    if asks; then yes=(); else yes=(--force); fi
     if [[ $taken == *" docker "* ]] && [ "$(field docker "$plan")" = ready ]; then
         step docker
         socket="$(systemctl show --property=Listen --value docker.socket)"
         socket="${socket%% *}"
-        docker --host "unix://${socket}" image prune --all --force
-        docker --host "unix://${socket}" builder prune --all --force
+        docker --host "unix://${socket}" image prune --all "${yes[@]}"
+        docker --host "unix://${socket}" builder prune --all "${yes[@]}"
     fi
     if [[ $taken == *" podman "* ]] && [ "$(field podman "$plan")" = ready ]; then
         step podman
-        podman image prune --all --force
+        podman image prune --all "${yes[@]}"
     fi
 }
 

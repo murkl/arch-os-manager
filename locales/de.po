@@ -1308,3 +1308,18 @@ msgstr ""
 
 msgid "needs a Wayland session"
 msgstr "braucht eine Wayland-Sitzung"
+
+msgid "Runs"
+msgstr "Läufe"
+
+msgid "Overview"
+msgstr "Übersicht"
+
+msgid "Terminal"
+msgstr "Terminal"
+
+msgid "the steps, questions answered for you"
+msgstr "die Schritte, Fragen für dich beantwortet"
+
+msgid "every command shown, every question yours"
+msgstr "jeder Befehl sichtbar, jede Frage deine"

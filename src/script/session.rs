@@ -34,6 +34,9 @@ impl Session {
     ) -> Result<Session, String> {
         let mut cmd = command(op, args)?;
         cmd.env("SM_RUN", op.title());
+        if super::terminal() {
+            cmd.env("SM_TERMINAL", "on");
+        }
         Session::spawn(cmd, size, sink)
     }
 

@@ -15,6 +15,7 @@ struct Sandbox {
 struct Outcome {
     code: i32,
     out: String,
+    err: String,
     events: String,
     calls: String,
 }
@@ -84,6 +85,7 @@ impl Sandbox {
         Outcome {
             code: output.status.code().unwrap_or(-1),
             out: String::from_utf8_lossy(&output.stdout).into(),
+            err: String::from_utf8_lossy(&output.stderr).into(),
             events: std::fs::read_to_string(events).unwrap_or_default(),
             calls: std::fs::read_to_string(self.dir.join("calls")).unwrap_or_default(),
         }
@@ -474,6 +476,41 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
         "{}",
         o.calls
     );
+}
+
+/// In the terminal no tool is told yes, the AUR helper keeps its review, and every program is
+/// echoed before it runs, the helper through its variable too, the script's own logic not. A
+/// failure is reported as ever, and echoed as nothing.
+#[test]
+fn in_the_terminal_the_tools_ask_and_every_program_is_echoed() {
+    let s = Sandbox::new("terminal");
+    for c in ["pacman", "paru", "flatpak"] {
+        s.stub(c, "exit 0");
+    }
+    let all = [
+        ("SM_AUR", "paru"),
+        ("SM_FLATPAK", "on"),
+        ("SM_TERMINAL", "on"),
+    ];
+    let o = s.run("upgrade", &["run"], &all);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let calls: Vec<&str> = o.calls.lines().filter(|l| !l.starts_with("sudo")).collect();
+    assert_eq!(calls, ["pacman -Syu", "paru -Sua", "flatpak update"]);
+    let echoed = [
+        " \x1b[90m$\x1b[0m sudo pacman -Syu",
+        " \x1b[90m$\x1b[0m paru -Sua",
+        " \x1b[90m$\x1b[0m flatpak update",
+    ];
+    assert_eq!(o.err.lines().collect::<Vec<_>>(), echoed);
+    s.stub("flatpak", "exit 3");
+    let o = s.run("upgrade", &["run"], &all);
+    assert_eq!(o.code, 1);
+    assert!(
+        o.events.contains("fail\t3\tupgrade/upgrade.sh\t"),
+        "{}",
+        o.events
+    );
+    assert_eq!(o.err.lines().collect::<Vec<_>>(), echoed);
 }
 
 /// Where another app store updates Flatpak, the check and the update leave it out.
