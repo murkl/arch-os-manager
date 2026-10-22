@@ -39,9 +39,8 @@ pub fn summary(lab: &Homelab) -> (String, Tone) {
 pub fn setup() -> Box<dyn Page> {
     Box::new(TextPage::new(
         t("Homelab"),
-        t(
-            "Make a homelab? The name of its server in the network, such as nas.fritz.box. Empty, the homelab stays off.",
-        ),
+        t("Make a homelab? The name of its server in the network. Empty, the homelab stays off."),
+        "nas.fritz.box",
         String::new(),
         |server, ctx| {
             if server.is_empty() {
@@ -302,7 +301,8 @@ impl Page for ServerPage {
                         .unwrap_or_default();
                     Flow::Push(Box::new(TextPage::new(
                         t("Add a secret"),
-                        t("Its path in the folder of the server, such as traefik/.env."),
+                        t("Its path in the folder of the server."),
+                        "traefik/.env",
                         shown,
                         move |path, ctx| {
                             if path.is_empty() {

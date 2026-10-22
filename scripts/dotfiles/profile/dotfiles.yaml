@@ -1,9 +1,8 @@
-# The groups of the Dotfiles page, each set up by a script of this folder.
-# Switched on there, a group runs its script, and set up runs it again
-# whenever it changed. For example:
+# The groups of the Dotfiles page. Switched on there, a group runs the function of init.sh that
+# install names, and set up runs it again where it changed. For example:
 #
 # groups:
 #   - name: Gaming
 #     description: Steam, Lutris and Wine
-#     script: groups/gaming.sh
+#     install: gaming
 groups: []

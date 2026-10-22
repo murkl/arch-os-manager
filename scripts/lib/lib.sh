@@ -23,6 +23,22 @@ sm_failed() {
     exit 1
 }
 
+# What the script made for its own use, removed as it ends, also on an error or
+# ctrl+c: the folder of scratch, and each file written beside its target until
+# it takes the target's place.
+sm_made=()
+# The same of root, which sudo removes without asking: the run used it just
+# before.
+sm_made_root=()
+trap sm_clean EXIT
+sm_clean() {
+    local path
+    rm -rf -- "${sm_made[@]}"
+    for path in "${sm_made_root[@]}"; do
+        if [ -e "$path" ]; then sudo -n rm -rf -- "$path" 2>/dev/null || true; fi
+    done
+}
+
 # Runs the operation the first argument names: the function op_<name>, a dash
 # in the name an underscore in the function.
 operation() {
@@ -109,10 +125,20 @@ allow() {
     return "$status"
 }
 
-# A folder of the operation's own as $work, removed when it ends.
+# A folder of the operation's own as $work, made at its first use.
 scratch() {
+    if [ -n "${work:-}" ]; then return 0; fi
     work="$(mktemp -d)"
-    trap 'rm -rf "$work"' EXIT
+    sm_made+=("$work")
+}
+
+# The name a file is written under beside its target before it takes the
+# target's place, as $new, which the caller declares local:
+# `beside <file>; <command> >"$new"; mv -f -- "$new" <file>`. Absolute, as the
+# script may change folders, with the links in it kept.
+beside() {
+    new="$(realpath -ms -- "$1").new"
+    sm_made+=("$new")
 }
 
 # Every request leaving the machine, bound to the protocol of its address,
@@ -156,17 +182,15 @@ on_bus() {
 # An extension of extensions.gnome.org in the version for this GNOME Shell,
 # installed for this user. GNOME loads one it did not start with at the next login.
 ego_install() {
-    local shell info url zip status=0
+    local shell info url
     shell="$(gnome-shell --version)"
     shell="${shell##* }"
     info="$(fetch "https://extensions.gnome.org/extension-info/?uuid=$1&shell_version=${shell%%.*}")" || return 1
     url="$(sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p' <<<"$info")"
     if [ -z "$url" ]; then return 1; fi
-    zip="$(mktemp --suffix=.zip)"
-    fetch "https://extensions.gnome.org${url}" >"$zip" || status=1
-    if [ "$status" = 0 ]; then gnome-extensions install --force "$zip"; fi
-    rm -f -- "$zip"
-    return "$status"
+    scratch
+    fetch "https://extensions.gnome.org${url}" >"${work}/extension.zip" || return 1
+    gnome-extensions install --force "${work}/extension.zip"
 }
 
 # The GNOME extension that shows pending updates in the top bar.

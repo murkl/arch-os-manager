@@ -202,6 +202,7 @@ pub fn repository(ctx: &mut Ctx) -> Box<dyn Page> {
         t(
             "The address to clone from and to upload to, as GitHub or Gitea show it for cloning. Empty, the dotfiles stay on this machine.",
         ),
+        "https://github.com/tux/dotfiles.git",
         current.clone(),
         move |url, ctx| {
             let cloning = state.as_ref().is_none_or(|s| s.repo == Repo::Missing);
@@ -1027,6 +1028,11 @@ mod tests {
         }
         screen(&mut app, &mut term);
         press(&mut app, &[Key::Ctrl('u')]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("https://github.com/tux/dotfiles.git"),
+            "emptied, the box shows an example: {shown}"
+        );
         for c in "https://git.example.org/tux/dotfiles.git".chars() {
             press(&mut app, &[Key::Char(c)]);
         }

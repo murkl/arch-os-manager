@@ -23,8 +23,12 @@ op_run() {
     *) exit 11 ;;
     esac
     sudo rm -rf -- "${gpg}.new" "${gpg}.old"
+    sm_made_root+=("${gpg}.new")
     sudo pacman-key --gpgdir "${gpg}.new" --init
     sudo pacman-key --gpgdir "${gpg}.new" --populate
+    # The swap is left to the next run, which clears what this one leaves: removed
+    # in between, the new keyring could be the only one.
+    sm_made_root=()
     if [ -e "$gpg" ]; then sudo mv -- "$gpg" "${gpg}.old"; fi
     sudo mv -- "${gpg}.new" "$gpg"
     sudo rm -rf -- "${gpg}.old"

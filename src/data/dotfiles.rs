@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::i18n::tf;
+use crate::i18n::{t, tf};
 use crate::script::{Failure, op, query};
 
 /// The repository, as the script finds it.
@@ -18,20 +18,17 @@ pub enum Repo {
     Ready,
 }
 
-/// Whether this machine ran a script of the profile as it is now.
+/// Whether this machine ran init.sh as it is now, or a group at all.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Ran {
     Applied,
     Changed,
-    /// Named in groups.txt, but the file is gone.
-    Missing,
 }
 
 impl Ran {
     fn parse(s: &str) -> Ran {
         match s {
             "applied" => Ran::Applied,
-            "missing" => Ran::Missing,
             _ => Ran::Changed,
         }
     }
@@ -60,7 +57,7 @@ pub struct State {
     pub unlocked: Option<bool>,
     /// init.sh, and when it ran here last.
     pub init: Option<(Ran, Option<jiff::Timestamp>)>,
-    /// The groups switched on, by script.
+    /// The groups switched on, by function.
     pub groups: Vec<(String, Ran)>,
     /// Secrets a setup would write.
     pub due_secrets: usize,
@@ -109,7 +106,7 @@ impl State {
                 ["secrets", _] => s.secrets = n(1),
                 ["key", v] => s.unlocked = Some(*v == "unlocked"),
                 ["init", ran, at] => s.init = Some((Ran::parse(ran), timestamp(at))),
-                ["group", script, ran] => s.groups.push((script.to_string(), Ran::parse(ran))),
+                ["group", install, ran] => s.groups.push((install.to_string(), Ran::parse(ran))),
                 ["pending", "secrets", _] => s.due_secrets = n(2),
                 ["pending", "gnome"] => s.due_gnome = true,
                 ["unsaved", part] => s.unsaved.push(part.to_string()),
@@ -123,8 +120,8 @@ impl State {
     }
 
     /// Whether a group is switched on in the profile.
-    pub fn on(&self, script: &str) -> bool {
-        self.groups.iter().any(|(s, _)| s == script)
+    pub fn on(&self, install: &str) -> bool {
+        self.groups.iter().any(|(s, _)| s == install)
     }
 
     /// Whether a backup has anything to save or upload. A new profile has all of it.
@@ -133,14 +130,15 @@ impl State {
     }
 }
 
-/// A group of the profile's dotfiles.yaml: a name, a sentence, and the script that sets it up.
+/// A group of the profile's dotfiles.yaml: a name, a sentence, and the function of init.sh that
+/// sets it up.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
-    pub script: String,
+    pub install: String,
 }
 
 #[derive(Deserialize)]
@@ -150,21 +148,18 @@ struct File {
     groups: Option<Vec<Group>>,
 }
 
-/// Whether a script path is a plain one inside the profile ending in .sh, as the script of the
-/// dotfiles takes it: no shell in a value of the yaml.
-fn plain(script: &str) -> bool {
-    script.ends_with(".sh")
-        && !script.starts_with('/')
-        && script
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "._/-".contains(c))
-        && script
-            .split('/')
-            .all(|part| !part.is_empty() && part != "..")
+/// Whether a name is one bash takes for a function, as the script of the dotfiles checks it too:
+/// `^[A-Za-z_][A-Za-z0-9_-]*$`. No shell in a value of the yaml.
+fn function(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || "_-".contains(c))
 }
 
-/// The groups of a profile's dotfiles.yaml, each script checked to be a file of the profile. None
-/// without the file.
+/// The groups of a profile's dotfiles.yaml. None without the file. Whether init.sh holds each
+/// function shows only once it is read, which a run does.
 pub fn groups(profile: &Path) -> Result<Vec<Group>, String> {
     let path = profile.join("dotfiles.yaml");
     let src = match std::fs::read_to_string(&path) {
@@ -172,34 +167,34 @@ pub fn groups(profile: &Path) -> Result<Vec<Group>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(format!("dotfiles.yaml: {e}")),
     };
-    parse_groups(&src, |script| profile.join(script).is_file())
+    parse_groups(&src)
 }
 
-fn parse_groups(src: &str, exists: impl Fn(&str) -> bool) -> Result<Vec<Group>, String> {
+fn parse_groups(src: &str) -> Result<Vec<Group>, String> {
     if src.trim().is_empty() {
         return Ok(Vec::new());
     }
     let file: File = serde_saphyr::from_str(src).map_err(|e| format!("dotfiles.yaml: {e}"))?;
     let groups = file.groups.unwrap_or_default();
     for (i, g) in groups.iter().enumerate() {
-        let script: &[(&str, &dyn std::fmt::Display)] = &[("script", &g.script)];
+        let install: &[(&str, &dyn std::fmt::Display)] = &[("install", &g.install)];
         if g.name.trim().is_empty() {
             return Err(tf(
                 "dotfiles.yaml: group {n} has no name",
                 &[("n", &(i + 1))],
             ));
         }
-        if !plain(&g.script) {
+        if !function(&g.install) {
             return Err(tf(
-                "dotfiles.yaml: {script} is no path of the profile ending in .sh",
-                script,
+                "dotfiles.yaml: {install} is no name of a function",
+                install,
             ));
         }
-        if !exists(&g.script) {
-            return Err(tf("dotfiles.yaml: {script} does not exist", script));
+        if g.install == "init" {
+            return Err(t("dotfiles.yaml: init is no group, set up calls it anyway").into());
         }
-        if groups[..i].iter().any(|o| o.script == g.script) {
-            return Err(tf("dotfiles.yaml: {script} sets up two groups", script));
+        if groups[..i].iter().any(|o| o.install == g.install) {
+            return Err(tf("dotfiles.yaml: {install} sets up two groups", install));
         }
     }
     Ok(groups)
@@ -301,18 +296,18 @@ pub fn example() -> Dotfiles {
             "dir\t/home/tux/.dotfiles\nprofile\ttux-notebook\nhost\ttux-notebook\n",
             "repo\tready\nremote\tgit@github.com:tux/dotfiles.git\nahead\t0\nbehind\t0\n",
             "changes\t2\nfiles\t31\nlinks\t0\nsetup\t1792130400\ninit\tapplied\t1792130400\n",
-            "group\tgroups/development.sh\tapplied\nsecrets\t3\nkey\tunlocked\n",
+            "group\tdevelopment\tapplied\nsecrets\t3\nkey\tunlocked\n",
         )),
         groups: Ok(vec![
             Group {
                 name: "Development".into(),
                 description: Some("Neovim, Rust and the linters".into()),
-                script: "groups/development.sh".into(),
+                install: "development".into(),
             },
             Group {
                 name: "Gaming".into(),
                 description: None,
-                script: "groups/gaming.sh".into(),
+                install: "gaming".into(),
             },
         ]),
         profiles: vec!["tux-desktop".into(), "tux-notebook".into()],
@@ -329,7 +324,7 @@ mod tests {
             "dir\t/home/tux/.dotfiles\nprofile\ttux-notebook\nhost\ttux\nrepo\tready\n",
             "remote\tgit@github.com:tux/dotfiles.git\nahead\t1\nbehind\t2\nchanges\t3\n",
             "files\t12\nlinks\t2\nsetup\t1792130400\ninit\tchanged\t1792130000\n",
-            "group\tgroups/gaming.sh\tapplied\ngroup\tgroups/office.sh\tmissing\n",
+            "group\tgaming\tapplied\ngroup\toffice\tchanged\n",
             "secrets\t3\nkey\tunlocked\npending\tsecrets\t1\npending\tgnome\n",
             "unsaved\tsecrets\nunsaved\tgnome\nunsaved\tpackages\n",
             "backup\t/home/tux/.dotfiles-backup/2026-10-22-151020\nhomelab\tready\n"
@@ -344,8 +339,8 @@ mod tests {
         assert_eq!(s.setup.unwrap().as_second(), 1792130400);
         let (ran, at) = s.init.unwrap();
         assert_eq!((ran, at.unwrap().as_second()), (Ran::Changed, 1792130000));
-        assert!(s.on("groups/gaming.sh") && !s.on("groups/dev.sh"));
-        assert_eq!(s.groups[1].1, Ran::Missing);
+        assert!(s.on("gaming") && !s.on("development"));
+        assert_eq!(s.groups[1].1, Ran::Changed);
         assert_eq!((s.due_secrets, s.due_gnome), (1, true));
         assert_eq!(s.unsaved, ["secrets", "gnome", "packages"]);
         assert_eq!(s.backups.len(), 1);
@@ -367,41 +362,50 @@ mod tests {
     }
 
     #[test]
-    fn groups_are_checked_against_the_profile() {
+    fn groups_name_functions() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
-        let there = |s: &str| s == "groups/gaming.sh" || s == "office.sh";
-        let src = "groups:\n  - name: Gaming\n    description: Steam\n    script: groups/gaming.sh\n  - name: Office\n    script: office.sh\n";
-        let groups = parse_groups(src, there).unwrap();
+        let src = "groups:\n  - name: Gaming\n    description: Steam\n    install: gaming\n  - name: Printer\n    install: brother-dcp1610w\n";
+        let groups = parse_groups(src).unwrap();
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].description.as_deref(), Some("Steam"));
-        assert_eq!(parse_groups("groups:\n", there), Ok(Vec::new()));
-        assert_eq!(parse_groups("groups: []\n", there), Ok(Vec::new()));
-        assert_eq!(parse_groups("# nothing\n", there), Ok(Vec::new()));
+        assert_eq!(groups[1].install, "brother-dcp1610w");
+        assert_eq!(parse_groups("groups:\n"), Ok(Vec::new()));
+        assert_eq!(parse_groups("groups: []\n"), Ok(Vec::new()));
+        assert_eq!(parse_groups("# nothing\n"), Ok(Vec::new()));
         for (src, says) in [
-            ("groups:\n  - name: G\n    script: rm -rf ~.sh\n", "no path"),
-            ("groups:\n  - name: G\n    script: ../x.sh\n", "no path"),
             (
-                "groups:\n  - name: G\n    script: /usr/bin/x.sh\n",
-                "no path",
+                "groups:\n  - name: G\n    install: rm -rf ~\n",
+                "no name of a function",
             ),
-            ("groups:\n  - name: G\n    script: gaming.py\n", "no path"),
             (
-                "groups:\n  - name: G\n    script: groups/none.sh\n",
-                "does not exist",
+                "groups:\n  - name: G\n    install: groups/x.sh\n",
+                "no name of a function",
             ),
-            ("groups:\n  - name: ' '\n    script: office.sh\n", "no name"),
             (
-                "groups:\n  - name: G\n    script: office.sh\n  - name: H\n    script: office.sh\n",
+                "groups:\n  - name: G\n    install: 1st\n",
+                "no name of a function",
+            ),
+            (
+                "groups:\n  - name: G\n    install: ''\n",
+                "no name of a function",
+            ),
+            (
+                "groups:\n  - name: G\n    install: init\n",
+                "init is no group",
+            ),
+            ("groups:\n  - name: ' '\n    install: office\n", "no name"),
+            (
+                "groups:\n  - name: G\n    install: office\n  - name: H\n    install: office\n",
                 "two groups",
             ),
             (
-                "groups:\n  - name: G\n    run: office.sh\n",
+                "groups:\n  - name: G\n    script: office.sh\n",
                 "unknown field",
             ),
             ("group: []\n", "unknown field"),
         ] {
-            let e = parse_groups(src, there).unwrap_err();
+            let e = parse_groups(src).unwrap_err();
             assert!(
                 e.starts_with("dotfiles.yaml: ") && e.contains(says),
                 "{src}: {e}"
@@ -419,7 +423,7 @@ mod tests {
                 .1,
         )
         .unwrap();
-        assert_eq!(parse_groups(template, |_| false), Ok(Vec::new()));
+        assert_eq!(parse_groups(template), Ok(Vec::new()));
         // Its example, uncommented, is a group as the loader takes it.
         let example: String = template
             .lines()
@@ -427,8 +431,11 @@ mod tests {
             .skip_while(|l| !l.starts_with("groups:"))
             .map(|l| format!("{l}\n"))
             .collect();
-        let groups = parse_groups(&example, |s| s == "groups/gaming.sh").unwrap();
-        assert_eq!(groups[0].name, "Gaming");
+        let groups = parse_groups(&example).unwrap();
+        assert_eq!(
+            (groups[0].name.as_str(), groups[0].install.as_str()),
+            ("Gaming", "gaming")
+        );
     }
 
     #[test]
@@ -449,8 +456,8 @@ mod tests {
 
     #[test]
     fn profiles_are_the_folders_at_the_top() {
-        let dir = std::env::temp_dir().join(format!("sm-profiles-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         for d in [
             "work/home",
             "home-pc",
@@ -463,7 +470,6 @@ mod tests {
         std::fs::write(dir.join("home-pc/init.sh"), "").unwrap();
         std::fs::write(dir.join("homelab/homelab.yaml"), "").unwrap();
         std::fs::write(dir.join("README.md"), "").unwrap();
-        assert_eq!(profiles(&dir), ["home-pc", "work"]);
-        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(profiles(dir), ["home-pc", "work"]);
     }
 }

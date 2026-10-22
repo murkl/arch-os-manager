@@ -170,7 +170,7 @@ impl PasswordPage {
     fn new(job: Job) -> PasswordPage {
         PasswordPage {
             job,
-            input: Input::masked(""),
+            input: Input::masked(t("Password")),
             probe: None,
             needed: false,
             auth: None,
@@ -548,12 +548,9 @@ impl RunPage {
                     ctx,
                 )
             }
-            Prompt::Password | Prompt::Secret { .. } => {
-                self.input.masked = true;
-                self.input.draw(buf, inner.x, y, inner.width, ctx);
-            }
-            Prompt::Text { .. } => {
-                self.input.masked = false;
+            Prompt::Password | Prompt::Secret { .. } | Prompt::Text { .. } => {
+                self.input.masked = !matches!(prompt, Prompt::Text { .. });
+                self.input.placeholder = prompt.placeholder().to_string();
                 self.input.draw(buf, inner.x, y, inner.width, ctx);
             }
         }
@@ -1024,6 +1021,32 @@ mod tests {
         assert!(shown.contains("The password cannot be empty."), "{shown}");
     }
 
+    /// The empty box names what it takes, dimmed, until a letter takes its place.
+    #[test]
+    fn the_password_box_names_what_it_takes_until_something_is_typed() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
+        page.needed = true;
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        let (y, line) = shown
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains("Password"))
+            .unwrap_or_else(|| panic!("{shown}"));
+        let x = crate::ui::draw::width(&line[..line.find("Password").unwrap()]);
+        let cell = &term.backend().buffer()[(x as u16, y as u16)];
+        assert_eq!(cell.fg, app.ctx.style.muted, "dimmed: {shown}");
+        press(&mut app, &[Key::Char('x')]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("Password") && shown.contains(app.ctx.style.glyphs.mask),
+            "{shown}"
+        );
+    }
+
     #[test]
     fn ctrl_c_and_q_quit_once_nothing_runs() {
         let (mut after, _) = app();
@@ -1217,6 +1240,11 @@ mod tests {
         open(
             &mut app,
             Box::new(RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run)),
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Password"),
+            "the empty box names it: {shown}"
         );
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);

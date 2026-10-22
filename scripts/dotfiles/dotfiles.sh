@@ -53,11 +53,10 @@ repository() {
     [ "$top" = "$(realpath -- "$SM_DOTFILES")" ]
 }
 
-# Into the dotfiles, with what this machine applied of them and a folder of the operation's own.
+# Into the dotfiles, with what this machine applied of them.
 enter() {
     local path hash time
     if ! repository; then exit 10; fi
-    scratch
     cd -- "$SM_DOTFILES"
     here="$(pwd -P)"
     mine="$(git rev-parse --absolute-git-dir)/system-manager"
@@ -81,11 +80,32 @@ remember() {
             unset 'blob[$path]' 'when[$path]'
         fi
     done
+    record
+}
+
+# Notes a function of init.sh as run here in the state its hash names.
+ran() {
+    local key="${profile}/init.sh/$1"
+    blob["$key"]="$2"
+    when["$key"]="$EPOCHSECONDS"
+    record
+}
+
+# The hash a function of init.sh last ran with here, empty where it never did.
+applied() {
+    local key="${profile}/init.sh/$1"
+    printf '%s\n' "${blob[$key]:-}"
+}
+
+# What this machine applied, written anew.
+record() {
+    local path new
     mkdir -p -- "$mine"
+    beside "${mine}/applied"
     for path in "${!blob[@]}"; do
         printf '%s\t%s\t%s\n' "$path" "${blob[$path]}" "${when[$path]}"
-    done | LC_ALL=C sort >"${mine}/applied.new"
-    mv -f -- "${mine}/applied.new" "${mine}/applied"
+    done | LC_ALL=C sort >"$new"
+    mv -f -- "$new" "${mine}/applied"
 }
 
 # Whether a file of the dotfiles changed since this machine applied it, or never did.
@@ -104,11 +124,19 @@ track() {
     git add --force -- "$1"
 }
 
-# What a command prints, into a file only once it succeeded: `keep <file> <command>`.
+# What a command prints, into a file only once it succeeded, and no file where it prints nothing:
+# `keep <file> <command>`.
 keep() {
+    local out new
+    out="$("${@:2}")"
+    if [ -z "$out" ]; then
+        rm -f -- "$1"
+        return 0
+    fi
     mkdir -p -- "$(dirname -- "$1")"
-    "${@:2}" >"$1.new"
-    mv -f -- "$1.new" "$1"
+    beside "$1"
+    printf '%s\n' "$out" >"$new"
+    mv -f -- "$new" "$1"
 }
 
 # The repository of the dotfiles, made where there is none.
@@ -118,15 +146,14 @@ ensure_repository() {
     fi
 }
 
-# The profile, made where it is missing, with the two files a new one starts with. They are the
-# person's from then on: one deleted stays deleted. The template's init.sh does nothing, so it
-# counts as run.
+# The profile, made where it is missing as something goes into it, with the two files a new one
+# starts with. They are the person's from then on: one deleted stays deleted. The template's
+# init.sh does nothing, so it counts as run.
 ensure_profile() {
     local template="${BASH_SOURCE[0]%/*}/profile"
     if [ -d "$profile" ]; then return 0; fi
     mkdir -p -- "$profile"
     cp -- "${template}/init.sh" "${template}/dotfiles.yaml" "${profile}/"
-    chmod +x -- "${profile}/init.sh"
     remember "${profile}/init.sh"
 }
 
@@ -230,6 +257,11 @@ leaves() {
     done < <(find "${profile}/home" -mindepth 1 \( -type f -o -type l \) -print0)
 }
 
+# Every place of home/ in $HOME, a line each, as the record of the links keeps them.
+places() {
+    leaves | cut -f1
+}
+
 # Whether a place in $HOME is the link to a file of the dotfiles.
 linked() {
     [ -L "${HOME}/$1" ] && [ "$(realpath -m -- "${HOME}/$1")" = "${here}/$2" ]
@@ -266,8 +298,7 @@ link() {
         done < <(find "${profile}/home" -mindepth 1 -print0)
         stow_home || exit 16
     fi
-    mkdir -p -- "$mine"
-    leaves | cut -f1 >"${mine}/${profile}.links"
+    keep "${mine}/${profile}.links" places
 }
 
 stow_home() {
@@ -287,19 +318,19 @@ sealed() {
 # The key of a folder unlocked on this machine: out of its key.age with the passphrase, which age
 # asks for, up to three times.
 unlock() {
-    local key
+    local key new said
     key="$(keyfile "$1")"
     if [ -f "$key" ]; then return 0; fi
     if [ ! -f "$1/key.age" ]; then exit 23; fi
     mkdir -p -- "$mine"
+    beside "$key"
     for _ in 1 2 3; do
-        rm -f -- "${key}.new"
-        if (umask 077 && age --decrypt --output "${key}.new" "$1/key.age") 2>"${work}/said"; then
-            mv -f -- "${key}.new" "$key"
+        if said="$( (umask 077 && age --decrypt --output "$new" "$1/key.age") 2>&1)"; then
+            mv -f -- "$new" "$key"
             return 0
         fi
-        cat -- "${work}/said" >&2
-        if ! grep -q 'incorrect passphrase' "${work}/said"; then exit 1; fi
+        printf '%s\n' "$said" >&2
+        if ! grep -q 'incorrect passphrase' <<<"$said"; then exit 1; fi
     done
     exit 20
 }
@@ -307,21 +338,22 @@ unlock() {
 # The key of a folder behind a passphrase into its key.age, which age asks for twice: the one of
 # this machine, or a new one for a folder without secrets.
 wrap() {
-    local key
+    local key new said
     key="$(keyfile "$1")"
-    mkdir -p -- "$mine"
     if [ ! -f "$key" ]; then
         if sealed "$1"; then exit 23; fi
-        (umask 077 && age-keygen --output "${key}.new" 2>/dev/null)
-        mv -f -- "${key}.new" "$key"
+        mkdir -p -- "$mine"
+        beside "$key"
+        (umask 077 && age-keygen --output "$new" 2>/dev/null)
+        mv -f -- "$new" "$key"
     fi
-    if ! age --passphrase --output "$1/key.age.new" "$key" 2>"${work}/said"; then
-        rm -f -- "$1/key.age.new"
-        cat -- "${work}/said" >&2
-        if grep -q "didn't match" "${work}/said"; then exit 21; fi
+    beside "$1/key.age"
+    if ! said="$(age --passphrase --output "$new" "$key" 2>&1)"; then
+        printf '%s\n' "$said" >&2
+        if grep -q "didn't match" <<<"$said"; then exit 21; fi
         exit 1
     fi
-    mv -f -- "$1/key.age.new" "$1/key.age"
+    mv -f -- "$new" "$1/key.age"
 }
 
 # Every secret of the profile, by its place in $HOME and its path in the dotfiles after a tab.
@@ -337,19 +369,20 @@ secrets() {
 # Each secret into $HOME, readable by its owner only, where it is missing or its file in the
 # profile changed since it was written here. What stands there otherwise goes into the backup.
 restore_secrets() {
-    local place file target key
+    local place file target key new
     unlock "$profile"
     key="$(keyfile "$profile")"
     while IFS=$'\t' read -r -u 4 place file; do
         target="${HOME}/${place}"
         if [ -f "$target" ] && [ ! -L "$target" ] && ! changed "$file"; then continue; fi
         mkdir -p -- "$(dirname -- "$target")"
-        (umask 077 && age --decrypt --identity "$key" --output "${target}.new" "$file")
-        if [ -f "$target" ] && [ ! -L "$target" ] && cmp -s -- "${target}.new" "$target"; then
-            rm -- "${target}.new"
+        beside "$target"
+        (umask 077 && age --decrypt --identity "$key" --output "$new" "$file")
+        if [ -f "$target" ] && [ ! -L "$target" ] && cmp -s -- "$new" "$target"; then
+            rm -- "$new"
         else
             if [ -e "$target" ] || [ -L "$target" ]; then aside "$place"; fi
-            mv -- "${target}.new" "$target"
+            mv -- "$new" "$target"
         fi
         remember "$file"
     done 4< <(secrets)
@@ -362,12 +395,13 @@ differs() {
 
 # Each secret whose file in $HOME differs from the profile's, encrypted anew into the profile.
 save_secrets() {
-    local place file recipient
+    local place file recipient new
     recipient="$(age-keygen -y "$(keyfile "$profile")")"
     while IFS=$'\t' read -r -u 4 place file; do
         if [ -f "${HOME}/${place}" ] && differs "$place" "$file"; then
-            age --encrypt --recipient "$recipient" --output "${file}.new" "${HOME}/${place}"
-            mv -f -- "${file}.new" "$file"
+            beside "$file"
+            age --encrypt --recipient "$recipient" --output "$new" "${HOME}/${place}"
+            mv -f -- "$new" "$file"
             remember "$file"
         fi
     done 4< <(secrets)
@@ -423,30 +457,64 @@ lacking() {
     LC_ALL=C comm -23 <(listed "$1" | LC_ALL=C sort -u) <("${@:2}" | LC_ALL=C sort -u)
 }
 
-# A script of the profile in a shell of its own, in its folder, as the person would start it, and
-# recorded where it succeeds. 75, EX_TEMPFAIL of sysexits.h, says not yet: it runs again next time.
+# A command after init.sh, in a shell of its own in the profile's folder: init.sh holds functions
+# as a PKGBUILD does, read first and run strict as makepkg runs those. What init.sh prints as it is
+# read goes to the details.
+sourced() {
+    (cd -- "$profile" && bash -c 'set -euo pipefail; . ./init.sh >&2; "$@"' init.sh "$@")
+}
+
+# The hash of a function of init.sh as bash reads it, so a comment or a space changes nothing.
+# Empty where init.sh lacks it.
+fingerprint() {
+    local text
+    text="$(sourced declare -f "$1" 2>/dev/null)" || return 0
+    git hash-object --stdin <<<"$text"
+}
+
+# Whether every function named ran here once.
+known() {
+    local name
+    for name; do
+        if [ -z "$(applied "$name")" ]; then return 1; fi
+    done
+}
+
+# Runs a function of init.sh and records it where it succeeds: `hook <function> <hash>`. 75,
+# EX_TEMPFAIL of sysexits.h, says not yet: it runs again next time.
 hook() {
     local status=0
-    (cd -- "$(dirname -- "$1")" && bash -- "./$(basename -- "$1")") || status=$?
+    sourced "$1" || status=$?
     case "$status" in
-    0) remember "$1" ;;
-    75) echo "Not yet: ${1#"${profile}/"}" ;;
+    0) ran "$1" "$2" ;;
+    75)
+        echo "Not yet: $1"
+        later=1
+        ;;
     *) return 1 ;;
     esac
 }
 
-# A group's script as dotfiles.yaml names it: a file of the profile ending in .sh.
+# A group's function as dotfiles.yaml names it after install: a name bash takes for a function,
+# other than init, which set up calls anyway.
 group() {
-    case "$1" in
-    /* | *..* | '') exit 38 ;;
-    esac
-    if [[ $1 != *.sh ]] || [ ! -f "${profile}/$1" ]; then exit 38; fi
+    if [[ ! $1 =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || [ "$1" = init ]; then exit 38; fi
+}
+
+# groups.txt with a function more.
+with() {
+    { listed "${profile}/groups.txt" && printf '%s\n' "$1"; } | LC_ALL=C sort -u
+}
+
+# groups.txt without a function.
+without() {
+    listed "${profile}/groups.txt" | grep -vxF -- "$1" || allow 1
 }
 
 # What a setup would apply and a backup would save, a line each. Nothing past the repository
 # where it or the profile is missing.
 op_state() {
-    local t counts place file files=0 missing=0 key script status
+    local t counts place file files=0 missing=0 name status
     printf 'dir\t%s\nprofile\t%s\nhost\t%s\n' "$SM_DOTFILES" "$SM_PROFILE" "$(</proc/sys/kernel/hostname)"
     if [ ! -e "$SM_DOTFILES" ]; then
         printf 'repo\tmissing\n'
@@ -486,14 +554,11 @@ op_state() {
         if changed "$file"; then status=changed; fi
         printf 'init\t%s\t%s\n' "$status" "${when[$file]:-}"
     fi
-    while IFS= read -r script; do
+    # A group switched on is due where it never ran here. A change of its function is one of init.sh.
+    while IFS= read -r name; do
         status=applied
-        if [ ! -f "${profile}/${script}" ]; then
-            status=missing
-        elif changed "${profile}/${script}"; then
-            status=changed
-        fi
-        printf 'group\t%s\t%s\n' "$script" "$status"
+        if ! known "$name"; then status=changed; fi
+        printf 'group\t%s\t%s\n' "$name" "$status"
     done < <(listed "${profile}/groups.txt")
     secrets_state
     gnome_state
@@ -539,6 +604,7 @@ gnome_state() {
             break
         fi
     done
+    scratch
     extensions "${work}/gnome"
     if ! diff -rq -- "${work}/gnome" "${profile}/gnome" >/dev/null 2>&1; then printf 'unsaved\tgnome\n'; fi
 }
@@ -564,16 +630,13 @@ op_fetch() {
 # Clones the repository into the dotfiles, or binds the dotfiles to it. Empty, the dotfiles stay on
 # this machine only.
 op_connect() {
-    local url="${1:-}" before
+    local url="${1:-}" before said
     case "$url" in
     http://* | git://*) exit 37 ;;
     esac
     if [ ! -e "$SM_DOTFILES" ]; then
         if [ -z "$url" ]; then return 0; fi
-        scratch
-        if ! git clone --quiet -- "$url" "$SM_DOTFILES" 2>"${work}/said"; then unreached "$(<"${work}/said")"; fi
-        enter
-        ensure_profile
+        said="$(git clone --quiet -- "$url" "$SM_DOTFILES" 2>&1)" || unreached "$said"
         return 0
     fi
     enter
@@ -586,7 +649,6 @@ op_connect() {
     if [ -n "$before" ]; then git remote set-url origin "$url"; else git remote add origin "$url"; fi
     fetch_remote
     git remote set-head origin --auto >/dev/null 2>&1 || true
-    ensure_profile
 }
 
 # Whether a repository answers and shares the history of the dotfiles, asked by its address alone,
@@ -604,19 +666,18 @@ fits() {
     if ! git merge-base HEAD FETCH_HEAD >/dev/null; then exit 36; fi
 }
 
-# The machine as the profile describes it: the latest state, the links, the secrets, init.sh, the
+# The machine as the profile describes it: the latest state, the links, the secrets, init, the
 # packages, the groups and GNOME. What the profile brought since the last time is applied, what
 # this machine changed since stays for a backup.
 op_setup() {
-    local script file uuid name present
-    local -a wanted=() repo=() gone=() missing=() apps=()
-    ensure_repository
+    local name file uuid present lack repos later=0
+    local -a on=() wanted=() repo=() gone=() missing=() apps=()
+    local -A hash=()
     enter
     if remote; then
         step pull
         integrate
     fi
-    ensure_profile
     step link
     link
     if [ -n "$(secrets)" ]; then
@@ -624,18 +685,28 @@ op_setup() {
         step secrets
         restore_secrets
     fi
-    if [ -f "${profile}/init.sh" ] && changed "${profile}/init.sh"; then
+
+    # The functions of init.sh where it changed since its last setup here or a group switched on
+    # never ran here. init.sh is read on its own first, so a failure of its own is no missing
+    # function.
+    mapfile -t on < <(listed "${profile}/groups.txt")
+    for name in "${on[@]}"; do group "$name"; done
+    if { [ -f "${profile}/init.sh" ] && changed "${profile}/init.sh"; } || ! known "${on[@]}"; then
         step init
-        hook "${profile}/init.sh" || exit 17
+        if [ -f "${profile}/init.sh" ]; then sourced true || exit 17; fi
+        for name in init "${on[@]}"; do hash["$name"]="$(fingerprint "$name")"; done
+    fi
+    if [ -n "${hash[init]:-}" ] && [ "$(applied init)" != "${hash[init]}" ]; then
+        hook init "${hash[init]}" || exit 17
     fi
 
     step packages
-    lacking "${profile}/packages/pacman.txt" pacman -Qq >"${work}/wanted"
-    if [ -s "${work}/wanted" ]; then
+    lack="$(lacking "${profile}/packages/pacman.txt" pacman -Qq)"
+    if [ -n "$lack" ]; then
         # What no repository has any more is left out, as the Arch Wiki filters a list.
-        pacman -Slq | LC_ALL=C sort -u >"${work}/repos"
-        mapfile -t repo < <(LC_ALL=C comm -12 "${work}/repos" "${work}/wanted")
-        mapfile -t gone < <(LC_ALL=C comm -13 "${work}/repos" "${work}/wanted")
+        repos="$(pacman -Slq | LC_ALL=C sort -u)"
+        mapfile -t repo < <(LC_ALL=C comm -12 <(printf '%s\n' "$repos") <(printf '%s\n' "$lack"))
+        mapfile -t gone < <(LC_ALL=C comm -13 <(printf '%s\n' "$repos") <(printf '%s\n' "$lack"))
         if [ ${#gone[@]} -gt 0 ]; then echo "In no repository: ${gone[*]}"; fi
         if [ ${#repo[@]} -gt 0 ]; then sudo pacman -S --needed -- "${repo[@]}"; fi
     fi
@@ -658,12 +729,14 @@ op_setup() {
         fi
     fi
 
-    while IFS= read -r script; do
-        if [ ! -f "${profile}/${script}" ] || ! changed "${profile}/${script}"; then continue; fi
+    for name in "${on[@]}"; do
+        if [ -z "${hash[$name]+set}" ] || [ "$(applied "$name")" = "${hash[$name]}" ]; then continue; fi
+        if [ -z "${hash[$name]}" ]; then exit 38; fi
         step groups
-        echo "$script"
-        hook "${profile}/${script}" || exit 18
-    done < <(listed "${profile}/groups.txt")
+        echo "$name"
+        hook "$name" "${hash[$name]}" || exit 18
+    done
+    if [ ${#hash[@]} -gt 0 ] && [ "$later" = 0 ]; then remember "${profile}/init.sh"; fi
 
     if [ -d "${profile}/gnome" ] && gnome_shell; then
         step gnome
@@ -686,7 +759,7 @@ op_setup() {
             remember "${profile}/gnome/extensions.txt"
         fi
     fi
-    printf '%s\n' "$EPOCHSECONDS" >"${mine}/${profile}.setup"
+    keep "${mine}/${profile}.setup" printf '%s\n' "$EPOCHSECONDS"
 }
 
 # The parts of the dotfiles that changed, for the commit message: `nvim, packages`. A file of
@@ -712,7 +785,7 @@ areas() {
 # This machine into its profile: the packages, GNOME and the secrets that changed, then everything
 # open committed and uploaded.
 op_backup() {
-    local list file
+    local list file new
     local -a stale=()
     ensure_repository
     enter
@@ -721,10 +794,11 @@ op_backup() {
     for list in pacman aur flatpak; do keep "${profile}/packages/${list}.txt" installed "$list"; done
     if gnome_shell; then
         step gnome
-        extensions "${work}/gnome"
-        # Swapped whole, so no file of an extension without settings stays behind.
+        # Written beside and swapped whole, so no file of an extension without settings stays.
+        beside "${profile}/gnome"
+        extensions "$new"
         rm -rf -- "${profile}/gnome"
-        mv -- "${work}/gnome" "${profile}/gnome"
+        mv -- "$new" "${profile}/gnome"
         for file in "${!blob[@]}"; do
             if [[ $file == "${profile}/gnome/"* ]]; then stale+=("$file"); fi
         done
@@ -748,24 +822,24 @@ op_backup() {
     fi
 }
 
-# Runs a group's script and switches it on in the profile, so a setup runs it again where it changed.
+# Runs the function of a group and switches it on in the profile, so a setup runs it again where
+# it changed.
 op_group_on() {
+    local hash later=0
     enter
     group "$1"
-    hook "${profile}/$1" || exit 18
-    { listed "${profile}/groups.txt" && printf '%s\n' "$1"; } | LC_ALL=C sort -u >"${profile}/groups.txt.new"
-    mv -f -- "${profile}/groups.txt.new" "${profile}/groups.txt"
+    if [ ! -f "${profile}/init.sh" ]; then exit 38; fi
+    sourced true || exit 17
+    hash="$(fingerprint "$1")"
+    if [ -z "$hash" ]; then exit 38; fi
+    hook "$1" "$hash" || exit 18
+    keep "${profile}/groups.txt" with "$1"
 }
 
-# Switches a group off in the profile. What its script installed stays.
+# Switches a group off in the profile. What its function installed stays.
 op_group_off() {
     enter
-    { listed "${profile}/groups.txt" | grep -vxF -- "$1" || allow 1; } >"${profile}/groups.txt.new"
-    if [ -s "${profile}/groups.txt.new" ]; then
-        mv -f -- "${profile}/groups.txt.new" "${profile}/groups.txt"
-    else
-        rm -f -- "${profile}/groups.txt.new" "${profile}/groups.txt"
-    fi
+    keep "${profile}/groups.txt" without "$1"
 }
 
 # An XDG folder of this user, where its files are no configuration.
@@ -826,8 +900,7 @@ op_add() {
         exit 16
     fi
     track "$dest"
-    mkdir -p -- "$mine"
-    leaves | cut -f1 >"${mine}/${profile}.links"
+    keep "${mine}/${profile}.links" places
 }
 
 # The links in $HOME to files of home/, as `file<TAB>path`, each folder holding nothing else as
@@ -882,25 +955,26 @@ tidy() {
 # Gives a link back as the file it points to, or every link of a folder, and takes the file out of
 # home/.
 op_remove() {
-    local chosen="${1%/}" place file found=0
+    local chosen="${1%/}" place file new found=0
     enter
     while IFS=$'\t' read -r -u 4 place file; do
         if [[ ${HOME}/$place != "$chosen" && ${HOME}/$place != "$chosen"/* ]] || ! linked "$place" "$file"; then
             continue
         fi
-        cp --preserve=mode,timestamps -- "$file" "${HOME}/${place}.restore"
-        mv -f -- "${HOME}/${place}.restore" "${HOME}/${place}"
+        beside "${HOME}/${place}"
+        cp --preserve=mode,timestamps -- "$file" "$new"
+        mv -f -- "$new" "${HOME}/${place}"
         rm -- "$file"
         tidy "$file" "${profile}/home"
         found=1
     done 4< <(leaves)
     if [ "$found" = 0 ]; then exit 34; fi
-    leaves | cut -f1 >"${mine}/${profile}.links"
+    keep "${mine}/${profile}.links" places
 }
 
 # Encrypts a file or every file of a folder of $HOME into secrets/. The file stays where it is.
 op_secret_add() {
-    local path="$1" file dest recipient
+    local path="$1" file dest recipient new
     local -a files=()
     if kept "$path"; then exit 33; fi
     refuse "$path"
@@ -913,8 +987,9 @@ op_secret_add() {
     for file in "${files[@]}"; do
         dest="${profile}/secrets/$(encode "${file#"$HOME"/}").age"
         mkdir -p -- "$(dirname -- "$dest")"
-        age --encrypt --recipient "$recipient" --output "${dest}.new" "$file"
-        mv -f -- "${dest}.new" "$dest"
+        beside "$dest"
+        age --encrypt --recipient "$recipient" --output "$new" "$file"
+        mv -f -- "$new" "$dest"
         track "$dest"
         remember "$dest"
     done
@@ -985,7 +1060,7 @@ listing() {
 # .age, as <server>.tar in the downloads folder. Packed without anyone's name, unpacked again and
 # compared before it takes its place, and readable by its owner only, as it holds the secrets.
 op_homelab_export() {
-    local server="$1" dir stage file
+    local server="$1" dir out stage file
     enter
     server "$server"
     if [ -n "$(find "${lab}/${server}" ! -type d ! -type f -print -quit)" ]; then exit 42; fi
@@ -993,10 +1068,9 @@ op_homelab_export() {
     dir="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"
     if [ ! -d "$dir" ]; then dir="$HOME"; fi
     # Beside the archive rather than in /tmp: renamed there, it is never half written.
-    rm -rf -- "$work"
-    work="$(mktemp -d "${dir}/.system-manager.XXXXXX")"
-    trap 'rm -rf -- "$work"' EXIT
-    stage="${work}/stage"
+    out="$(mktemp -d "${dir}/.system-manager.XXXXXX")"
+    sm_made+=("$out")
+    stage="${out}/stage"
     cp -r --preserve=timestamps -- "${lab}/${server}" "$stage"
     chmod -R u+rwX,go+rX,go-w "$stage"
     while IFS= read -r -d '' file; do
@@ -1005,16 +1079,16 @@ op_homelab_export() {
     done < <(find "$stage" -type f -name '*.age' -print0)
     find "$stage" -name .gitkeep -delete
     (cd -- "$stage" && find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort) |
-        tar --create --file "${work}/archive" --directory "$stage" --no-recursion \
+        tar --create --file "${out}/archive" --directory "$stage" --no-recursion \
             --verbatim-files-from --files-from - --format=ustar --owner=0 --group=0 --numeric-owner
-    mkdir -- "${work}/check"
-    tar --extract --preserve-permissions --file "${work}/archive" --directory "${work}/check"
-    if ! diff -r --no-dereference -- "$stage" "${work}/check" >&2 ||
-        ! diff <(listing "$stage") <(listing "${work}/check") >&2; then
+    mkdir -- "${out}/check"
+    tar --extract --preserve-permissions --file "${out}/archive" --directory "${out}/check"
+    if ! diff -r --no-dereference -- "$stage" "${out}/check" >&2 ||
+        ! diff <(listing "$stage") <(listing "${out}/check") >&2; then
         exit 43
     fi
-    chmod 600 -- "${work}/archive"
-    mv -f -- "${work}/archive" "${dir}/${server}.tar"
+    chmod 600 -- "${out}/archive"
+    mv -f -- "${out}/archive" "${dir}/${server}.tar"
     echo "${dir}/${server}.tar"
 }
 
@@ -1028,7 +1102,7 @@ within() {
 # A file of the home folder as a secret of a server, encrypted to <path>.age in its folder. One
 # there before is replaced.
 op_homelab_secret_add() {
-    local server="$1" file="$2" path="$3" dest
+    local server="$1" file="$2" path="$3" dest new
     enter
     server "$server"
     within "$path"
@@ -1036,8 +1110,9 @@ op_homelab_secret_add() {
     if [ -f "${lab}/key.age" ]; then unlock "$lab"; else wrap "$lab"; fi
     dest="${lab}/${server}/${path}.age"
     mkdir -p -- "$(dirname -- "$dest")"
-    age --encrypt --recipient "$(age-keygen -y "$(keyfile "$lab")")" --output "${dest}.new" "$file"
-    mv -f -- "${dest}.new" "$dest"
+    beside "$dest"
+    age --encrypt --recipient "$(age-keygen -y "$(keyfile "$lab")")" --output "$new" "$file"
+    mv -f -- "$new" "$dest"
     track "$dest"
 }
 

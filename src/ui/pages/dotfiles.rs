@@ -84,9 +84,9 @@ fn place(s: &State) -> String {
 enum Item {
     Setup,
     Backup,
-    /// A group of dotfiles.yaml, by its script.
-    Group(String),
     Files,
+    /// A group of dotfiles.yaml, by its function.
+    Group(String),
 }
 
 pub struct DotfilesPage {
@@ -127,30 +127,28 @@ impl DotfilesPage {
             Row::new(Item::Backup, t("Back up"))
                 .icon(icon::BACKUP, Tone::Normal)
                 .detail(backup, backup_tone),
+            Row::heading(""),
+            Row::new(Item::Files, t("Files"))
+                .icon(icon::FOLDER, Tone::Normal)
+                .detail((s.files + s.secrets).to_string(), Tone::Muted),
         ];
         if let Ok(groups) = &d.groups
             && !groups.is_empty()
         {
             rows.push(Row::heading(""));
             for g in groups {
-                let (on, tone) = match s.on(&g.script) {
+                let (on, tone) = match s.on(&g.install) {
                     true => (t("on"), Tone::Ok),
                     false => (t("off"), Tone::Muted),
                 };
                 rows.push(
-                    Row::new(Item::Group(g.script.clone()), g.name.clone())
+                    Row::new(Item::Group(g.install.clone()), g.name.clone())
                         .icon(icon::PACKAGE, Tone::Normal)
                         .detail(on, tone)
                         .note(g.description.clone().unwrap_or_default()),
                 );
             }
         }
-        rows.push(Row::heading(""));
-        rows.push(
-            Row::new(Item::Files, t("Files"))
-                .icon(icon::FOLDER, Tone::Normal)
-                .detail((s.files + s.secrets).to_string(), Tone::Muted),
-        );
         rows
     }
 
@@ -196,7 +194,7 @@ impl DotfilesPage {
 /// The question before a setup: exactly what happens.
 fn setup_job(s: &State) -> Job {
     let text = tf(
-        "Set up this machine from {profile}?\nFetches the latest state, links the files, writes the secrets, runs init.sh and the scripts of the groups where they changed, and installs what the package lists name. What stands in the way of a link goes to ~/.dotfiles-backup.",
+        "Set up this machine from {profile}?\nFetches the latest state, links the files, writes the secrets, calls init and the groups switched on where they changed, and installs what the package lists name. What stands in the way of a link goes to ~/.dotfiles-backup.",
         &[("profile", &place(s))],
     );
     Job::new(op::DOTFILES_SETUP, Vec::new())
@@ -220,24 +218,24 @@ fn backup_job(s: &State) -> Job {
         .named(t("Back up"))
 }
 
-fn group_job(s: &State, name: &str, script: &str) -> Job {
-    let args = vec![script.to_string()];
+fn group_job(s: &State, name: &str, install: &str) -> Job {
+    let args = vec![install.to_string()];
     let what: &[(&str, &dyn std::fmt::Display)] = &[
         ("name", &name),
-        ("script", &script),
+        ("install", &install),
         ("profile", &s.profile),
     ];
-    if s.on(script) {
+    if s.on(install) {
         Job::new(op::DOTFILES_GROUP_OFF, args)
             .confirm(tf(
-                "Switch {name} off?\nSet up no longer runs {script}. What it installed stays.",
+                "Switch {name} off?\nSet up no longer calls {install} of init.sh. What it installed stays.",
                 what,
             ))
             .named(name)
     } else {
         Job::new(op::DOTFILES_GROUP_ON, args)
             .confirm(tf(
-                "Set up {name}?\nRuns {script} and switches the group on in the profile {profile}, so set up runs it on its other machines too.",
+                "Set up {name}?\nCalls {install} of init.sh and switches the group on in the profile {profile}, so set up calls it on its other machines too.",
                 what,
             ))
             .named(name)
@@ -311,17 +309,17 @@ impl Page for DotfilesPage {
             Item::Setup if s.repo != Repo::Ready => Flow::Stay,
             Item::Setup => Flow::Push(start(setup_job(s), ctx)),
             Item::Backup => Flow::Push(start(backup_job(s), ctx)),
-            Item::Group(script) => {
+            Item::Files => Flow::Push(Box::new(FilesPage::new())),
+            Item::Group(install) => {
                 let name = d
                     .groups
                     .iter()
                     .flatten()
-                    .find(|g| g.script == script)
+                    .find(|g| g.install == install)
                     .map(|g| g.name.clone())
-                    .unwrap_or_else(|| script.clone());
-                Flow::Push(start(group_job(s, &name, &script), ctx))
+                    .unwrap_or_else(|| install.clone());
+                Flow::Push(start(group_job(s, &name, &install), ctx))
             }
-            Item::Files => Flow::Push(Box::new(FilesPage::new())),
         }
     }
 
@@ -538,10 +536,20 @@ mod tests {
         assert!(shown.contains("Neovim, Rust and the linters"), "{shown}");
         assert!(row("Back up").ends_with("not backed up"), "{shown}");
         assert!(row("Files").ends_with("34"), "{shown}");
-        press(&mut app, &[Key::Down, Key::Down, Key::Down, Key::Enter]);
+        // The groups stand below Files, the last row of all.
+        let rows: Vec<&str> = shown.lines().collect();
+        let at = |name: &str| rows.iter().position(|l| l.contains(name)).unwrap();
+        assert!(
+            at("Files") < at("Development") && at("Development") < at("Gaming"),
+            "{shown}"
+        );
+        press(
+            &mut app,
+            &[Key::Down, Key::Down, Key::Down, Key::Down, Key::Enter],
+        );
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("Set up Gaming?") && shown.contains("groups/gaming.sh"),
+            shown.contains("Set up Gaming?") && shown.contains("Calls gaming of init.sh"),
             "{shown}"
         );
         let no = shown
@@ -560,12 +568,12 @@ mod tests {
         crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut d = example();
-        d.groups = Err("dotfiles.yaml: groups/x.sh does not exist".into());
+        d.groups = Err("dotfiles.yaml: x y is no name of a function".into());
         app.ctx.shared.dotfiles = Loaded::Ready(d);
         open(&mut app, Box::new(DotfilesPage::new()));
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("groups/x.sh does not exist") && shown.contains("Files"),
+            shown.contains("x y is no name of a function") && shown.contains("Files"),
             "{shown}"
         );
         assert!(!shown.contains("Gaming"), "{shown}");

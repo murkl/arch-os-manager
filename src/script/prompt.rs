@@ -151,6 +151,20 @@ impl Prompt {
         }
     }
 
+    /// What the box of a typed answer shows while it is empty.
+    pub fn placeholder(&self) -> &'static str {
+        match self {
+            Prompt::Password => t("Password"),
+            Prompt::Secret { question } if question.starts_with("Password for '") => {
+                t("Password or token")
+            }
+            Prompt::Secret { .. } => t("Passphrase"),
+            Prompt::Text { question } if question.starts_with("Username for '") => t("User name"),
+            Prompt::Text { .. } => t("Empty keeps the default"),
+            Prompt::YesNo { .. } | Prompt::Choice { .. } | Prompt::HostKey { .. } => "",
+        }
+    }
+
     /// The answers of a question to choose from, yes first, in the words the program takes.
     pub fn answers(&self) -> Option<[&'static str; 2]> {
         match self {
@@ -416,6 +430,31 @@ mod tests {
             None,
             "a login of its own stays in the terminal"
         );
+    }
+
+    #[test]
+    fn an_empty_answer_box_names_what_it_takes() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        for (line, shows) in [
+            (format!("x{}", sudo::PROMPT), "Password"),
+            (
+                "Password for 'https://tux@github.com': ".into(),
+                "Password or token",
+            ),
+            (
+                "Enter passphrase for key '/home/tux/.ssh/id_ed25519': ".into(),
+                "Passphrase",
+            ),
+            ("Confirm passphrase: ".into(), "Passphrase"),
+            ("Username for 'https://github.com': ".into(), "User name"),
+            ("==> ".into(), "Empty keeps the default"),
+        ] {
+            let p = Prompt::detect(&line, &[]).unwrap();
+            assert_eq!(p.placeholder(), shows, "{line}");
+        }
+        let chosen = Prompt::detect(":: Proceed with installation? [Y/n] ", &[]).unwrap();
+        assert_eq!(chosen.placeholder(), "", "chosen, not typed");
     }
 
     #[test]

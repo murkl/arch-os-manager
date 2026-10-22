@@ -21,7 +21,8 @@ type Then<T> = Box<dyn FnMut(T, &mut Ctx) -> Flow>;
 type Answers = Result<Vec<Row<String>>, Failure>;
 type Read = Box<dyn FnOnce() -> Answers + Send>;
 
-/// A text, with a sentence above it on what it is for. Whoever takes it checks it.
+/// A text, with a sentence above it on what it is for and an example in the empty box. Whoever
+/// takes it checks it.
 pub struct TextPage {
     title: String,
     question: String,
@@ -33,10 +34,11 @@ impl TextPage {
     pub fn new(
         title: &str,
         question: &str,
+        example: &str,
         prefill: String,
         then: impl FnMut(String, &mut Ctx) -> Flow + 'static,
     ) -> TextPage {
-        let mut input = Input::new("");
+        let mut input = Input::new(example);
         input.text = prefill;
         TextPage {
             title: title.to_string(),

@@ -94,7 +94,7 @@ errors:
     init.sh failed
     Its output in the details names the line.
   18: |
-    The script of a group failed
+    The function of a group failed
     Its output in the details names the line.
   19: |
     Git does not know your name
@@ -143,8 +143,8 @@ errors:
     Plain http and git:// are refused
     They carry the dotfiles unencrypted. Take the https or ssh address.
   38: |
-    The script is not in the profile
-    dotfiles.yaml names a script of the profile folder, ending in .sh.
+    init.sh has no such function
+    dotfiles.yaml names a function of init.sh after install, other than init.
   39: |
     The profile has no secrets yet
   40: |

@@ -55,6 +55,7 @@ op_merge() {
     esac
     # Written beside it with its owner and mode, then renamed over it, so nothing
     # reads half a configuration.
+    sm_made_root+=("${target}.sm-new")
     sudo install -m "$(stat -c %a -- "$target")" -o "$(stat -c %u -- "$target")" \
         -g "$(stat -c %g -- "$target")" -- "${work}/current" "${target}.sm-new"
     sudo mv -f -- "${target}.sm-new" "$target"

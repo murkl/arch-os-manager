@@ -1,8 +1,16 @@
 #!/bin/bash
-# Commands of your own for this machine. Set up runs this file in its folder,
-# after the links and the secrets and before the packages, and again whenever
-# it changed. Every line must be safe to run twice.
-set -euo pipefail
+# The commands of this machine, in functions as in a PKGBUILD. Set up reads this file, then calls
+# init and the function of each group switched on, each again where it changed. So every function
+# must be safe to run twice, and outside them stand only definitions. One that ends with 75 runs
+# again at the next set up.
 
-# sudo pacman -S --needed zsh
-# sudo chsh -s /usr/bin/zsh "$USER"
+init() {
+    # sudo pacman -S --needed zsh
+    # sudo chsh -s /usr/bin/zsh "$USER"
+    :
+}
+
+# A group, as dotfiles.yaml names it with install: gaming
+# gaming() {
+#     sudo pacman -S --needed steam
+# }

@@ -10,6 +10,8 @@ use system_manager::script::{op, query};
 
 struct Sandbox {
     dir: PathBuf,
+    /// Removed with the sandbox, also where the test fails.
+    _tmp: tempfile::TempDir,
 }
 
 struct Outcome {
@@ -22,12 +24,15 @@ struct Outcome {
 
 impl Sandbox {
     fn new(test: &str) -> Sandbox {
-        let dir = std::env::temp_dir().join(format!("sm-scripts-{test}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let tmp = tempfile::Builder::new()
+            .prefix(&format!("sm-scripts-{test}-"))
+            .tempdir()
+            .unwrap();
+        let dir = tmp.path().to_path_buf();
         std::fs::create_dir_all(dir.join("bin")).unwrap();
-        let sandbox = Sandbox { dir };
+        let sandbox = Sandbox { dir, _tmp: tmp };
         // sudo runs the command as it is: the sandbox has nothing to elevate.
-        sandbox.stub("sudo", r#"exec "$@""#);
+        sandbox.stub("sudo", r#"if [ "$1" = -n ]; then shift; fi; exec "$@""#);
         // The machine's own container engines stay out of reach, unless a test asks for one.
         for engine in ["docker", "podman"] {
             sandbox.absent(engine);
@@ -405,6 +410,7 @@ fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
     );
     assert_eq!(s.run("repair", &["run"], &[]).code, 1);
     assert!(gpg.join("old").exists(), "a failed rebuild left no keyring");
+    assert!(!s.dir.join("gnupg.new").exists(), "the half new one stays");
     s.stub(
         "pacman-key",
         r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; touch "$2/new""#,
@@ -1176,8 +1182,8 @@ case "$1" in get) cat "$store" ;; set) echo "$4" >"$store" ;; esac"#,
 /// release no longer has.
 #[test]
 fn a_release_replaces_what_the_aur_has() {
-    let dir = std::env::temp_dir().join(format!("sm-aur-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
     std::fs::create_dir_all(dir.join("seed")).unwrap();
     let remote = dir.join("aur/arch-os-manager.git");
     let sh = |script: &str| {
@@ -1185,7 +1191,7 @@ fn a_release_replaces_what_the_aur_has() {
             .arg("-c")
             .arg(script)
             .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .env("DIR", &dir)
+            .env("DIR", dir)
             .env("REMOTE", &remote)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_COUNT", "1")
@@ -1213,7 +1219,6 @@ fn a_release_replaces_what_the_aur_has() {
     let commit = sh(r#"git -C "$REMOTE" log -1 --format='%an <%ae> %s' master"#);
     assert_eq!(commit, "murkl <murkl@users.noreply.github.com> 2.0.0\n");
     assert!(sh(r#"tools/aur.sh push "$DIR/stamped""#).contains("there already"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A release built as root, as in CI, gets what the package needs before makepkg, which builds
@@ -2113,14 +2118,24 @@ fn dotfiles_name_what_they_keep_and_refuse_what_is_no_configuration() {
     assert_eq!(s.dotfiles(&["remove", &format!("{home}/.zshrc")]).code, 34);
 }
 
+/// init.sh of the functions given, each a line of its own body, as `name: body`.
+fn functions(s: &Sandbox, functions: &[(&str, &str)]) {
+    let text: String = functions
+        .iter()
+        .map(|(name, body)| format!("{name}() {{\n    {body}\n}}\n\n"))
+        .collect();
+    s.write(".dotfiles/tux/init.sh", &text);
+}
+
 #[test]
-fn init_sh_and_the_groups_run_again_only_where_they_changed() {
+fn init_and_the_groups_run_again_only_where_their_function_changed() {
     let s = dotfiles("dotfiles-run");
-    assert_eq!(s.dotfiles(&["setup"]).code, 0);
-    s.write(
-        ".dotfiles/tux/init.sh",
-        "#!/bin/bash\necho \"init in $PWD as $SM_PROFILE\" >>\"$HOME/ran\"\n",
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
+    let init = (
+        "init",
+        r#"echo "init in $PWD as $SM_PROFILE" >>"$HOME/ran""#,
     );
+    functions(&s, &[init]);
     assert!(s.dotfiles(&["state"]).out.contains("init\tchanged\t"));
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
@@ -2132,40 +2147,89 @@ fn init_sh_and_the_groups_run_again_only_where_they_changed() {
     let state = s.dotfiles(&["state"]).out;
     assert!(state.contains("init\tapplied\t1"), "{state}");
 
-    s.write(
-        ".dotfiles/tux/groups/gaming.sh",
-        "#!/bin/bash\necho \"gaming in $PWD\" >>\"$HOME/ran\"\n",
-    );
-    assert_eq!(s.dotfiles(&["group-on", "../gaming.sh"]).code, 38);
-    assert_eq!(s.dotfiles(&["group-on", "groups/none.sh"]).code, 38);
-    let o = s.dotfiles(&["group-on", "groups/gaming.sh"]);
+    // A group beside init: switched on it runs at once, and init, unchanged, not again.
+    let gaming = ("gaming", r#"echo gaming >>"$HOME/ran""#);
+    functions(&s, &[init, gaming]);
+    for wrong in ["../gaming", "init", "office"] {
+        assert_eq!(s.dotfiles(&["group-on", wrong]).code, 38, "{wrong}");
+    }
+    let o = s.dotfiles(&["group-on", "gaming"]);
     assert_eq!(o.code, 0, "{}{}", o.events, o.err);
-    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "groups/gaming.sh\n");
+    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "gaming\n");
     assert!(
         s.dotfiles(&["state"])
             .out
-            .contains("group\tgroups/gaming.sh\tapplied\n")
+            .contains("group\tgaming\tapplied\n")
     );
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
-    assert_eq!(s.read("ran").lines().count(), 2, "unchanged, no second run");
-    s.write(
-        ".dotfiles/tux/groups/gaming.sh",
-        "#!/bin/bash\necho \"gaming again\" >>\"$HOME/ran\"\n",
+    assert_eq!(s.read("ran").lines().count(), 2, "neither function changed");
+    // A comment and a space change no function, a command does.
+    functions(
+        &s,
+        &[
+            init,
+            ("gaming", "# Steam\n      echo gaming   >>\"$HOME/ran\""),
+        ],
     );
-    assert!(
-        s.dotfiles(&["state"])
-            .out
-            .contains("group\tgroups/gaming.sh\tchanged\n")
+    let o = s.dotfiles(&["setup"]);
+    assert!(!o.events.contains("step\tgroups"), "{}", o.events);
+    functions(
+        &s,
+        &[init, ("gaming", r#"echo "gaming again" >>"$HOME/ran""#)],
     );
     let o = s.dotfiles(&["setup"]);
     assert!(o.events.contains("step\tgroups\n"), "{}", o.events);
-    assert!(s.read("ran").ends_with("gaming again\n"));
-    assert_eq!(s.dotfiles(&["group-off", "groups/gaming.sh"]).code, 0);
+    assert!(s.read("ran").ends_with("tux\ngaming\ngaming again\n"));
+
+    // Switched on elsewhere, a group that never ran here is due.
+    let office = ("office", r#"echo office >>"$HOME/ran""#);
+    functions(&s, &[init, gaming, office]);
+    s.write(".dotfiles/tux/groups.txt", "gaming\noffice\n");
+    assert!(
+        s.dotfiles(&["state"])
+            .out
+            .contains("group\toffice\tchanged\n")
+    );
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert!(s.read("ran").ends_with("gaming\noffice\n"));
+    assert_eq!(s.dotfiles(&["group-off", "gaming"]).code, 0);
+    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "office\n");
+    assert_eq!(s.dotfiles(&["group-off", "office"]).code, 0);
     assert!(!s.dir.join(".dotfiles/tux/groups.txt").exists());
-    s.write(".dotfiles/tux/groups/gaming.sh", "exit 3\n");
-    assert_eq!(s.dotfiles(&["group-on", "groups/gaming.sh"]).code, 18);
-    s.write(".dotfiles/tux/init.sh", "exit 4\n");
+
+    functions(&s, &[init, ("gaming", "exit 3")]);
+    assert_eq!(s.dotfiles(&["group-on", "gaming"]).code, 18);
+    functions(&s, &[("init", "exit 4")]);
     assert_eq!(s.dotfiles(&["setup"]).code, 17);
+    s.write(".dotfiles/tux/init.sh", "init() {\n");
+    assert_eq!(s.dotfiles(&["setup"]).code, 17, "init.sh does not read");
+    functions(&s, &[init]);
+    s.write(".dotfiles/tux/groups.txt", "groups/gaming.sh\n");
+    assert_eq!(s.dotfiles(&["setup"]).code, 38, "a path is no function");
+}
+
+/// The example of the new profile's init.sh, uncommented, is the group the example of its
+/// dotfiles.yaml installs.
+#[test]
+fn the_example_group_of_a_new_profile_runs_as_written() {
+    let s = dotfiles("dotfiles-example");
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
+    let template = s.read(".dotfiles/tux/init.sh");
+    let example: String = template
+        .lines()
+        .skip_while(|l| !l.starts_with("# gaming() {"))
+        .filter_map(|l| l.strip_prefix("# ").or_else(|| l.strip_prefix("#")))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    assert!(example.starts_with("gaming() {\n"), "{template}");
+    s.write(".dotfiles/tux/init.sh", &format!("{template}\n{example}"));
+    let o = s.dotfiles(&["group-on", "gaming"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.calls.contains("sudo pacman -S --needed steam\n"),
+        "{}",
+        o.calls
+    );
 }
 
 #[test]
@@ -2209,18 +2273,19 @@ fn what_is_added_is_backed_up_though_a_global_ignore_file_names_it() {
 }
 
 #[test]
-fn a_script_ending_with_75_is_not_yet_applied_and_runs_at_the_next_setup() {
+fn a_function_ending_with_75_is_not_yet_applied_and_runs_at_the_next_setup() {
     let s = dotfiles("dotfiles-later");
-    assert_eq!(s.dotfiles(&["setup"]).code, 0);
-    s.write(
-        ".dotfiles/tux/groups/firefox.sh",
-        "#!/bin/bash\necho group >>\"$HOME/ran\"\nexit 75\n",
-    );
-    assert_eq!(s.dotfiles(&["group-on", "groups/firefox.sh"]).code, 0);
-    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "groups/firefox.sh\n");
-    s.write(
-        ".dotfiles/tux/init.sh",
-        "#!/bin/bash\necho init >>\"$HOME/ran\"\nexit 75\n",
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
+    let firefox = ("firefox", "echo group >>\"$HOME/ran\"\n    exit 75");
+    functions(&s, &[firefox]);
+    assert_eq!(s.dotfiles(&["group-on", "firefox"]).code, 0);
+    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "firefox\n");
+    functions(
+        &s,
+        &[
+            ("init", "echo init >>\"$HOME/ran\"\n    return 75"),
+            firefox,
+        ],
     );
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
     let o = s.dotfiles(&["setup"]);
@@ -2228,16 +2293,98 @@ fn a_script_ending_with_75_is_not_yet_applied_and_runs_at_the_next_setup() {
     assert_eq!(s.read("ran"), "group\ninit\ngroup\ninit\ngroup\n");
     let state = s.dotfiles(&["state"]).out;
     assert!(state.contains("init\tchanged\t"), "{state}");
-    assert!(
-        state.contains("group\tgroups/firefox.sh\tchanged\n"),
-        "{state}"
+    assert!(state.contains("group\tfirefox\tchanged\n"), "{state}");
+}
+
+/// A profile, a list and a record appear once something goes into them.
+#[test]
+fn nothing_is_made_before_something_goes_into_it() {
+    let a = dotfiles("dotfiles-lazy-a");
+    a.write(".zshrc", "x\n");
+    assert_eq!(
+        a.dotfiles(&["add", a.dir.join(".zshrc").to_str().unwrap()])
+            .code,
+        0
     );
+    assert_eq!(a.dotfiles(&["backup"]).code, 0);
+    let url = remote(&a);
+    assert_eq!(a.dotfiles(&["connect", &url]).code, 0);
+    assert_eq!(a.dotfiles(&["backup"]).code, 0);
+
+    // Another machine with a profile of its own, not in the repository yet.
+    let b = dotfiles("dotfiles-lazy-b");
+    let other = [("SM_PROFILE", "other"), ("GIT_CONFIG_NOSYSTEM", "1")];
+    assert_eq!(b.run("dotfiles", &["connect", &url], &other).code, 0);
+    assert!(
+        !b.dir.join(".dotfiles/other").exists(),
+        "made by connecting"
+    );
+    let o = b.run("dotfiles", &["setup"], &other);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(!b.dir.join(".dotfiles/other").exists(), "made by a setup");
+    let mine = b.dir.join(".dotfiles/.git/system-manager");
+    assert!(!mine.join("other.links").exists() && mine.join("other.setup").exists());
+    assert!(
+        b.run("dotfiles", &["state"], &other)
+            .out
+            .contains("new\tprofile\n")
+    );
+    let o = b.run("dotfiles", &["backup"], &other);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    for (path, there) in [
+        ("other/init.sh", true),
+        ("other/dotfiles.yaml", true),
+        ("other/packages/pacman.txt", true),
+        ("other/packages/aur.txt", true),
+        ("other/packages/flatpak.txt", false),
+    ] {
+        assert_eq!(b.dir.join(".dotfiles").join(path).exists(), there, "{path}");
+    }
+}
+
+/// What a run makes for itself goes as it ends, also where it fails: nothing stays in the
+/// temporary folder or beside a file of the dotfiles.
+#[test]
+fn a_run_leaves_nothing_of_its_own_behind_also_where_it_fails() {
+    let s = dotfiles("dotfiles-tidy");
+    gnome(&s);
+    let tmp = s.dir.join("tmp");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let mut env = TUX.to_vec();
+    env.push(("TMPDIR", tmp.to_str().unwrap()));
+    let left = || std::fs::read_dir(&tmp).unwrap().count();
+    let o = s.run("dotfiles", &["backup"], &env);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let url = remote(&s);
+    assert_eq!(s.run("dotfiles", &["connect", &url], &env).code, 0);
+    assert_eq!(s.run("dotfiles", &["backup"], &env).code, 0);
+    assert!(
+        s.run("dotfiles", &["state"], &env)
+            .out
+            .contains("repo\tready\n")
+    );
+    assert_eq!(left(), 0, "after a query that compared GNOME");
+    // A clone, which once left a folder of its own.
+    let t = dotfiles("dotfiles-tidy-clone");
+    let theirs = t.dir.join("tmp");
+    std::fs::create_dir_all(&theirs).unwrap();
+    let mut env_t = TUX.to_vec();
+    env_t.push(("TMPDIR", theirs.to_str().unwrap()));
+    assert_eq!(t.run("dotfiles", &["connect", &url], &env_t).code, 0);
+    assert_eq!(std::fs::read_dir(&theirs).unwrap().count(), 0);
+    // GNOME failing halfway through a backup.
+    s.stub("gnome-extensions", "exit 5");
+    let o = s.run("dotfiles", &["backup"], &env);
+    assert_eq!(o.code, 1, "{}{}", o.events, o.err);
+    assert!(!s.dir.join(".dotfiles/tux/gnome.new").exists());
+    assert!(s.dir.join(".dotfiles/tux/gnome/extensions.txt").exists());
+    assert_eq!(left(), 0);
 }
 
 #[test]
 fn a_setup_installs_only_what_the_lists_name_and_this_machine_lacks() {
     let s = dotfiles("dotfiles-packages");
-    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
     s.write(
         ".dotfiles/tux/packages/pacman.txt",
         "base\nfish\ngone-pkg\n",
@@ -2275,7 +2422,7 @@ fn a_setup_installs_only_what_the_lists_name_and_this_machine_lacks() {
 #[test]
 fn secrets_are_written_for_their_owner_only_and_backed_up_where_they_changed() {
     let a = dotfiles("dotfiles-secrets-a");
-    assert_eq!(a.dotfiles(&["setup"]).code, 0);
+    assert_eq!(a.dotfiles(&["backup"]).code, 0);
     // The key as unlocking leaves it, so no passphrase is asked.
     let key = a.dir.join(".dotfiles/.git/system-manager/tux.key");
     std::fs::create_dir_all(key.parent().unwrap()).unwrap();

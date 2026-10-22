@@ -73,22 +73,23 @@ mod tests {
 
     #[test]
     fn an_atomic_write_replaces_the_file_and_leaves_nothing_beside_it() {
-        let dir = std::env::temp_dir().join(format!("sm-atomic-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let path = dir.join("state.yaml");
         write_atomic(&path, b"one").unwrap();
         write_atomic(&path, b"two").unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"two");
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 1);
         // A folder in the way: the copy is written, the rename refused.
         std::fs::create_dir_all(dir.join("taken/inside")).unwrap();
         assert!(write_atomic(&dir.join("taken"), b"x").is_err());
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 2);
     }
 
     #[test]
     fn an_atomic_write_through_a_link_keeps_the_link() {
-        let dir = std::env::temp_dir().join(format!("sm-atomic-link-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         std::fs::create_dir_all(dir.join("dotfiles")).unwrap();
         let (real, link) = (
             dir.join("dotfiles/settings.yaml"),
@@ -99,6 +100,5 @@ mod tests {
         write_atomic(&link, b"two").unwrap();
         assert!(link.symlink_metadata().unwrap().is_symlink());
         assert_eq!(std::fs::read(&real).unwrap(), b"two");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

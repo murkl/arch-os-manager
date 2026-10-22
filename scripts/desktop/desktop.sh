@@ -13,12 +13,14 @@ wants="${units}/timers.target.wants/system-manager-notify.timer"
 # Writes standard input to a file only where it differs, so a start that changes
 # nothing touches nothing. Prints the file when it wrote.
 put() {
+    local new
     mkdir -p "${1%/*}"
-    cat >"${1}.new"
-    if cmp -s "${1}.new" "$1"; then
-        rm -f "${1}.new"
+    beside "$1"
+    cat >"$new"
+    if cmp -s "$new" "$1"; then
+        rm -f "$new"
     else
-        mv -f "${1}.new" "$1"
+        mv -f "$new" "$1"
         echo "$1"
     fi
 }

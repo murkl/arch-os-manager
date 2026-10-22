@@ -422,15 +422,14 @@ mod tests {
     /// age, as the dotfiles run it: each passphrase is the person's, typed hidden, never empty.
     #[test]
     fn age_asks_for_its_passphrases_and_the_person_answers_them() {
-        let dir = std::env::temp_dir().join(format!("sm-age-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         std::fs::write(dir.join("plain"), "secret\n").unwrap();
         // Each answer the run sent, by run.
         let answer = |args: &[&str]| -> (Option<Result<(), Failure>>, usize) {
             let (tx, rx) = mpsc::channel();
             let mut cmd = std::process::Command::new("age");
-            cmd.args(args).current_dir(&dir);
+            cmd.args(args).current_dir(dir);
             let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
             let mut run = Run::with(crate::script::op::DOTFILES_PASSPHRASE, session, (24, 80));
             let deadline = Instant::now() + Duration::from_secs(20);
@@ -457,7 +456,6 @@ mod tests {
             std::fs::read_to_string(dir.join("plain.out")).unwrap(),
             "secret\n"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

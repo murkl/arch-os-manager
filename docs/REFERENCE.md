@@ -341,18 +341,18 @@ Docker is the system's, asked at the socket `docker.socket` listens on and only 
 
 **Settings › Dotfiles** switches them on, off by default. The start page then shows **Dotfiles** with what waits: new commits, a changed `init.sh`, missing links, or whether this machine is backed up.
 
-The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another, and a folder there is a profile when it holds one of the parts below. The manager makes a missing one at its first use, with `init.sh` and `dotfiles.yaml`.
+The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another, and a folder there is a profile when it holds one of the parts below. The manager makes a missing one once something goes into it, with `init.sh` and `dotfiles.yaml`.
 
 | In `~/.dotfiles/<profile>/` | Content | Written by |
 |---|---|---|
-| `init.sh` | Your commands for this machine | you |
+| `init.sh` | Your commands for this machine, in functions | you |
 | `dotfiles.yaml` | The groups of the Dotfiles page | you |
 | `home/` | Files of the home folder, `.foo` as `dot-foo` | **Add a file** |
 | `secrets/` | Files of the home folder encrypted with age, each `<name>.age` | **Add a secret** |
 | `key.age` | The age key of the secrets, behind your passphrase | the first secret |
 | `packages/` | `pacman.txt`, `aur.txt`, `flatpak.txt`: the packages installed on purpose | **Back up** |
 | `gnome/` | `extensions.txt` and the settings of each extension | **Back up** |
-| `groups.txt` | The groups switched on | the Dotfiles page |
+| `groups.txt` | The functions of the groups switched on | the Dotfiles page |
 
 **Settings › Repository** takes the address GitHub or Gitea show for cloning. Without `~/.dotfiles` it clones, else it binds them to it, once the repository answers and shares their history. Empty, the dotfiles stay on this machine. Plain http and `git://` are refused, as they carry the dotfiles unencrypted. git and ssh ask for what they need in the run, and Arch OS keeps a token in the keyring and a key in its agent.
 
@@ -365,33 +365,47 @@ The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile an
 | Latest state | The remote's commits, as a fast-forward or a rebase of the commits here, open changes stashed and back |
 | Links | `stow --dotfiles --no-folding` from `home/`, folders real. What stands where a link goes moves to `~/.dotfiles-backup/<time>/`, links to files gone from `home/` go |
 | Secrets | Each one missing here or changed in the profile, written for its owner only. The passphrase is asked once per machine |
-| `init.sh` | Run in its folder where it changed or never ran here |
+| `init` | The function `init` of `init.sh`, where it changed or never ran here |
 | Packages | What the lists name and this machine lacks, from the repositories, the AUR and Flathub. One no repository has any more is named and left out |
-| Groups | The script of each group switched on, where it changed |
+| Groups | The function of each group switched on, where it changed or never ran here |
 | GNOME | Missing extensions from extensions.gnome.org, settings and the list of extensions on where they changed |
 
 **Back up** writes the package lists, the GNOME extensions and each secret changed here into the profile, commits every change of the dotfiles as `Back up <profile>: <parts>`, takes in the remote's commits and uploads. A branch without an upstream gets it at its first push.
 
-What this machine applied lies in the clone and is never committed: `.git/system-manager/` holds the blob of each file as it was applied, the links of the last set up and the key once unlocked.
+What this machine applied lies in the clone and is never committed: `.git/system-manager/` holds the blob of each file as it was applied, the hash of each function of `init.sh` as it ran, the links of the last set up and the key once unlocked.
 
 ### Groups
 
-`dotfiles.yaml` names the groups of the profile, in their order on the Dotfiles page:
+`dotfiles.yaml` names the groups of the profile, in their order at the foot of the Dotfiles page:
 
 ```yaml
 groups:
   - name: Gaming
     description: Steam, Lutris and Wine
-    script: groups/gaming.sh
+    install: gaming
 ```
 
 | Key | Meaning |
 |---|---|
 | `name` | The row on the Dotfiles page |
 | `description` | One sentence under it, optional |
-| `script` | A file of the profile ending in `.sh`, run as `bash` in its folder |
+| `install` | The function of `init.sh` that sets the group up, its line in `groups.txt` |
 
-**⏎** on a group switches it on and runs its script, or switches it off and leaves what it installed. `init.sh` and every script of a group get `SM_DOTFILES` and `SM_PROFILE`, run with `LC_ALL=C.UTF-8`, and may call `sudo`. A script ending with status 75 (`EX_TEMPFAIL`) has not applied yet, for example while a program it configures was never started. Set up goes on and runs it again next time.
+`init.sh` holds functions as a PKGBUILD does. Set up reads it, then calls `init` and the function of each group switched on:
+
+```bash
+init() {
+    sudo pacman -S --needed zsh
+}
+
+gaming() {
+    sudo pacman -S --needed steam
+}
+```
+
+**⏎** on a group switches it on and calls its function, or switches it off and leaves what it installed. Set up calls a function again where it changed, a comment or a space aside. The functions run in the profile's folder with `set -euo pipefail`, get `SM_DOTFILES` and `SM_PROFILE`, run with `LC_ALL=C.UTF-8`, and may call `sudo`. Outside a function stand only definitions, as `init.sh` is read before every call. A function ending with status 75 (`EX_TEMPFAIL`) has not applied yet, for example while a program it configures was never started. Set up goes on and calls it again next time.
+
+**Note:** _A function named like a program, such as `docker`, hides the program in all of `init.sh`. A changed helper runs no function again that calls it._
 
 ### Files and Secrets
 

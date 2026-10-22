@@ -189,7 +189,8 @@ mod tests {
 
     #[test]
     fn stamps_every_line_and_starts_anew_past_the_limit() {
-        let dir = std::env::temp_dir().join(format!("sm-log-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let path = dir.join("logs/system-manager.log");
         let mut log = Log::open(&path).unwrap();
         let zone = jiff::tz::TimeZone::UTC;
@@ -228,13 +229,13 @@ mod tests {
                 .unwrap()
                 .ends_with(" INFO  next\n")
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// The thread writes what was sent, in order, once the program finishes.
     #[test]
     fn what_was_sent_is_written_in_order_by_the_end() {
-        let dir = std::env::temp_dir().join(format!("sm-log-thread-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let path = dir.join("system-manager.log");
         let writer = Writer::spawn(Log::open(&path).unwrap(), jiff::tz::TimeZone::UTC);
         for n in 0..1000 {
@@ -247,7 +248,6 @@ mod tests {
             .filter_map(|l| l.rsplit(' ').next()?.parse().ok())
             .collect();
         assert_eq!(numbers, (0..1000).collect::<Vec<_>>());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A disk that does not answer, here a pipe nobody reads: the end gives up at its limit
@@ -282,7 +282,9 @@ mod tests {
         assert_eq!(dropped.load(Ordering::Relaxed), 2);
         drop(tx);
 
-        let dir = std::env::temp_dir().join(format!("sm-log-full-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+
+        let dir = tmp.path();
         let path = dir.join("system-manager.log");
         write_out(
             rx,
@@ -295,6 +297,5 @@ mod tests {
             text.contains("INFO  0\n") && text.contains("WARN  2 messages dropped"),
             "{text}"
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

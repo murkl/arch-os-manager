@@ -938,10 +938,10 @@ pub mod tests {
 
     #[test]
     fn a_window_opens_only_where_a_wayland_display_answers() {
-        let dir = std::env::temp_dir().join(format!("sm-wayland-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let _display = std::os::unix::net::UnixListener::bind(dir.join("wayland-1")).unwrap();
-        let runtime = || Some(dir.clone().into_os_string());
+        let runtime = || Some(dir.as_os_str().to_owned());
         assert!(reachable(Some("wayland-1".into()), runtime()));
         let path = dir.join("wayland-1").into_os_string();
         assert!(reachable(Some(path.clone()), None), "a path of its own");
@@ -953,7 +953,6 @@ pub mod tests {
         assert!(!reachable(Some("".into()), runtime()), "X11");
         assert!(!reachable(None, runtime()), "X11");
         assert!(!reachable(Some("wayland-1".into()), None));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// The grid keeps the cursor where ratatui puts it, and forgets it when hidden.

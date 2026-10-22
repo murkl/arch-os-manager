@@ -621,8 +621,8 @@ mod tests {
     fn the_homelab_reads_its_servers_stacks_and_secrets() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
-        let dir = std::env::temp_dir().join(format!("sm-homelab-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let write = |path: &str, text: &str| {
             let path = dir.join(path);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -639,7 +639,7 @@ mod tests {
         write("nas/notes/README.md", "no stack\n");
         write("nas/traefik/.env.age", "sealed");
         write("nas/adguard/conf/AdGuardHome.yaml.age", "sealed");
-        let lab = Homelab::read(&dir);
+        let lab = Homelab::read(dir);
         assert_eq!(
             lab.servers.len(),
             1,
@@ -656,7 +656,7 @@ mod tests {
         );
         write("homelab.yaml", "server: []\n");
         assert!(
-            Homelab::read(&dir)
+            Homelab::read(dir)
                 .problem
                 .unwrap()
                 .contains("unknown field")
@@ -665,8 +665,7 @@ mod tests {
             "homelab.yaml",
             "servers:\n  - name: nas\n    cup: ftp://nas\n",
         );
-        assert!(Homelab::read(&dir).servers.is_empty());
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(Homelab::read(dir).servers.is_empty());
     }
 
     #[test]
