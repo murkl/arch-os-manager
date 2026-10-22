@@ -189,27 +189,30 @@ impl App {
             Flow::Push(page) => self.push(page),
             Flow::PushAll(pages) => pages.into_iter().for_each(|p| self.push(p)),
             Flow::Replace(page) => {
-                if self.pages.len() > 1 {
-                    self.pages.pop();
-                }
+                self.pages.truncate(self.pages.len() - self.closes());
                 self.push(page);
             }
             Flow::Pop => {
-                if self.pages.len() > 1 {
-                    self.pages.pop();
-                    if let Some((id, _)) = self.pages.last() {
-                        self.ctx.page = *id;
-                    }
+                self.pages.truncate(self.pages.len() - self.closes());
+                if let Some((id, _)) = self.pages.last() {
+                    self.ctx.page = *id;
                 }
             }
             Flow::Quit => self.quit = true,
         }
     }
 
+    /// The pages back closes: the top one, and the one beneath where its action is done. The
+    /// start page stays.
+    fn closes(&self) -> usize {
+        let below = self.pages.last().is_some_and(|(_, p)| p.closes_below());
+        (1 + usize::from(below)).min(self.pages.len().saturating_sub(1))
+    }
+
     pub fn draw(&mut self, frame: &mut Frame) {
         let area = frame.area();
         let path: Vec<String> = self.pages.iter().skip(1).map(|(_, p)| p.title()).collect();
-        let over_home = self.pages.len() == 2;
+        let over_home = self.pages.len() > 1 && self.pages.len() - self.closes() == 1;
         let (id, page) = self.pages.last_mut().expect("the start page stays");
         self.ctx.page = *id;
         self.ctx.cursor.set(None);
@@ -220,7 +223,7 @@ impl App {
             let content = draw::frame(area, frame.buffer_mut(), &self.ctx, &path);
             page.draw(content, frame.buffer_mut(), &mut self.ctx);
             let mut hints = page.hints(&self.ctx);
-            // Closing a page right above the start page leads to the menu, and says so.
+            // Back to the start page leads to the menu, and says so.
             if over_home {
                 for (_, does) in &mut hints {
                     if *does == Does::Back {
@@ -1013,6 +1016,53 @@ pub mod tests {
         );
         press(&mut app, &[Key::Esc]);
         assert!(screen(&mut app, &mut term).contains("esc main menu"));
+        press(&mut app, &[Key::Esc]);
+        assert_eq!(app.pages.len(), 1);
+    }
+
+    #[test]
+    fn back_after_a_success_leads_past_the_page_the_action_was_chosen_on() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let run = |outcome| {
+            let job = pages::run::Job::new(op::REPAIR_RUN, Vec::new());
+            Box::new(pages::run::RunPage::finished(job, outcome))
+        };
+        open(&mut app, Box::new(pages::repair::RepairPage::new()));
+        open(&mut app, run(Err(Failure::new(op::REPAIR_RUN, "failed"))));
+        assert!(screen(&mut app, &mut term).contains("esc back"));
+        press(&mut app, &[Key::Esc]);
+        assert_eq!(app.pages.len(), 2, "a failure leaves it for another try");
+        open(&mut app, run(Ok(())));
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("esc main menu"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.pages.len(), 1, "Back, the only action offered");
+        open(&mut app, Box::new(pages::services::ServicesPage::new()));
+        open(&mut app, Box::new(pages::repair::RepairPage::new()));
+        open(&mut app, run(Ok(())));
+        assert!(screen(&mut app, &mut term).contains("esc back"));
+        press(&mut app, &[Key::Esc]);
+        assert_eq!(app.pages.len(), 2);
+    }
+
+    #[test]
+    fn a_step_offered_after_a_success_takes_the_place_of_the_page_the_action_was_chosen_on() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        open(&mut app, Box::new(pages::upgrade::UpgradePage::new()));
+        let job = pages::run::Job::new(op::UPGRADE_RUN, Vec::new());
+        open(
+            &mut app,
+            Box::new(pages::run::RunPage::finished(job, Ok(()))),
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Config updates"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.pages.len(), 2);
         press(&mut app, &[Key::Esc]);
         assert_eq!(app.pages.len(), 1);
     }

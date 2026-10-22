@@ -254,7 +254,7 @@ pub enum Does {
     CloseFilter,
     ClearSearch,
     Reload,
-    /// Closes the page. The app names it `Menu` where the start page lies below.
+    /// Closes the page. The app names it `Menu` where that leads to the start page.
     Back,
     Menu,
     Stop,
@@ -330,6 +330,10 @@ pub trait Page {
     }
     /// Drawn on the whole screen, without the header and the keys.
     fn bare(&self) -> bool {
+        false
+    }
+    /// Back closes the page beneath as well, whose action is done.
+    fn closes_below(&self) -> bool {
         false
     }
 }

@@ -37,6 +37,7 @@ pub const REMOVE: &str = "\u{f09e7}";
 pub const INSTALL: &str = "\u{f0b8f}";
 pub const TAKE: &str = "\u{f0b33}";
 pub const KEEP: &str = "\u{f0e29}";
+pub const VERIFY: &str = "\u{f0e29}";
 pub const COMMAND: &str = "\u{f018d}";
 pub const CPU: &str = "\u{f0ee0}";
 pub const MEMORY: &str = "\u{f035b}";

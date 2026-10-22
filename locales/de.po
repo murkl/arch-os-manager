@@ -295,9 +295,6 @@ msgstr "Manuell aktualisieren"
 msgid "Remove now"
 msgstr "Jetzt entfernen"
 
-msgid "Renew the keyring"
-msgstr "Schlüsselbund erneuern"
-
 msgid "unread"
 msgstr "ungelesen"
 
@@ -335,11 +332,21 @@ msgid "Install from the AUR"
 msgstr "Aus dem AUR installieren"
 
 msgid ""
+"Install {install} and remove {remove}?\n"
+"What the removed ones alone needed goes with them, and their saved configuration too."
+msgstr ""
+"{install} installieren und {remove} entfernen?\n"
+"Was nur die entfernten brauchten, geht mit, ebenso ihre gespeicherte Konfiguration."
+
+msgid ""
 "Install {name} {version}?\n"
 "The next update brings the current version back."
 msgstr ""
 "{name} {version} installieren?\n"
 "Das nächste Update bringt die aktuelle Version zurück."
+
+msgid "Install {n} and remove {m}"
+msgstr "{n} installieren und {m} entfernen"
 
 msgid "Install {n} from the AUR"
 msgstr "{n} aus dem AUR installieren"
@@ -355,6 +362,9 @@ msgstr "Ausdrücklich installiert"
 
 msgid "Installing"
 msgstr "Wird installiert"
+
+msgid "Installing and removing"
+msgstr "Wird installiert und entfernt"
 
 msgid "Installing the GNOME extension"
 msgstr "GNOME-Erweiterung wird installiert"
@@ -1234,20 +1244,17 @@ msgstr "Dateien werden geprüft"
 msgid "Reinstalling the altered packages"
 msgstr "Veränderte Pakete werden neu installiert"
 
-msgid "Check the files"
-msgstr "Dateien prüfen"
+msgid "Repair the package management"
+msgstr "Paketverwaltung reparieren"
 
-msgid "When an update keeps failing"
-msgstr "Wenn ein Update immer wieder scheitert"
+msgid "When updates fail on a stale lock or on signatures. Removes the lock, creates the keyring anew and updates the system."
+msgstr "Wenn Updates an einer verwaisten Sperre oder an Signaturen scheitern. Entfernt die Sperre, legt den Schlüsselbund neu an und aktualisiert das System."
 
-msgid "On a database lock no package manager holds any more, or on signatures that cannot be verified. The stale lock is removed, the keyring is created anew from the packaged keys, and the system is updated."
-msgstr "An einer Datenbanksperre, die kein Paketmanager mehr hält, oder an Signaturen, die sich nicht prüfen lassen. Die liegengebliebene Sperre wird entfernt, der Schlüsselbund aus den mitgelieferten Schlüsseln neu angelegt und das System aktualisiert."
+msgid "Check the package files"
+msgstr "Paketdateien prüfen"
 
-msgid "When files went missing or changed"
-msgstr "Wenn Dateien fehlen oder verändert sind"
-
-msgid "After a crash or a full disk. Every file of every package is compared with what the package brought, and a package with a difference is installed again. A configuration changed by hand stays."
-msgstr "Etwa nach einem Absturz oder einer vollen Platte. Jede Datei jedes Pakets wird mit dem verglichen, was das Paket mitbrachte, und ein Paket mit Abweichung wird neu installiert. Eine von Hand geänderte Konfiguration bleibt."
+msgid "When files went missing or changed after a crash or a full disk. Installs every package with altered files again. A configuration changed by hand stays."
+msgstr "Wenn nach einem Absturz oder einer vollen Platte Dateien fehlen oder verändert sind. Installiert jedes Paket mit abweichenden Dateien neu. Eine von Hand geänderte Konfiguration bleibt."
 
 msgid "License"
 msgstr "Lizenz"

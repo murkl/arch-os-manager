@@ -863,9 +863,15 @@ impl Page for RunPage {
     fn animating(&self, ctx: &Ctx) -> bool {
         self.outcome.is_none() || !self.settled() || ctx.busy() || self.job.op == op::SYSTEM_REBOOT
     }
+
+    /// Done, the page the action was chosen on has nothing left to show. After a failure it
+    /// stays for another try.
+    fn closes_below(&self) -> bool {
+        matches!(self.outcome, Some((Ok(()), _)))
+    }
 }
 
-/// Leaves the finished run for a page, the run's page staying below it.
+/// Leaves the finished run for a page as back leaves it, or opens the pages of a setting above it.
 fn replace_with(target: Target, ctx: &mut Ctx) -> Flow {
     let mut pages = target.open(ctx);
     match pages.len() {

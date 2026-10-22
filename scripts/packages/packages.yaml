@@ -19,6 +19,9 @@ ops:
   remove:
     title: Removing
     root: true
+  change:
+    title: Installing and removing
+    root: true
   downgrade:
     title: Installing the older version
     root: true

@@ -7,7 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style as Cell;
 
-use super::draw::{cut, cut_front, put, width};
+use super::draw::{cut, cut_front, put, width, wrap};
 use super::input::Input;
 use super::{Ctx, Key, Nav, Tone};
 use crate::i18n::t;
@@ -49,6 +49,8 @@ pub struct Row<I> {
     /// Shown, but its action is not available here.
     pub dim: bool,
     pub heading: bool,
+    /// Lines under the label, wrapped where it starts. The cursor steps over them with the row.
+    pub note: String,
 }
 
 impl<I> Row<I> {
@@ -75,6 +77,7 @@ impl<I> Row<I> {
             lead: Lead::None,
             dim: false,
             heading: false,
+            note: String::new(),
         }
     }
 
@@ -98,6 +101,18 @@ impl<I> Row<I> {
         self.dim = dim;
         self
     }
+
+    pub fn note(mut self, note: impl Into<String>) -> Row<I> {
+        self.note = note.into();
+        self
+    }
+}
+
+/// A line a list draws: a row, a line of the note under it, or the space before a heading.
+enum Line {
+    Row(usize),
+    Note(String),
+    Blank,
 }
 
 /// The columns of a row, as a list and a page of facts both draw it: the lead where the page
@@ -407,36 +422,55 @@ impl<I: Clone + Ord> List<I> {
             }
             return;
         }
+        // A column for the leads only where one shows. The console has no icons.
+        let column = self.markable || self.rows.iter().any(|r| r.lead.shows(s));
+        let indent = if column { 3 } else { 0 };
         // Each heading after the first gets a blank line before it. An empty one is only that.
-        let mut lines: Vec<Option<usize>> = Vec::new();
+        let mut lines: Vec<Line> = Vec::new();
         for &i in &visible {
-            if self.rows[i].heading && !lines.is_empty() {
-                lines.push(None);
+            let row = &self.rows[i];
+            if row.heading && !lines.is_empty() {
+                lines.push(Line::Blank);
             }
-            if !(self.rows[i].heading && self.rows[i].label.is_empty()) {
-                lines.push(Some(i));
+            if !(row.heading && row.label.is_empty()) {
+                lines.push(Line::Row(i));
+            }
+            if !row.note.is_empty() {
+                let room = area.width.saturating_sub(indent) as usize;
+                lines.extend(wrap(&row.note, room).into_iter().map(Line::Note));
             }
         }
         let at = lines
             .iter()
-            .position(|l| *l == Some(self.cursor))
+            .position(|l| matches!(l, Line::Row(i) if *i == self.cursor))
             .unwrap_or(0);
+        // The row under the cursor comes into sight with its note, as far as there is room.
+        let notes = lines[at + 1..]
+            .iter()
+            .take_while(|l| matches!(l, Line::Note(_)))
+            .count();
         if at < self.offset {
             self.offset = at.saturating_sub(usize::from(
-                at > 0 && lines[at - 1].is_some_and(|i| self.rows[i].heading),
+                at > 0 && matches!(lines[at - 1], Line::Row(i) if self.rows[i].heading),
             ));
-        } else if at >= self.offset + height {
-            self.offset = at + 1 - height;
+        } else if at + 1 + notes > self.offset + height {
+            self.offset = (at + 1 + notes - height).min(at);
         }
         self.offset = self.offset.min(lines.len().saturating_sub(height.max(1)));
         let rows = Rect::new(area.x, y, area.width, height as u16);
         super::draw::scrollbar(buf, rows, lines.len(), self.offset, ctx);
-        // A column for the leads only where one shows. The console has no icons.
-        let column = self.markable || self.rows.iter().any(|r| r.lead.shows(s));
         for (n, line) in lines.iter().skip(self.offset).take(height).enumerate() {
-            let Some(i) = *line else { continue };
-            let row = &self.rows[i];
             let ly = y + n as u16;
+            let i = match line {
+                Line::Row(i) => *i,
+                Line::Note(text) => {
+                    let room = area.width.saturating_sub(indent);
+                    put(buf, area.x + indent, ly, text, room, s.tone(Tone::Muted));
+                    continue;
+                }
+                Line::Blank => continue,
+            };
+            let row = &self.rows[i];
             if row.heading {
                 put(
                     buf,
@@ -662,6 +696,37 @@ mod tests {
             "muted turns to text on the selection"
         );
         assert_eq!(buf[(31, 1)].fg, s.muted);
+    }
+
+    #[test]
+    fn a_note_stands_under_its_row_where_the_label_starts_and_the_cursor_steps_over_it() {
+        let (app, _) = crate::ui::app::tests::app();
+        let line = |y: u16, buf: &Buffer| -> String {
+            let text: String = (0..14).map(|x| buf[(x, y)].symbol()).collect();
+            text.trim_end().to_string()
+        };
+        let mut l = List::new(vec![
+            Row::new("a", "Repair")
+                .icon("x", Tone::Normal)
+                .note("one two three"),
+            Row::heading(""),
+            Row::new("b", "Check").icon("x", Tone::Normal).note("four"),
+        ]);
+        let area = Rect::new(2, 0, 12, 4);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 14, 4));
+        l.draw(area, &mut buf, &app.ctx);
+        assert_eq!(line(1, &buf), "     one two");
+        assert_eq!(line(2, &buf), "     three");
+        l.key(Key::Down);
+        assert_eq!(l.selected().unwrap().id, Some("b"));
+        let mut buf = Buffer::empty(Rect::new(0, 0, 14, 4));
+        l.draw(area, &mut buf, &app.ctx);
+        assert_eq!(line(2, &buf), "▶ x  Check", "the cursor skips the note");
+        assert_eq!(
+            line(3, &buf),
+            "     four",
+            "and its own note stays in sight"
+        );
     }
 
     #[test]

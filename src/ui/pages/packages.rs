@@ -546,6 +546,42 @@ impl MarkedPage {
                 body.push(Block::Blank);
             }
         }
+        if !local.is_empty() && (!repo.is_empty() || !from_aur.is_empty()) {
+            let installs: Vec<&str> = repo
+                .iter()
+                .map(|p| p.rsplit('/').next().unwrap_or(p))
+                .chain(from_aur.iter().map(String::as_str))
+                .collect();
+            let label = tf(
+                "Install {n} and remove {m}",
+                &[("n", &installs.len()), ("m", &local.len())],
+            );
+            let text = tf(
+                "Install {install} and remove {remove}?\nWhat the removed ones alone needed goes with them, and their saved configuration too.",
+                &[
+                    ("install", &installs.join(", ")),
+                    ("remove", &local.join(", ")),
+                ],
+            );
+            let args: Vec<String> = repo
+                .iter()
+                .map(|p| format!("repo:{p}"))
+                .chain(from_aur.iter().map(|p| format!("aur:{p}")))
+                .chain(local.iter().map(|p| format!("remove:{p}")))
+                .collect();
+            let helper = (!from_aur.is_empty() && script::aur().is_none())
+                .then(|| t("needs paru or yay").to_string());
+            acts.push(
+                Act::new(label, move |ctx: &mut Ctx| {
+                    Flow::Push(start(
+                        Job::new(op::PACKAGES_CHANGE, args.clone()).confirm(text.clone()),
+                        ctx,
+                    ))
+                })
+                .icon(icon::INSTALL)
+                .unless(helper),
+            );
+        }
         if !repo.is_empty() {
             acts.push(
                 Act::new(
@@ -846,6 +882,33 @@ mod tests {
         assert!(
             marked.contains("firejail") && marked.contains("firefox"),
             "{marked}"
+        );
+    }
+
+    #[test]
+    fn what_is_marked_to_install_and_to_remove_goes_in_one_run_after_one_question() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let marked = BTreeSet::from([
+            Pick::Local("pulseaudio".into()),
+            Pick::Repo("extra".into(), "pipewire-pulse".into()),
+        ]);
+        open(&mut app, Box::new(MarkedPage::new(marked)));
+        let shown = screen(&mut app, &mut term);
+        for act in [
+            "Install 1 and remove 1",
+            "Install 1 from the repositories",
+            "Remove 1",
+        ] {
+            assert!(shown.contains(act), "{act}: {shown}");
+        }
+        press(&mut app, &[Key::Enter]);
+        let asked = screen(&mut app, &mut term);
+        assert!(
+            asked.contains("Install pipewire-pulse and remove pulseaudio?"),
+            "{asked}"
         );
     }
 
