@@ -40,6 +40,12 @@ pub struct Settings {
     /// Journal messages like one of these, numbers aside, are left out of the log page.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_log: Vec<String>,
+    /// The dotfiles in ~/.dotfiles, off unless switched on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dotfiles: Option<bool>,
+    /// The profile of the dotfiles, the host's name unless chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dotfiles_profile: Option<String>,
 }
 
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
@@ -120,6 +126,13 @@ impl Settings {
         {
             return Err(format!("runs: {r} is not one of {}", RUNS.join(", ")));
         }
+        if let Some(p) = &s.dotfiles_profile
+            && (p.is_empty() || p.starts_with('.') || p.contains('/'))
+        {
+            return Err(format!(
+                "dotfiles-profile: {p} is no folder name, without / and not hidden"
+            ));
+        }
         Ok(s)
     }
 
@@ -154,6 +167,11 @@ impl Settings {
     /// Whether a run shows in the terminal only, where the person answers every question.
     pub fn terminal(&self) -> bool {
         self.runs() == "terminal"
+    }
+
+    /// Whether the dotfiles are switched on.
+    pub fn dotfiles(&self) -> bool {
+        self.dotfiles.unwrap_or(false)
     }
 
     /// Whether the clean-up takes a part, as chosen or by default.
@@ -218,6 +236,8 @@ mod tests {
             flatpak: Some(false),
             cleanup: BTreeMap::from([("docker".into(), true), ("flatpak".into(), false)]),
             hidden_log: vec!["ACPI Error: with space".into()],
+            dotfiles: Some(true),
+            dotfiles_profile: Some("work laptop".into()),
         };
         let yaml = serde_saphyr::to_string(&s).unwrap();
         assert_eq!(Settings::parse(&yaml).unwrap(), s);
@@ -233,6 +253,12 @@ mod tests {
         assert!(Settings::parse("flatpak: updates").is_err());
         assert!(Settings::parse("cleanup: {trash: true}").is_err());
         assert!(Settings::parse("cleanup: {docker: maybe}").is_err());
+        assert!(Settings::parse("dotfiles: maybe").is_err());
+        assert!(Settings::parse("dotfiles-profile: ../x").is_err());
+        assert!(Settings::parse("dotfiles-profile: .git").is_err());
+        assert!(Settings::parse("dotfiles-profile: ''").is_err());
+        assert!(!Settings::default().dotfiles());
+        assert!(Settings::parse("dotfiles: true").unwrap().dotfiles());
         assert_eq!(
             Settings::parse("notify: weekly").unwrap().notify(),
             "weekly"

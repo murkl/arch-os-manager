@@ -149,6 +149,22 @@ on_bus() {
     fi
 }
 
+# An extension of extensions.gnome.org in the version for this GNOME Shell,
+# installed for this user. GNOME loads one it did not start with at the next login.
+ego_install() {
+    local shell info url zip status=0
+    shell="$(gnome-shell --version)"
+    shell="${shell##* }"
+    info="$(fetch "https://extensions.gnome.org/extension-info/?uuid=$1&shell_version=${shell%%.*}")" || return 1
+    url="$(sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p' <<<"$info")"
+    if [ -z "$url" ]; then return 1; fi
+    zip="$(mktemp --suffix=.zip)"
+    fetch "https://extensions.gnome.org${url}" >"$zip" || status=1
+    if [ "$status" = 0 ]; then gnome-extensions install --force "$zip"; fi
+    rm -f -- "$zip"
+    return "$status"
+}
+
 # The GNOME extension that shows pending updates in the top bar.
 ARCH_UPDATE=arch-update@RaphaelRochet
 

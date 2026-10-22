@@ -51,6 +51,8 @@ pub struct Row<I> {
     pub heading: bool,
     /// Lines under the label, wrapped where it starts. The cursor steps over them with the row.
     pub note: String,
+    /// The detail is a path or an address, cut at its front, where it says least.
+    pub front: bool,
 }
 
 impl<I> Row<I> {
@@ -78,6 +80,7 @@ impl<I> Row<I> {
             dim: false,
             heading: false,
             note: String::new(),
+            front: false,
         }
     }
 
@@ -104,6 +107,11 @@ impl<I> Row<I> {
 
     pub fn note(mut self, note: impl Into<String>) -> Row<I> {
         self.note = note.into();
+        self
+    }
+
+    pub fn front(mut self) -> Row<I> {
+        self.front = true;
         self
     }
 }
@@ -518,7 +526,7 @@ impl<I: Clone + Ord> List<I> {
                 ly,
                 (lead, column),
                 &[(&row.label, style)],
-                (&[(&row.detail, s.tone(detail_tone))], false),
+                (&[(&row.detail, s.tone(detail_tone))], row.front),
                 ctx,
             );
             if current {

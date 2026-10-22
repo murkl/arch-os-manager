@@ -25,6 +25,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::data::cleanup::Plan;
+use crate::data::dotfiles::Dotfiles;
 use crate::data::features::Features;
 use crate::data::firmware::Firmware;
 use crate::data::journal::Entry;
@@ -203,6 +204,10 @@ pub enum Fresh {
     Cleanup(Result<Plan, Failure>),
     Mirrors(Result<Mirrors, Failure>),
     Firmware(Result<Vec<Firmware>, Failure>),
+    /// Boxed, as they are many times the size of the other values.
+    Dotfiles(Result<Box<Dotfiles>, Failure>),
+    /// The dotfiles read after fetching their repository, or why it was not reached.
+    DotfilesFetched(Result<Box<Dotfiles>, Failure>),
     /// settings.yaml written, or why not.
     Saved(Result<(), String>),
 }
@@ -254,6 +259,8 @@ pub enum Does {
     CloseFilter,
     ClearSearch,
     Reload,
+    /// One folder up, in a browser of folders.
+    Parent,
     /// Closes the page. The app names it `Menu` where that leads to the start page.
     Back,
     Menu,
@@ -285,6 +292,7 @@ impl Does {
             Does::CloseFilter => t("close filter"),
             Does::ClearSearch => t("clear search"),
             Does::Reload => t("reload"),
+            Does::Parent => t("parent folder"),
             Does::Back => t("back"),
             Does::Menu => t("main menu"),
             Does::Stop => t("stop"),
@@ -388,6 +396,9 @@ pub struct Shared {
     pub cleanup: Loaded<Plan>,
     pub mirrors: Loaded<Mirrors>,
     pub firmware: Loaded<Vec<Firmware>>,
+    pub dotfiles: Loaded<Dotfiles>,
+    /// Why the repository of the dotfiles was not reached at the last fetch.
+    pub unreached: Option<Failure>,
 }
 
 /// A job reading a shared value or writing settings, until its value is in.

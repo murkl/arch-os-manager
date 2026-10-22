@@ -20,6 +20,16 @@ pub enum Prompt {
     Text {
         question: String,
     },
+    /// A secret only the person knows, such as a token or a passphrase: hidden as it is typed,
+    /// and held nowhere.
+    Secret {
+        question: String,
+    },
+    /// ssh meeting a host it has no key of, answered in words.
+    HostKey {
+        host: String,
+        fingerprint: String,
+    },
 }
 
 impl Prompt {
@@ -29,6 +39,36 @@ impl Prompt {
             return Some(Prompt::Password);
         }
         let line = current.trim_end();
+        // git asking for credentials, ssh and age for a passphrase.
+        if line.ends_with(':')
+            && (line.starts_with("Password for '")
+                || line.starts_with("Enter passphrase")
+                || line == "Confirm passphrase:")
+        {
+            return Some(Prompt::Secret {
+                question: line.to_string(),
+            });
+        }
+        if line.starts_with("Username for '") && line.ends_with("':") {
+            return Some(Prompt::Text {
+                question: line.to_string(),
+            });
+        }
+        if line.ends_with("(yes/no/[fingerprint])?") {
+            let after = |lead: &str| {
+                recent
+                    .iter()
+                    .rev()
+                    .find_map(|l| l.split_once(lead).map(|(_, rest)| rest.to_string()))
+            };
+            let host = after("authenticity of host '")
+                .and_then(|r| r.split_once('\'').map(|(h, _)| h.to_string()))
+                .unwrap_or_default();
+            let fingerprint = after("key fingerprint is ")
+                .map(|f| f.trim_end_matches('.').to_string())
+                .unwrap_or_default();
+            return Some(Prompt::HostKey { host, fingerprint });
+        }
         for (tag, yes) in [
             ("[Y/n]", true),
             ("[y/N]", false),
@@ -103,8 +143,52 @@ impl Prompt {
         match self {
             Prompt::Password => t("The password for sudo").to_string(),
             Prompt::YesNo { question, .. } | Prompt::Choice { question, .. } => translate(question),
-            Prompt::Text { question } => question.clone(),
+            Prompt::Text { question } | Prompt::Secret { question } => ask(question),
+            Prompt::HostKey { host, fingerprint } => tf(
+                "Trust the host {host}? The fingerprint of its key is {fingerprint}.",
+                &[("host", host), ("fingerprint", fingerprint)],
+            ),
         }
+    }
+
+    /// The answers of a question to choose from, yes first, in the words the program takes.
+    pub fn answers(&self) -> Option<[&'static str; 2]> {
+        match self {
+            Prompt::YesNo { .. } => Some(["y", "n"]),
+            Prompt::HostKey { .. } => Some(["yes", "no"]),
+            _ => None,
+        }
+    }
+
+    /// The answer the cursor starts on.
+    pub fn default_answer(&self) -> Option<&'static str> {
+        let [yes, no] = self.answers()?;
+        match self {
+            Prompt::YesNo { yes: true, .. } => Some(yes),
+            _ => Some(no),
+        }
+    }
+}
+
+/// git's and age's questions for a text, worded for people. What is in quotes is kept.
+fn ask(q: &str) -> String {
+    let quoted = || q.split('\'').nth(1).unwrap_or_default();
+    if q.starts_with("Username for '") {
+        return tf("The user name for {url}", &[("url", &quoted())]);
+    }
+    if q.starts_with("Password for '") {
+        return tf("The password or token for {url}", &[("url", &quoted())]);
+    }
+    if q.starts_with("Enter passphrase for key '") {
+        return tf("The passphrase of the key {key}", &[("key", &quoted())]);
+    }
+    match q {
+        "Enter passphrase (leave empty to autogenerate a secure one):" => {
+            t("A new passphrase for the secrets").into()
+        }
+        "Confirm passphrase:" => t("The new passphrase again").into(),
+        "Enter passphrase:" => t("The passphrase of the secrets").into(),
+        _ => q.to_string(),
     }
 }
 
@@ -266,6 +350,72 @@ mod tests {
             "Import the PGP key 1234ABCD of Jane <j@x>?"
         );
         assert_eq!(ask("Something new?"), "Something new?");
+    }
+
+    #[test]
+    fn recognises_what_git_ssh_and_age_ask() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let user = Prompt::detect("Username for 'https://github.com': ", &[]).unwrap();
+        assert_eq!(user.friendly(), "The user name for https://github.com");
+        let token = Prompt::detect("Password for 'https://tux@github.com': ", &[]).unwrap();
+        assert!(matches!(token, Prompt::Secret { .. }));
+        assert_eq!(
+            token.friendly(),
+            "The password or token for https://tux@github.com"
+        );
+        let key = Prompt::detect(
+            "Enter passphrase for key '/home/tux/.ssh/id_ed25519': ",
+            &[],
+        );
+        assert_eq!(
+            key.unwrap().friendly(),
+            "The passphrase of the key /home/tux/.ssh/id_ed25519"
+        );
+        for (line, says) in [
+            (
+                "Enter passphrase (leave empty to autogenerate a secure one): ",
+                "A new passphrase for the secrets",
+            ),
+            ("Confirm passphrase: ", "The new passphrase again"),
+            ("Enter passphrase: ", "The passphrase of the secrets"),
+        ] {
+            let p = Prompt::detect(line, &[]).unwrap();
+            assert!(matches!(p, Prompt::Secret { .. }), "{line}");
+            assert_eq!(p.friendly(), says);
+            assert_eq!(p.automatic(), None);
+        }
+        let recent = [
+            "The authenticity of host 'github.com (140.82.121.3)' can't be established."
+                .to_string(),
+            "ED25519 key fingerprint is SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU.".into(),
+            "This key is not known by any other names.".into(),
+        ];
+        let host = Prompt::detect(
+            "Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
+            &recent,
+        )
+        .unwrap();
+        assert_eq!(
+            host,
+            Prompt::HostKey {
+                host: "github.com (140.82.121.3)".into(),
+                fingerprint: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU".into(),
+            }
+        );
+        assert_eq!(host.answers(), Some(["yes", "no"]));
+        assert_eq!(
+            host.default_answer(),
+            Some("no"),
+            "a new key is trusted on purpose"
+        );
+        assert_eq!(host.automatic(), None);
+        assert!(host.friendly().contains("github.com") && host.friendly().contains("SHA256:"));
+        assert_eq!(
+            Prompt::detect("Password: ", &[]),
+            None,
+            "a login of its own stays in the terminal"
+        );
     }
 
     #[test]

@@ -59,7 +59,8 @@ pub struct Meta {
     /// Output a failure is recognised by. lib.yaml's apply to every script.
     #[serde(default)]
     pub hints: BTreeMap<String, Hint>,
-    /// features only: the optional packages by group, `packages` or `desktop`, then by name.
+    /// features only: the optional packages by group, `packages`, `desktop` or `dotfiles`, then
+    /// by name.
     #[serde(default)]
     pub probe: BTreeMap<String, BTreeMap<String, Probe>>,
     /// features only: what a package may need of the system, with why it is not offered
@@ -191,6 +192,14 @@ pub fn set_flatpak(on: bool) {
     *FLATPAK.lock().unwrap() = if on { "on" } else { "off" };
 }
 
+static PROFILE: Mutex<Option<String>> = Mutex::new(None);
+
+/// The profile of the dotfiles chosen in the settings, as `$SM_PROFILE`. Without one the script
+/// takes the host's name.
+pub fn set_profile(profile: Option<&str>) {
+    *PROFILE.lock().unwrap() = profile.map(str::to_string);
+}
+
 static TERMINAL: AtomicBool = AtomicBool::new(false);
 
 /// Whether a run shows in the terminal only, where the person answers every question: the
@@ -251,6 +260,10 @@ fn command(op: Op, args: &[String]) -> Result<Command, String> {
         .env("SUDO_PROMPT", sudo::PROMPT)
         .env_remove("BASH_ENV")
         .env_remove("ENV");
+    match PROFILE.lock().unwrap().as_deref() {
+        Some(profile) => cmd.env("SM_PROFILE", profile),
+        None => cmd.env_remove("SM_PROFILE"),
+    };
     Ok(cmd)
 }
 

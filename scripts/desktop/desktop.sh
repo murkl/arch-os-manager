@@ -200,18 +200,9 @@ op_open() {
     systemd-run --user --collect --quiet -- "$@"
 }
 
-# The update indicator from extensions.gnome.org, in the version for this GNOME
-# Shell. GNOME loads an extension it did not start with at the next login.
+# The update indicator from extensions.gnome.org.
 op_extension_install() {
-    local shell info url
-    shell="$(gnome-shell --version)"
-    shell="${shell##* }"
-    info="$(fetch "https://extensions.gnome.org/extension-info/?uuid=${ARCH_UPDATE}&shell_version=${shell%%.*}")" || exit 11
-    url="$(sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p' <<<"$info")"
-    if [ -z "$url" ]; then exit 11; fi
-    scratch
-    fetch "https://extensions.gnome.org${url}" >"${work}/extension.zip" || exit 11
-    gnome-extensions install --force "${work}/extension.zip"
+    ego_install "$ARCH_UPDATE" || exit 11
     on_bus gnome-extensions enable "$ARCH_UPDATE"
 }
 

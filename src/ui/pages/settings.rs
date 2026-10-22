@@ -3,8 +3,11 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
+use super::ask::TextPage;
 use super::features::FeaturesPage;
 use super::log::HiddenPage;
+use super::run::{Job, start};
+use crate::data::dotfiles::Repo;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
 use crate::settings::{AUR_HELPERS, NOTIFY, RUNS};
@@ -98,6 +101,31 @@ impl SettingsPage {
                 Tone::Muted,
                 false,
             ),
+            Target::UseDotfiles => {
+                let (text, tone) = on_off(ctx.settings.dotfiles());
+                (text.into(), tone, false)
+            }
+            Target::Repository => match &ctx.shared.dotfiles {
+                Loaded::Ready(d) => match (d.state.repo, &d.state.remote) {
+                    (Repo::Invalid, _) => (t("not usable").into(), Tone::Error, false),
+                    (Repo::Ready, Some(url)) => (short(url), Tone::Muted, false),
+                    _ => (t("this machine only").into(), Tone::Muted, false),
+                },
+                Loaded::Loading => ctx.loading(),
+                Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
+                Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
+            },
+            Target::Profile => {
+                match (&ctx.settings.dotfiles_profile, ctx.shared.dotfiles.ready()) {
+                    (Some(chosen), _) => (chosen.clone(), Tone::Muted, false),
+                    (None, Some(d)) => (
+                        tf("{profile}, automatic", &[("profile", &d.state.profile)]),
+                        Tone::Muted,
+                        false,
+                    ),
+                    (None, None) => ctx.loading(),
+                }
+            }
             Target::Features => match &ctx.shared.features {
                 Loaded::Ready(f) => {
                     let ok = f.list.iter().filter(|(p, _)| f.ok(p)).count();
@@ -136,6 +164,67 @@ fn on_off(on: bool) -> (&'static str, Tone) {
     }
 }
 
+/// A repository's address as it reads best: host and path, without scheme, user and `.git`.
+fn short(url: &str) -> String {
+    let rest = match url.split_once("://") {
+        Some((_, rest)) => rest.to_string(),
+        // scp-like, as `git@github.com:tux/dotfiles.git`.
+        None => url.replacen(':', "/", 1),
+    };
+    // A user stands before the host, which ends at the first slash.
+    let host = rest.split('/').next().unwrap_or_default();
+    let rest = match host.split_once('@') {
+        Some((user, _)) => &rest[user.len() + 1..],
+        None => rest.as_str(),
+    };
+    rest.trim_end_matches('/')
+        .trim_end_matches(".git")
+        .to_string()
+}
+
+/// The address of the repository, and the run that clones it or binds the dotfiles to it.
+pub fn repository(ctx: &mut Ctx) -> Box<dyn Page> {
+    let state = ctx.shared.dotfiles.ready().map(|d| d.state.clone());
+    let current = state
+        .as_ref()
+        .and_then(|s| s.remote.clone())
+        .unwrap_or_default();
+    Box::new(TextPage::new(
+        t("Repository"),
+        t(
+            "The address to clone from and to upload to, as GitHub or Gitea show it for cloning. Empty, the dotfiles stay on this machine.",
+        ),
+        current.clone(),
+        move |url, ctx| {
+            let cloning = state.as_ref().is_none_or(|s| s.repo == Repo::Missing);
+            if url == current || (cloning && url.is_empty()) {
+                return Flow::Pop;
+            }
+            let profile = state
+                .as_ref()
+                .map(|s| s.profile.clone())
+                .unwrap_or_default();
+            let text = if cloning {
+                tf(
+                    "Clone {url} into ~/.dotfiles?\nSet up applies the profile {profile} to this machine afterwards.",
+                    &[("url", &url), ("profile", &profile)],
+                )
+            } else if url.is_empty() {
+                t("Disconnect the repository?\nThe dotfiles stay on this machine. The repository keeps what it holds.").into()
+            } else {
+                tf(
+                    "Connect ~/.dotfiles to {url}?\nBack up uploads to it from then on.",
+                    &[("url", &url)],
+                )
+            };
+            let job = Job::new(op::DOTFILES_CONNECT, vec![url])
+                .confirm(text)
+                .named(t("Repository"));
+            Flow::Push(start(job, ctx))
+        },
+    ))
+}
+
 /// What an interval of `NOTIFY` says in a sentence.
 fn label(every: &str) -> &'static str {
     match every {
@@ -163,18 +252,30 @@ impl Page for SettingsPage {
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
-        // Flatpak's row only once Flatpak is known to be installed.
-        let rows: Vec<Row<Target>> = SETTINGS
-            .iter()
-            .filter(|t| **t != Target::Flatpak || ctx.features().is_some_and(|f| f.ok("flatpak")))
-            .map(|&target| {
+        // Flatpak's row only once Flatpak is known to be installed, the repository and the profile
+        // only with the dotfiles on.
+        let shown = |t: &Target| match t {
+            Target::Flatpak => ctx.features().is_some_and(|f| f.ok("flatpak")),
+            Target::Repository | Target::Profile => ctx.settings.dotfiles(),
+            _ => true,
+        };
+        let mut rows: Vec<Row<Target>> = Vec::new();
+        for (i, group) in SETTINGS.iter().enumerate() {
+            if i > 0 {
+                rows.push(Row::heading(""));
+            }
+            for &target in group.iter().filter(|t| shown(t)) {
                 let (detail, tone, dim) = self.value(target, ctx);
-                Row::new(target, target.label())
+                let row = Row::new(target, target.label())
                     .icon(target.icon(), Tone::Normal)
                     .detail(detail, tone)
-                    .dim(dim)
-            })
-            .collect();
+                    .dim(dim);
+                rows.push(match target {
+                    Target::Repository => row.front(),
+                    _ => row,
+                });
+            }
+        }
         let height = rows.len() as u16;
         // A row still to come keeps the focus waiting.
         let focus = self.focus.filter(|t| rows.iter().any(|r| r.id == Some(*t)));
@@ -244,6 +345,19 @@ impl Page for SettingsPage {
                 ctx.save_settings();
                 Flow::Stay
             }
+            // Off is the default, so only on is stored. The dotfiles are read as it switches on.
+            Target::UseDotfiles => {
+                let on = !ctx.settings.dotfiles();
+                ctx.settings.dotfiles = on.then_some(true);
+                ctx.save_settings();
+                ctx.reload();
+                Flow::Stay
+            }
+            Target::Repository => match Target::Repository.missing(ctx) {
+                Some(package) => Flow::Push(Box::new(FeaturesPage::new(Some(package.into())))),
+                None => Flow::Push(repository(ctx)),
+            },
+            Target::Profile => Flow::Push(choice(Target::Profile, ctx)),
             // The check, the update and the notification follow at once.
             Target::Flatpak => {
                 let on = !ctx.settings.flatpak.unwrap_or(true);
@@ -277,7 +391,9 @@ impl Page for SettingsPage {
     }
 
     fn animating(&self, ctx: &Ctx) -> bool {
-        self.applying.is_some() || matches!(ctx.shared.features, Loaded::Loading)
+        self.applying.is_some()
+            || matches!(ctx.shared.features, Loaded::Loading)
+            || ctx.settings.dotfiles() && matches!(ctx.shared.dotfiles, Loaded::Loading)
     }
 }
 
@@ -312,6 +428,22 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
                 .collect(),
             ctx.settings.notify().into(),
         ),
+        // Automatic is the id no folder can have: empty.
+        Target::Profile => {
+            let d = ctx.shared.dotfiles.ready();
+            let host = d.map(|d| d.state.host.clone()).unwrap_or_default();
+            let mut rows = vec![Row::new(String::new(), t("Automatic")).detail(host, Tone::Muted)];
+            rows.extend(
+                d.map(|d| d.profiles.clone())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|p| Row::new(p.clone(), p)),
+            );
+            (
+                rows,
+                ctx.settings.dotfiles_profile.clone().unwrap_or_default(),
+            )
+        }
         Target::Runs => (
             RUNS.iter()
                 .map(|way| {
@@ -384,6 +516,11 @@ impl ChoicePage {
             Target::Runs => {
                 ctx.settings.runs = (id != RUNS[0]).then(|| id.to_string());
                 script::set_terminal(ctx.settings.terminal());
+            }
+            Target::Profile => {
+                ctx.settings.dotfiles_profile = (!id.is_empty()).then(|| id.to_string());
+                script::set_profile(ctx.settings.dotfiles_profile.as_deref());
+                ctx.reload();
             }
             _ => {
                 ctx.settings.aur_helper = (id != "auto").then(|| id.to_string());
@@ -732,6 +869,146 @@ mod tests {
         press(&mut app, &[Key::Enter, Key::Esc]);
         assert_eq!(app.ctx.settings.usage, None, "on is the default");
         assert!(screen(&mut app, &mut term).contains("CPU"));
+    }
+
+    /// The dotfiles are off by default: their rows appear with the switch, and so does the row
+    /// on the start page. A profile chosen goes to the scripts at once.
+    #[test]
+    fn the_dotfiles_switch_brings_their_rows_and_a_profile_is_chosen_from_the_repository() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Dotfiles"), "off by default: {shown}");
+        for page in Target::UseDotfiles.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("Repository") && !shown.contains("Profile"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.ctx.settings.dotfiles, Some(true));
+        assert!(app.ctx.busy(), "the dotfiles are read as they switch on");
+        let shown = screen(&mut app, &mut term);
+        let row = |name: &str| {
+            shown
+                .lines()
+                .find(|l| l.contains(name))
+                .unwrap_or_default()
+                .to_string()
+        };
+        assert!(row("Dotfiles").ends_with("on"), "{shown}");
+        assert!(
+            row("Repository").ends_with("github.com/tux/dotfiles"),
+            "{shown}"
+        );
+        assert!(
+            row("Profile").ends_with("tux-notebook, automatic"),
+            "{shown}"
+        );
+        // The profile, chosen among those of the repository, then automatic again.
+        press(&mut app, &[Key::Down, Key::Down, Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Automatic") && shown.contains("tux-desktop"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Down, Key::Enter]);
+        assert_eq!(
+            app.ctx.settings.dotfiles_profile.as_deref(),
+            Some("tux-desktop")
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown
+                .lines()
+                .any(|l| l.contains("Profile") && l.ends_with("tux-desktop")),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Enter, Key::Up, Key::Enter]);
+        assert_eq!(
+            app.ctx.settings.dotfiles_profile, None,
+            "automatic is the default"
+        );
+        // The start page shows them now, and the switch takes them off again.
+        press(&mut app, &[Key::Esc]);
+        assert!(screen(&mut app, &mut term).contains("Dotfiles"));
+        for page in Target::UseDotfiles.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter, Key::Esc]);
+        assert_eq!(app.ctx.settings.dotfiles, None);
+        assert!(!screen(&mut app, &mut term).contains("Dotfiles"));
+    }
+
+    /// The address is asked with what is there, and the question before the run says what happens.
+    #[test]
+    fn the_repository_is_asked_as_an_address_and_a_change_asks_before_it_runs() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        app.ctx.settings.dotfiles = Some(true);
+        for page in Target::Repository.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("git@github.com:tux/dotfiles.git"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        assert!(
+            screen(&mut app, &mut term).contains("Repository"),
+            "unchanged, nothing runs"
+        );
+        for page in Target::Repository.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Ctrl('u')]);
+        for c in "https://git.example.org/tux/dotfiles.git".chars() {
+            press(&mut app, &[Key::Char(c)]);
+        }
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Connect ~/.dotfiles to https://git.example.org/tux/dotfiles.git?"),
+            "{shown}"
+        );
+        let no = shown
+            .lines()
+            .find(|l| l.trim_end().ends_with("No"))
+            .unwrap_or_default();
+        assert!(
+            no.contains(app.ctx.style.glyphs.cursor),
+            "opens on no: {shown}"
+        );
+    }
+
+    #[test]
+    fn an_address_reads_as_host_and_path() {
+        for (url, read) in [
+            ("git@github.com:tux/dotfiles.git", "github.com/tux/dotfiles"),
+            (
+                "https://github.com/tux/dotfiles.git",
+                "github.com/tux/dotfiles",
+            ),
+            (
+                "ssh://git@git.example.org:2222/tux/dotfiles.git",
+                "git.example.org:2222/tux/dotfiles",
+            ),
+            (
+                "https://git.example.org/tux/a@b/",
+                "git.example.org/tux/a@b",
+            ),
+            ("file:///srv/dotfiles.git", "/srv/dotfiles"),
+        ] {
+            assert_eq!(short(url), read, "{url}");
+        }
     }
 
     /// A setting that could not be written says so under the list, until a write succeeds.

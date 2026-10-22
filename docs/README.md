@@ -28,6 +28,7 @@
 - Config updates compared, merged or taken over
 - Mirrors ranked, firmware updated
 - A broken keyring renewed, damaged package files restored
+- [Dotfiles](REFERENCE.md#dotfiles) per machine in your git repository, set up and backed up in one run, secrets encrypted
 - Terminal, Linux console or a window of its own
 - Runs in the terminal if you like, every command shown and every question yours
 - English and German

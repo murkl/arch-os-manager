@@ -9,7 +9,7 @@ use super::target::Target;
 use super::{
     Ctx, Does, Flow, Fresh, Key, Loaded, Msg, Nav, Page, PageId, Shared, Style, draw, pages,
 };
-use crate::data::{self, features::Features};
+use crate::data::{self, dotfiles::Dotfiles, features::Features};
 use crate::i18n::{self, Lang};
 use crate::script::{self, Failure, op, query};
 use crate::settings::Settings;
@@ -34,6 +34,7 @@ impl App {
             crate::warn!("settings.yaml not used: {e}");
         }
         script::set_terminal(settings.terminal());
+        script::set_profile(settings.dotfiles_profile.as_deref());
         i18n::set(
             settings
                 .language
@@ -328,6 +329,20 @@ impl App {
             Firmware,
             load_firmware()
         );
+        // The dotfiles need stow beside git, though reading them needs git alone.
+        if ctx.settings.dotfiles() {
+            match missing(op::DOTFILES_SETUP) {
+                Some(package) => ctx.shared.dotfiles = Loaded::Missing(package),
+                None => {
+                    ctx.fresh(op::DOTFILES_STATE, || {
+                        Fresh::Dotfiles(Dotfiles::load().map(Box::new))
+                    });
+                    ctx.remote(op::DOTFILES_FETCH, || {
+                        Fresh::DotfilesFetched(Dotfiles::fetch().map(Box::new))
+                    });
+                }
+            }
+        }
     }
 
     fn fresh(&mut self, fresh: Fresh) {
@@ -352,6 +367,7 @@ impl App {
                     s.pacnew.give_up(f);
                     s.cleanup.give_up(f);
                     s.firmware.give_up(f);
+                    s.dotfiles.give_up(f);
                 }
             }
             Fresh::System(r) => s.system = Loaded::from(r),
@@ -387,6 +403,13 @@ impl App {
             Fresh::Cleanup(r) => s.cleanup = Loaded::from(r),
             Fresh::Mirrors(r) => s.mirrors = Loaded::from(r),
             Fresh::Firmware(r) => s.firmware = Loaded::from(r),
+            Fresh::Dotfiles(r) => s.dotfiles = Loaded::from(r.map(|d| *d)),
+            // Unreached, the dotfiles as read here stay, with the reason beside them.
+            Fresh::DotfilesFetched(Ok(d)) => {
+                s.dotfiles = Loaded::Ready(*d);
+                s.unreached = None;
+            }
+            Fresh::DotfilesFetched(Err(f)) => s.unreached = Some(f),
             Fresh::Saved(Ok(())) => {
                 self.ctx.settings_error = None;
                 self.ctx.settings_unsaved = None;
@@ -582,7 +605,7 @@ pub mod tests {
         use crate::data::{packages::Installed, services::Service, system::System, updates};
         let s = &mut app.ctx.shared;
         s.features = Loaded::Ready(Features::parse(
-            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\nreflector\tok\t2023-2\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\nreflector\tok\t2023-2\ngit\tok\t2.56.0-1\nstow\tok\t2.4.1-1\nage\tok\t1.3.2-1\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {
@@ -652,6 +675,7 @@ pub mod tests {
             servers: vec!["mirror.example.org".into()],
         });
         s.firmware = Loaded::Ready(Vec::new());
+        s.dotfiles = Loaded::Ready(crate::data::dotfiles::example());
     }
 
     #[test]
@@ -877,6 +901,7 @@ pub mod tests {
             pages::splash::END + 1000,
             &app.ctx,
         ))]);
+        all.push(vec![Box::new(pages::dotfiles::FilesPage::new())]);
         all.push(run(Ok(())));
         all.push(run(Err(Failure::classify(
             op::UPGRADE_RUN,

@@ -1888,3 +1888,532 @@ esac"#,
     assert_eq!(o.code, 1, "{}", o.events);
     assert!(o.events.starts_with("fail\t"), "{}", o.events);
 }
+
+/// What the dotfiles need beside the real git, stow and age: a git identity, a profile, and
+/// pacman and Flatpak that know a few packages.
+fn dotfiles(test: &str) -> Sandbox {
+    let s = Sandbox::new(test);
+    std::fs::write(
+        s.dir.join(".gitconfig"),
+        "[user]\n\tname = Tux\n\temail = tux@example.org\n[init]\n\tdefaultBranch = main\n",
+    )
+    .unwrap();
+    s.stub(
+        "pacman",
+        r#"case "$*" in
+-Qqen) printf 'base\nzsh\n' ;;
+-Qqem) printf 'paru-bin\n' ;;
+-Qq) printf 'base\nzsh\nparu-bin\n' ;;
+-Slq) printf 'base\nfish\nzsh\n' ;;
+esac"#,
+    );
+    s.stub("flatpak", "exit 0");
+    s.absent("busctl");
+    s
+}
+
+/// The environment of every dotfiles run: the profile, and git without the machine's own
+/// configuration.
+const TUX: [(&str, &str); 2] = [("SM_PROFILE", "tux"), ("GIT_CONFIG_NOSYSTEM", "1")];
+
+impl Sandbox {
+    fn dotfiles(&self, args: &[&str]) -> Outcome {
+        self.run("dotfiles", args, &TUX)
+    }
+
+    fn write(&self, path: &str, text: &str) {
+        let path = self.dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    fn read(&self, path: &str) -> String {
+        std::fs::read_to_string(self.dir.join(path)).unwrap_or_default()
+    }
+
+    /// Where a link of the home folder points, as stow wrote it.
+    fn link(&self, path: &str) -> Option<String> {
+        std::fs::read_link(self.dir.join(path))
+            .ok()
+            .map(|p| p.display().to_string())
+    }
+
+    fn git(&self, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .args(["-C", self.dir.join(".dotfiles").to_str().unwrap()])
+            .args(args)
+            .env("HOME", &self.dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into()
+    }
+}
+
+/// A bare repository beside a sandbox, as GitHub or Gitea would hold the dotfiles.
+fn remote(s: &Sandbox) -> String {
+    let dir = s.dir.join("remote.git");
+    let ok = Command::new("git")
+        .args(["init", "--quiet", "--bare", "--initial-branch=main"])
+        .arg(&dir)
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
+    format!("file://{}", dir.display())
+}
+
+#[test]
+fn dotfiles_go_into_the_profile_and_come_back_as_links_on_another_machine() {
+    let a = dotfiles("dotfiles-a");
+    assert_eq!(
+        a.dotfiles(&["state"]).out.lines().nth(3),
+        Some("repo\tmissing")
+    );
+    a.write(".config/nvim/init.lua", "vim.o.number = true\n");
+    a.write(".zshrc", "alias ll='ls -l'\n");
+    for path in [".config/nvim", ".zshrc"] {
+        let o = a.dotfiles(&["add", a.dir.join(path).to_str().unwrap()]);
+        assert_eq!(o.code, 0, "{path}: {}{}", o.events, o.err);
+    }
+    // Relative, as stow links, and folders stay real.
+    assert_eq!(
+        a.link(".config/nvim/init.lua").as_deref(),
+        Some("../../.dotfiles/tux/home/dot-config/nvim/init.lua")
+    );
+    assert!(!a.dir.join(".config/nvim").is_symlink());
+    assert_eq!(a.read(".zshrc"), "alias ll='ls -l'\n");
+    // A new profile starts with its two files, and the empty init.sh counts as run.
+    assert!(a.read(".dotfiles/tux/init.sh").starts_with("#!/bin/bash"));
+    assert!(a.read(".dotfiles/tux/dotfiles.yaml").contains("groups: []"));
+    let state = a.dotfiles(&["state"]).out;
+    assert!(state.contains("init\tapplied\t"), "{state}");
+    assert!(state.contains("files\t2\nlinks\t0\n"), "{state}");
+
+    let o = a.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(o.events, "step\tpackages\nstep\tcommit\n");
+    assert_eq!(a.read(".dotfiles/tux/packages/pacman.txt"), "base\nzsh\n");
+    assert_eq!(a.read(".dotfiles/tux/packages/aur.txt"), "paru-bin\n");
+    assert_eq!(
+        a.git(&["log", "--format=%s"]),
+        "Back up tux: dotfiles.yaml, init.sh, nvim, packages, zshrc\n"
+    );
+    let url = remote(&a);
+    assert_eq!(a.dotfiles(&["connect", &url]).code, 0);
+    a.write(".config/nvim/init.lua", "vim.o.number = false\n");
+    assert!(a.dotfiles(&["state"]).out.contains("changes\t1\n"));
+    let o = a.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.events.ends_with("step\tpull\nstep\tpush\n"),
+        "{}",
+        o.events
+    );
+    assert!(
+        a.git(&["status", "-sb"])
+            .starts_with("## main...origin/main\n")
+    );
+
+    // Another machine of the profile: its own .zshrc goes aside for the link.
+    let b = dotfiles("dotfiles-b");
+    b.write(".zshrc", "mine\n");
+    let o = b.dotfiles(&["connect", &url]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let state = b.dotfiles(&["state"]).out;
+    assert!(state.contains("links\t2\n"), "{state}");
+    let o = b.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(
+        o.events, "step\tpull\nstep\tlink\nstep\tinit\nstep\tpackages\n",
+        "init.sh never ran here"
+    );
+    assert_eq!(b.read(".config/nvim/init.lua"), "vim.o.number = false\n");
+    assert!(b.dir.join(".zshrc").is_symlink());
+    let aside = std::fs::read_dir(b.dir.join(".dotfiles-backup"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert_eq!(
+        std::fs::read_to_string(aside.join(".zshrc")).unwrap(),
+        "mine\n"
+    );
+    let state = b.dotfiles(&["state"]).out;
+    assert!(
+        state.contains("links\t0\n") && state.contains("\nsetup\t"),
+        "{state}"
+    );
+    assert!(
+        state.contains(&format!("backup\t{}", aside.display())),
+        "{state}"
+    );
+    assert_eq!(
+        b.dotfiles(&["setup"]).events,
+        "step\tpull\nstep\tlink\nstep\tpackages\n",
+        "init.sh unchanged runs no more"
+    );
+
+    // A file taken out on one machine takes its link along on the other.
+    let o = a.dotfiles(&["remove", a.dir.join(".config/nvim").to_str().unwrap()]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(!a.dir.join(".config/nvim/init.lua").is_symlink());
+    assert_eq!(a.read(".config/nvim/init.lua"), "vim.o.number = false\n");
+    assert!(!a.dir.join(".dotfiles/tux/home/dot-config").exists());
+    assert_eq!(a.dotfiles(&["backup"]).code, 0);
+    assert_eq!(b.dotfiles(&["fetch"]).code, 0);
+    assert!(b.dotfiles(&["state"]).out.contains("behind\t1\n"));
+    assert_eq!(b.dotfiles(&["setup"]).code, 0);
+    assert!(
+        b.dir
+            .join(".config/nvim/init.lua")
+            .symlink_metadata()
+            .is_err()
+    );
+    assert!(b.dir.join(".zshrc").is_symlink());
+}
+
+#[test]
+fn dotfiles_name_what_they_keep_and_refuse_what_is_no_configuration() {
+    let s = dotfiles("dotfiles-keep");
+    s.write(".config/app/a.conf", "a\n");
+    s.write(".config/app/b.conf", "b\n");
+    s.write(".gitconfig.local", "x\n");
+    let home = s.dir.display().to_string();
+    let add = |path: &str| s.dotfiles(&["add", &format!("{home}/{path}")]).code;
+    assert_eq!(add(".config/app"), 0);
+    assert_eq!(add(".config/app"), 33, "kept already");
+    assert_eq!(s.dotfiles(&["add", "/etc/hosts"]).code, 24);
+    std::os::unix::fs::symlink("/etc/hosts", s.dir.join("hosts")).unwrap();
+    assert_eq!(add("hosts"), 27);
+    // The cache as XDG_CACHE_HOME puts it.
+    s.write("cache/x", "x\n");
+    assert_eq!(add("cache/x"), 25);
+    s.write("dot-files/x", "x\n");
+    assert_eq!(add("dot-files"), 35);
+    std::fs::create_dir_all(s.dir.join("empty")).unwrap();
+    assert_eq!(add("empty"), 31);
+    for i in 0..101 {
+        s.write(&format!("many/{i}"), "x\n");
+    }
+    assert_eq!(add("many"), 32);
+    s.write("project/.git/HEAD", "x\n");
+    assert_eq!(add("project"), 29);
+    assert_eq!(add("nothing"), 28);
+    // A folder holding nothing but links of the dotfiles is named whole, the one above as well.
+    let o = s.dotfiles(&["managed"]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(
+        o.out,
+        format!(
+            "dir\t{home}/.config/\ndir\t{home}/.config/app/\nfile\t{home}/.config/app/a.conf\nfile\t{home}/.config/app/b.conf\n"
+        )
+    );
+    assert_eq!(s.dotfiles(&["remove", &format!("{home}/.zshrc")]).code, 34);
+}
+
+#[test]
+fn init_sh_and_the_groups_run_again_only_where_they_changed() {
+    let s = dotfiles("dotfiles-run");
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    s.write(
+        ".dotfiles/tux/init.sh",
+        "#!/bin/bash\necho \"init in $PWD as $SM_PROFILE\" >>\"$HOME/ran\"\n",
+    );
+    assert!(s.dotfiles(&["state"]).out.contains("init\tchanged\t"));
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    let here = s.dir.join(".dotfiles/tux");
+    assert_eq!(
+        s.read("ran"),
+        format!("init in {} as tux\n", here.display())
+    );
+    let state = s.dotfiles(&["state"]).out;
+    assert!(state.contains("init\tapplied\t1"), "{state}");
+
+    s.write(
+        ".dotfiles/tux/groups/gaming.sh",
+        "#!/bin/bash\necho \"gaming in $PWD\" >>\"$HOME/ran\"\n",
+    );
+    assert_eq!(s.dotfiles(&["group-on", "../gaming.sh"]).code, 38);
+    assert_eq!(s.dotfiles(&["group-on", "groups/none.sh"]).code, 38);
+    let o = s.dotfiles(&["group-on", "groups/gaming.sh"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "groups/gaming.sh\n");
+    assert!(
+        s.dotfiles(&["state"])
+            .out
+            .contains("group\tgroups/gaming.sh\tapplied\n")
+    );
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert_eq!(s.read("ran").lines().count(), 2, "unchanged, no second run");
+    s.write(
+        ".dotfiles/tux/groups/gaming.sh",
+        "#!/bin/bash\necho \"gaming again\" >>\"$HOME/ran\"\n",
+    );
+    assert!(
+        s.dotfiles(&["state"])
+            .out
+            .contains("group\tgroups/gaming.sh\tchanged\n")
+    );
+    let o = s.dotfiles(&["setup"]);
+    assert!(o.events.contains("step\tgroups\n"), "{}", o.events);
+    assert!(s.read("ran").ends_with("gaming again\n"));
+    assert_eq!(s.dotfiles(&["group-off", "groups/gaming.sh"]).code, 0);
+    assert!(!s.dir.join(".dotfiles/tux/groups.txt").exists());
+    s.write(".dotfiles/tux/groups/gaming.sh", "exit 3\n");
+    assert_eq!(s.dotfiles(&["group-on", "groups/gaming.sh"]).code, 18);
+    s.write(".dotfiles/tux/init.sh", "exit 4\n");
+    assert_eq!(s.dotfiles(&["setup"]).code, 17);
+}
+
+#[test]
+fn a_setup_installs_only_what_the_lists_name_and_this_machine_lacks() {
+    let s = dotfiles("dotfiles-packages");
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    s.write(
+        ".dotfiles/tux/packages/pacman.txt",
+        "base\nfish\ngone-pkg\n",
+    );
+    s.write(".dotfiles/tux/packages/aur.txt", "paru-bin\nyay-bin\n");
+    s.write(".dotfiles/tux/packages/flatpak.txt", "org.example.App\n");
+    s.stub("paru", "exit 0");
+    let mut env = TUX.to_vec();
+    env.push(("SM_AUR", "paru"));
+    let o = s.run("dotfiles", &["setup"], &env);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.calls.contains("sudo pacman -S --needed -- fish\n"),
+        "{}",
+        o.calls
+    );
+    assert!(o.out.contains("In no repository: gone-pkg"), "{}", o.out);
+    assert!(
+        o.calls
+            .contains("paru --skipreview -S --needed -- yay-bin\n"),
+        "{}",
+        o.calls
+    );
+    assert!(
+        o.calls
+            .contains("flatpak install --noninteractive --assumeyes flathub org.example.App\n"),
+        "{}",
+        o.calls
+    );
+    // Without a helper the AUR is left out and named.
+    let o = s.dotfiles(&["setup"]);
+    assert!(o.out.contains("No AUR helper for: yay-bin"), "{}", o.out);
+}
+
+#[test]
+fn secrets_are_written_for_their_owner_only_and_backed_up_where_they_changed() {
+    let a = dotfiles("dotfiles-secrets-a");
+    assert_eq!(a.dotfiles(&["setup"]).code, 0);
+    // The key as unlocking leaves it, so no passphrase is asked.
+    let key = a.dir.join(".dotfiles/.git/system-manager/tux.key");
+    std::fs::create_dir_all(key.parent().unwrap()).unwrap();
+    assert!(
+        Command::new("age-keygen")
+            .arg("-o")
+            .arg(&key)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    a.write(".dotfiles/tux/key.age", "the key behind a passphrase\n");
+    a.write(".ssh/id_ed25519", "PRIVATE\n");
+    a.write(".ssh/config", "Host example\n");
+    let o = a.dotfiles(&["secret-add", a.dir.join(".ssh").to_str().unwrap()]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let sealed = std::fs::read(a.dir.join(".dotfiles/tux/secrets/dot-ssh/id_ed25519.age")).unwrap();
+    assert!(sealed.starts_with(b"age-encryption.org/v1\n"));
+    assert!(!sealed.windows(7).any(|w| w == b"PRIVATE"));
+    let state = a.dotfiles(&["state"]).out;
+    assert!(state.contains("secrets\t2\nkey\tunlocked\n"), "{state}");
+    assert!(!state.contains("unsaved\tsecrets"), "{state}");
+    a.write(".ssh/config", "Host example\nHost another\n");
+    assert!(a.dotfiles(&["state"]).out.contains("unsaved\tsecrets\n"));
+    let o = a.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(o.events.contains("step\tsecrets\n"), "{}", o.events);
+    assert!(!a.dotfiles(&["state"]).out.contains("unsaved\tsecrets"));
+    let url = remote(&a);
+    assert_eq!(a.dotfiles(&["connect", &url]).code, 0);
+    assert_eq!(a.dotfiles(&["backup"]).code, 0);
+
+    // Another machine, its key unlocked as well: the secrets are files of their owner.
+    let b = dotfiles("dotfiles-secrets-b");
+    assert_eq!(b.dotfiles(&["connect", &url]).code, 0);
+    let locked = b.dotfiles(&["state"]).out;
+    assert!(
+        locked.contains("key\tlocked\npending\tsecrets\t2\n"),
+        "{locked}"
+    );
+    let theirs = b.dir.join(".dotfiles/.git/system-manager/tux.key");
+    std::fs::create_dir_all(theirs.parent().unwrap()).unwrap();
+    std::fs::copy(&key, &theirs).unwrap();
+    let o = b.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(b.read(".ssh/config"), "Host example\nHost another\n");
+    let mode = std::fs::metadata(b.dir.join(".ssh/id_ed25519"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o600);
+    assert!(!b.dir.join(".ssh/config").is_symlink());
+    // Taken out, the file stays.
+    let o = b.dotfiles(&["secret-remove", b.dir.join(".ssh/config").to_str().unwrap()]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(b.dir.join(".ssh/config").exists());
+    assert!(
+        !b.dir
+            .join(".dotfiles/tux/secrets/dot-ssh/config.age")
+            .exists()
+    );
+}
+
+#[test]
+fn a_repository_that_does_not_fit_is_refused_and_the_address_taken_back() {
+    let s = dotfiles("dotfiles-connect");
+    s.write(".zshrc", "x\n");
+    assert_eq!(
+        s.dotfiles(&["add", s.dir.join(".zshrc").to_str().unwrap()])
+            .code,
+        0
+    );
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
+    let ours = remote(&s);
+    assert_eq!(s.dotfiles(&["connect", &ours]).code, 0);
+    // A repository with a history of its own.
+    let other = s.dir.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    for args in [
+        &["init", "--quiet", "--initial-branch=main"][..],
+        &["commit", "--quiet", "--allow-empty", "-m", "elsewhere"],
+    ] {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&other)
+            .args(args)
+            .env("HOME", &s.dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "{args:?}");
+    }
+    let foreign = format!("file://{}", other.display());
+    assert_eq!(s.dotfiles(&["connect", &foreign]).code, 36);
+    assert_eq!(s.git(&["remote", "get-url", "origin"]), format!("{ours}\n"));
+    assert_eq!(s.git(&["branch", "--remotes"]), "", "nothing of it stays");
+    assert_eq!(
+        s.dotfiles(&["connect", "http://example.org/dotfiles.git"])
+            .code,
+        37
+    );
+    let gone = format!("file://{}/gone.git", s.dir.display());
+    assert_eq!(s.dotfiles(&["connect", &gone]).code, 12);
+    assert_eq!(s.git(&["remote", "get-url", "origin"]), format!("{ours}\n"));
+    assert_eq!(s.dotfiles(&["connect", ""]).code, 0);
+    assert_eq!(s.git(&["remote"]), "");
+    // Not a repository of its own, nothing is touched.
+    let t = dotfiles("dotfiles-bare");
+    assert!(
+        Command::new("git")
+            .args(["init", "--quiet", "--bare"])
+            .arg(t.dir.join(".dotfiles"))
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(t.dotfiles(&["state"]).out.contains("repo\tinvalid\n"));
+    assert_eq!(t.dotfiles(&["setup"]).code, 10);
+}
+
+/// GNOME Shell on the bus, with two extensions on, one of them missing here.
+fn gnome(s: &Sandbox) {
+    s.stub("busctl", "echo 'b true'");
+    s.stub("gnome-shell", "echo 'GNOME Shell 51.1'");
+    s.stub(
+        "gnome-extensions",
+        r#"case "$*" in
+"list --enabled") printf 'panel@x\nclock@y\n' ;;
+list) echo panel@x ;;
+esac"#,
+    );
+    s.stub(
+        "dconf",
+        r#"case "$1" in
+list) echo 'panel/' ;;
+dump) printf '[/]\nposition=%s\n' "$(cat "$HOME/panel" 2>/dev/null || echo top)" ;;
+load) cat >"$HOME/loaded" ;;
+esac"#,
+    );
+    s.stub("gsettings", "exit 0");
+    s.stub(
+        "curl",
+        r#"case "$*" in
+*extension-info*) echo '{"download_url": "/download-extension/clock.zip"}' ;;
+*download-extension*) echo zip ;;
+*) exit 22 ;;
+esac"#,
+    );
+}
+
+#[test]
+fn gnome_extensions_are_backed_up_and_what_the_profile_brings_is_loaded() {
+    let s = dotfiles("dotfiles-gnome");
+    gnome(&s);
+    let o = s.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(
+        s.read(".dotfiles/tux/gnome/extensions.txt"),
+        "clock@y\npanel@x\n"
+    );
+    assert_eq!(
+        s.read(".dotfiles/tux/gnome/panel.conf"),
+        "[/]\nposition=top\n"
+    );
+    let state = s.dotfiles(&["state"]).out;
+    assert!(
+        !state.contains("pending\tgnome") && !state.contains("unsaved\tgnome"),
+        "saved and loaded alike: {state}"
+    );
+    // Changed here: a backup saves it, a setup leaves it.
+    s.write("panel", "bottom\n");
+    assert!(s.dotfiles(&["state"]).out.contains("unsaved\tgnome\n"));
+    let o = s.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(!o.calls.contains("dconf load"), "{}", o.calls);
+    // Changed in the profile: a setup loads it and installs what is missing here.
+    s.write(".dotfiles/tux/gnome/panel.conf", "[/]\nposition=left\n");
+    s.write(
+        ".dotfiles/tux/gnome/extensions.txt",
+        "clock@y\npanel@x\nweather@z\n",
+    );
+    assert!(s.dotfiles(&["state"]).out.contains("pending\tgnome\n"));
+    let o = s.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.calls
+            .contains("dconf reset -f /org/gnome/shell/extensions/panel/\n"),
+        "{}",
+        o.calls
+    );
+    assert_eq!(s.read("loaded"), "[/]\nposition=left\n");
+    assert!(
+        o.calls.contains("gnome-extensions install --force /"),
+        "{}",
+        o.calls
+    );
+    assert!(
+        o.calls.contains(
+            "gsettings set org.gnome.shell enabled-extensions ['clock@y', 'panel@x', 'weather@z']\n"
+        ),
+        "{}",
+        o.calls
+    );
+    assert!(!s.dotfiles(&["state"]).out.contains("pending\tgnome"));
+}

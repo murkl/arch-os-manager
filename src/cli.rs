@@ -13,9 +13,9 @@ use crate::state::State;
 use crate::ui::Target;
 
 /// The pages the command line opens on.
-pub const PAGES: [&str; 12] = [
+pub const PAGES: [&str; 13] = [
     "upgrade", "news", "packages", "services", "log", "cleanup", "pacnew", "mirrors", "firmware",
-    "repair", "settings", "features",
+    "repair", "dotfiles", "settings", "features",
 ];
 
 /// The command line in two groups, each row an argument and what it does. The help and the

@@ -1,0 +1,135 @@
+ops:
+  state:
+    title: Reading the dotfiles
+    needs: [git]
+  fetch:
+    title: Fetching the dotfiles
+    needs: [git]
+  managed:
+    title: Listing what the dotfiles keep
+    needs: [git]
+  connect:
+    title: Connecting the repository
+    needs: [git]
+  setup:
+    title: Setting up from the dotfiles
+    root: true
+    needs: [git, stow]
+    steps:
+      pull: Fetching the latest state
+      link: Linking the files
+      secrets: Writing the secrets
+      init: Running init.sh
+      packages: Installing the packages
+      groups: Setting up the groups
+      gnome: Restoring the GNOME extensions
+  backup:
+    title: Backing up into the dotfiles
+    needs: [git]
+    steps:
+      packages: Listing the packages
+      gnome: Saving the GNOME extensions
+      secrets: Encrypting the secrets
+      commit: Committing
+      pull: Fetching the latest state
+      push: Uploading
+  group-on:
+    title: Setting up the group
+    needs: [git]
+  group-off:
+    title: Switching the group off
+    needs: [git]
+  add:
+    title: Adding to the dotfiles
+    needs: [git, stow]
+  remove:
+    title: Taking out of the dotfiles
+    needs: [git]
+  secret-add:
+    title: Adding the secret
+    needs: [git, age]
+  secret-remove:
+    title: Taking the secret out
+    needs: [git]
+  passphrase:
+    title: Changing the passphrase
+    needs: [git, age]
+errors:
+  10: |
+    ~/.dotfiles is no repository of its own
+    It is a bare repository or a folder inside another. Move it away, then try again.
+  11: |
+    The repository wants other credentials
+    A run asks for them. A token or key may lack the right to read or write.
+  12: |
+    The repository could not be reached
+    Check the address and the internet connection.
+  13: |
+    No branch is checked out
+    Check one out in ~/.dotfiles with git switch.
+  14: |
+    The branch is gone from the repository
+    It was deleted or renamed. Check out the default branch in ~/.dotfiles.
+  15: |
+    The changes here and in the repository collide
+    Nothing changed. Resolve it in ~/.dotfiles with git rebase.
+  16: |
+    A file is in the way
+    stow names it in the details. Move it, then try again.
+  17: |
+    init.sh failed
+    Its output in the details names the line.
+  18: |
+    The script of a group failed
+    Its output in the details names the line.
+  19: |
+    Git does not know your name
+    Set it once with git config --global user.name and user.email.
+  20: |
+    The passphrase was wrong three times
+  21: |
+    The passphrases did not match
+    Nothing changed.
+  22: |
+    The secrets need age
+    Install it under Settings › Optional packages.
+  23: |
+    The key of the secrets is missing
+    The profile holds secrets but no key.age to read them with.
+  24: |
+    Only what lies in the home folder
+  25: |
+    It lies in the dotfiles, the cache or the state
+  26: |
+    It holds the dotfiles, the cache or the state
+  27: |
+    It is a link
+  28: |
+    Neither a file nor a folder
+  29: |
+    It is a git repository
+  30: |
+    It holds links, sockets or devices
+  31: |
+    It holds no file
+  32: |
+    It holds more than 100 files
+    That is the data of a program, not its configuration.
+  33: |
+    The dotfiles keep it already
+  34: |
+    The dotfiles do not keep it
+  35: |
+    A name starts with dot-
+    stow reads dot- as a dot. Rename it first.
+  36: |
+    The repository and the dotfiles do not fit together
+    They share no history, or files here would be overwritten. Move ~/.dotfiles away, then connect again.
+  37: |
+    Plain http and git:// are refused
+    They carry the dotfiles unencrypted. Take the https or ssh address.
+  38: |
+    The script is not in the profile
+    dotfiles.yaml names a script of the profile folder, ending in .sh.
+  39: |
+    The profile has no secrets yet
