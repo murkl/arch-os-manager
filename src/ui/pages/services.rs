@@ -18,6 +18,10 @@ fn id(s: &Service) -> String {
     format!("{}:{}", if s.user { "user" } else { "system" }, s.unit)
 }
 
+fn label(s: &Service) -> &str {
+    s.unit.trim_end_matches(".service")
+}
+
 fn state(s: &Service) -> (String, Tone) {
     match s.active.as_str() {
         "failed" => (t("failed").into(), Tone::Error),
@@ -49,15 +53,31 @@ impl Page for ServicesPage {
         let Some(all) = loaded(&ctx.shared.services, area, buf, ctx) else {
             return;
         };
+        let scope = |user| if user { t("User") } else { t("System") };
         let mut rows = Vec::new();
-        for (user, heading) in [(false, t("System")), (true, t("User"))] {
-            rows.push(Row::heading(heading));
-            rows.extend(all.iter().filter(|s| s.user == user).map(|s| {
-                let (text, tone) = state(s);
-                Row::new(id(s), s.unit.trim_end_matches(".service"))
-                    .detail(text, tone)
-                    .dot(tone)
+        // What failed comes first, of both scopes, and the cursor starts there. Its heading
+        // says the state, so the name keeps the room and the note says what it is.
+        let failed: Vec<&Service> = all.iter().filter(|s| s.failed()).collect();
+        if !failed.is_empty() {
+            rows.push(Row::heading(t("Failed")));
+            rows.extend(failed.into_iter().map(|s| {
+                let note = match s.description.as_str() {
+                    "" => scope(s.user).to_string(),
+                    about => format!("{} {} {about}", scope(s.user), ctx.style.glyphs.separator),
+                };
+                Row::new(id(s), label(s)).dot(Tone::Error).note(note)
             }));
+        }
+        for user in [false, true] {
+            rows.push(Row::heading(scope(user)));
+            rows.extend(
+                all.iter()
+                    .filter(|s| s.user == user && !s.failed())
+                    .map(|s| {
+                        let (text, tone) = state(s);
+                        Row::new(id(s), label(s)).detail(text, tone).dot(tone)
+                    }),
+            );
         }
         self.list.set(rows);
         self.list.draw(area, buf, ctx);
@@ -204,7 +224,7 @@ impl ServicePage {
 
 impl Page for ServicePage {
     fn title(&self) -> String {
-        self.service.unit.trim_end_matches(".service").to_string()
+        label(&self.service).to_string()
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
@@ -224,5 +244,55 @@ impl Page for ServicePage {
     fn done(&mut self, _: &mut Ctx) -> Flow {
         self.log.receive();
         Flow::Stay
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::app::tests::{app, open, press, screen};
+
+    #[test]
+    fn what_failed_stands_on_top_with_what_it_is_and_the_cursor_on_it() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let service = |user, unit: &str, active: &str, description: &str| Service {
+            user,
+            unit: unit.into(),
+            description: description.into(),
+            active: active.into(),
+            enabled: "enabled".into(),
+        };
+        app.ctx.shared.services = Loaded::Ready(vec![
+            service(false, "sshd.service", "active", "OpenSSH Daemon"),
+            service(true, "nas-sync.service", "failed", "Copies the home folder"),
+        ]);
+        open(&mut app, Box::new(ServicesPage::new()));
+        let shown = screen(&mut app, &mut term);
+        let lines: Vec<&str> = shown.lines().collect();
+        let at = |text: &str| {
+            lines
+                .iter()
+                .position(|l| l.contains(text))
+                .unwrap_or_else(|| panic!("{text}: {shown}"))
+        };
+        let heading = |text: &str| {
+            lines
+                .iter()
+                .position(|l| l.trim() == text)
+                .unwrap_or_else(|| panic!("{text}: {shown}"))
+        };
+        assert!(heading("Failed") < at("nas-sync") && at("nas-sync") < heading("System"));
+        assert!(heading("System") < at("sshd") && at("sshd") < heading("User"));
+        assert_eq!(at("User · Copies the home folder"), at("nas-sync") + 1);
+        assert_eq!(shown.matches("nas-sync").count(), 1, "listed once");
+        assert!(
+            !lines[at("nas-sync")].contains("failed"),
+            "the heading says it"
+        );
+        assert!(lines[at("nas-sync")].contains(app.ctx.style.glyphs.cursor));
+        press(&mut app, &[Key::Enter]);
+        assert!(screen(&mut app, &mut term).contains("Services › nas-sync"));
     }
 }

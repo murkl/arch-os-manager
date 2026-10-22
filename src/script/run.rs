@@ -55,6 +55,17 @@ impl Run {
         run
     }
 
+    /// A run that printed `output` and ended with `code`, its last output already arrived.
+    #[cfg(test)]
+    pub fn ended(op: Op, output: &str, code: i32) -> Run {
+        let session = Session::spawn(std::process::Command::new("true"), (24, 80), |_| {})
+            .expect("true runs");
+        let mut run = Run::with(op, session, (24, 80));
+        run.on_event(Event::Output(output.as_bytes().to_vec()));
+        run.exit = Some((code, Instant::now() - SETTLE));
+        run
+    }
+
     fn with(op: Op, session: Session, size: (u16, u16)) -> Run {
         Run {
             op,
@@ -189,6 +200,17 @@ impl Run {
     pub fn resize(&mut self, rows: u16, cols: u16) {
         self.screen.screen_mut().set_size(rows.max(1), cols.max(1));
         self.session.resize(rows, cols);
+    }
+
+    /// Writes `line` under the output, a blank line between, bold in green or red.
+    pub fn conclude(&mut self, line: &str, ok: bool) {
+        let gap = match self.screen.screen().cursor_position() {
+            (_, 0) => "\r\n",
+            _ => "\r\n\r\n",
+        };
+        let colour = if ok { 32 } else { 31 };
+        let text = format!("{gap}\x1b[1;{colour}m{line}\x1b[0m");
+        self.screen.process(text.as_bytes());
     }
 
     pub fn screen(&self) -> &vt100::Screen {

@@ -115,7 +115,7 @@ A share reads in `success` below 75 %, `warning` below 90 % and `error` from the
 
 ## Runs
 
-A run is named in the header after the action chosen, and shows its step and pacman's progress. **tab** switches to the terminal itself, where every key goes to the program. A question appears in both: in the overview as a choice, in the terminal as typed.
+A run is named in the header after the action chosen, and shows its step and pacman's progress. **tab** switches to the terminal itself, where every key goes to the program. A question appears in both: in the overview as a choice, in the terminal as typed. The terminal ends with the outcome as the overview names it.
 
 <img src="screenshots/run.png" width="720" alt="An update under way: its step, the progress bar and the package being upgraded">
 

@@ -348,6 +348,15 @@ impl Page for PasswordPage {
     }
 }
 
+/// The outcome in a word. The header already names the job, only a recognised cause adds to it.
+fn headline(outcome: &Result<(), Failure>) -> String {
+    match outcome {
+        Ok(()) => t("Done").into(),
+        Err(f) if f.known.is_some() => f.headline(),
+        Err(_) => t("Failed").into(),
+    }
+}
+
 pub struct RunPage {
     job: Job,
     run: Option<Run>,
@@ -619,7 +628,7 @@ impl RunPage {
                 )
             }
             Ok(()) => {
-                let mut body = vec![done(t("Done"))];
+                let mut body = vec![done(headline(outcome))];
                 if ctx.busy() {
                     body.push(Block::Blank);
                     body.push(Block::Text(
@@ -634,15 +643,9 @@ impl RunPage {
                 }
             }
             Err(f) => {
-                // The header already names the job. Only a recognised cause adds to it.
-                let headline = if f.known.is_some() {
-                    f.headline()
-                } else {
-                    t("Failed").into()
-                };
                 let mut body = vec![Block::Row(
                     Lead::Icon(icon::FAILED, Tone::Error),
-                    vec![(headline, Tone::Normal)],
+                    vec![(headline(outcome), Tone::Normal)],
                     Vec::new(),
                 )];
                 body.extend(failure(f).into_iter().skip(1));
@@ -848,6 +851,13 @@ impl Page for RunPage {
                 Ok(()) => crate::info!("{}: done", self.job.op),
                 Err(f) => crate::error!("{}: {}\n{}", self.job.op, f.headline(), f.detail),
             }
+            // Under tab the terminal tells as well that the run ended.
+            let lead = match (ctx.style.glyphs.icons, &result) {
+                (false, _) => String::new(),
+                (true, Ok(())) => format!("{}  ", icon::DONE),
+                (true, Err(_)) => format!("{}  ", icon::FAILED),
+            };
+            run.conclude(&format!("{lead}{}", headline(&result)), result.is_ok());
             self.outcome = Some((result, Instant::now()));
             self.cancel = None;
             ctx.reload();
@@ -952,6 +962,7 @@ const CLEANUP_WORTH: u64 = 1024 * 1024 * 1024;
 mod tests {
     use super::*;
     use crate::script::sudo;
+    use crate::ui::Msg;
     use crate::ui::app::tests::{app, open, press, screen};
 
     #[test]
@@ -1080,6 +1091,26 @@ mod tests {
             "{shown}"
         );
         crate::i18n::set(crate::i18n::Lang::En);
+    }
+
+    /// The terminal ends with the outcome, so it shows that nothing more comes.
+    #[test]
+    fn the_terminal_ends_with_the_outcome() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        for (code, outcome) in [(0, "Done"), (1, "Failed")] {
+            let (mut app, mut term) = app();
+            let run = Run::ended(op::UPGRADE_RUN, "Upgraded\r\n", code);
+            let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+            open(&mut app, Box::new(page));
+            app.handle(Msg::Tick);
+            press(&mut app, &[Key::Tab]);
+            let shown = screen(&mut app, &mut term);
+            let lines: Vec<&str> = shown.lines().collect();
+            let at = |text| lines.iter().position(|l| l.contains(text));
+            let printed = at("Upgraded").expect("the output");
+            assert_eq!(at(outcome), Some(printed + 2), "{shown}");
+        }
     }
 
     #[test]
