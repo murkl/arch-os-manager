@@ -86,6 +86,30 @@ op_remove() {
     sudo pacman -Rns -- "$@"
 }
 
+# repo:<repo/name>, aur:<name> and remove:<name>. Installed first, so a package
+# that replaces another takes it out in its own transaction or provides what
+# depends on it.
+op_change() {
+    local arg name installed
+    local -a repo=() from_aur=() remove=() left=()
+    for arg; do
+        case "$arg" in
+        repo:*) repo+=("${arg#repo:}") ;;
+        aur:*) from_aur+=("${arg#aur:}") ;;
+        remove:*) remove+=("${arg#remove:}") ;;
+        esac
+    done
+    if [ "${#repo[@]}" -gt 0 ]; then sudo pacman -S --needed -- "${repo[@]}"; fi
+    if [ "${#from_aur[@]}" -gt 0 ]; then aur_sync -S -- "${from_aur[@]}"; fi
+    # What the installs replaced is gone. pacman -Q would still find its name in
+    # what provides it, pacman -R would not.
+    installed="$(pacman -Qq)"
+    for name in "${remove[@]}"; do
+        if grep -qFx -- "$name" <<<"$installed"; then left+=("$name"); fi
+    done
+    if [ "${#left[@]}" -gt 0 ]; then sudo pacman -Rns -- "${left[@]}"; fi
+}
+
 # A package file from the cache or an address in the Arch Linux Archive, and pacman
 # verifies the signature of either.
 op_downgrade() {

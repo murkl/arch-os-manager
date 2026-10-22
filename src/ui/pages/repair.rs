@@ -6,56 +6,56 @@ use ratatui::layout::Rect;
 
 use super::run::{Job, start};
 use crate::i18n::t;
-use crate::script::op;
-use crate::ui::detail::{Act, Block, Detail};
+use crate::script::{Op, op};
 use crate::ui::icon;
-use crate::ui::list::Lead;
+use crate::ui::list::{List, Picked, Row};
 use crate::ui::{Ctx, Does, Flow, Key, Page, Tone};
 
+/// A repair: its name, its icon, and when it helps and what it does.
+struct Repair {
+    op: Op,
+    name: &'static str,
+    icon: &'static str,
+    note: &'static str,
+}
+
 pub struct RepairPage {
-    detail: Detail,
+    repairs: [Repair; 2],
+    list: List<usize>,
 }
 
 impl RepairPage {
     pub fn new() -> RepairPage {
-        let mut detail = Detail::default();
-        // Each case under the icon of the action that answers it.
-        let case = |glyph, when: &str, what: &str| {
-            [
-                Block::Row(
-                    Lead::Icon(glyph, Tone::Normal),
-                    vec![(when.into(), Tone::Normal)],
-                    Vec::new(),
+        let repairs = [
+            Repair {
+                op: op::REPAIR_RUN,
+                name: t("Repair the package management"),
+                icon: icon::REPAIR,
+                note: t(
+                    "When updates fail on a stale lock or on signatures. Removes the lock, creates the keyring anew and updates the system.",
                 ),
-                Block::Note(Lead::None, what.into(), Tone::Muted),
-            ]
-        };
-        let mut body = case(
-            icon::REPAIR,
-            t("When an update keeps failing"),
-            t("On a database lock no package manager holds any more, or on signatures that cannot be verified. The stale lock is removed, the keyring is created anew from the packaged keys, and the system is updated."),
-        )
-        .to_vec();
-        body.push(Block::Blank);
-        body.extend(case(
-            icon::CHECK,
-            t("When files went missing or changed"),
-            t("After a crash or a full disk. Every file of every package is compared with what the package brought, and a package with a difference is installed again. A configuration changed by hand stays."),
-        ));
-        detail.set(
-            body,
-            vec![
-                Act::new(t("Renew the keyring"), |ctx: &mut Ctx| {
-                    Flow::Push(start(Job::new(op::REPAIR_RUN, Vec::new()), ctx))
-                })
-                .icon(icon::REPAIR),
-                Act::new(t("Check the files"), |ctx: &mut Ctx| {
-                    Flow::Push(start(Job::new(op::REPAIR_FILES, Vec::new()), ctx))
-                })
-                .icon(icon::CHECK),
-            ],
-        );
-        RepairPage { detail }
+            },
+            Repair {
+                op: op::REPAIR_FILES,
+                name: t("Check the package files"),
+                icon: icon::VERIFY,
+                note: t(
+                    "When files went missing or changed after a crash or a full disk. Installs every package with altered files again. A configuration changed by hand stays.",
+                ),
+            },
+        ];
+        let mut rows = Vec::new();
+        for (i, r) in repairs.iter().enumerate() {
+            // An empty heading is a blank line, between one repair and the next.
+            if i > 0 {
+                rows.push(Row::heading(""));
+            }
+            rows.push(Row::new(i, r.name).icon(r.icon, Tone::Normal).note(r.note));
+        }
+        RepairPage {
+            repairs,
+            list: List::new(rows),
+        }
     }
 }
 
@@ -63,14 +63,24 @@ impl Page for RepairPage {
     fn title(&self) -> String {
         t("Repair").into()
     }
+
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
-        self.detail.draw(area, buf, ctx);
+        self.list.draw(area, buf, ctx);
     }
+
     fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
-        self.detail.hints()
+        vec![("↑↓", Does::Choose), ("⏎", Does::Run), ("esc", Does::Back)]
     }
+
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
-        self.detail.key(key, ctx)
+        match self.list.key(key) {
+            Picked::Open(i) => {
+                let r = &self.repairs[i];
+                Flow::Push(start(Job::new(r.op, Vec::new()).named(r.name), ctx))
+            }
+            Picked::Used => Flow::Stay,
+            Picked::Ignored => Flow::Ignored,
+        }
     }
 }
 
@@ -88,8 +98,40 @@ mod tests {
         press(&mut app, &[Key::Down, Key::Enter]);
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("Repair › Check the files"),
+            shown.contains("Repair › Check the package files"),
             "the header names the action, not the step: {shown}"
         );
+    }
+
+    #[test]
+    fn each_repair_says_under_it_when_it_helps_and_the_cursor_steps_to_the_next() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        open(&mut app, Box::new(RepairPage::new()));
+        let shown = screen(&mut app, &mut term);
+        let lines: Vec<&str> = shown.lines().collect();
+        let at = |text: &str| {
+            lines
+                .iter()
+                .position(|l| l.contains(text))
+                .unwrap_or_else(|| panic!("{text}: {shown}"))
+        };
+        assert_eq!(
+            at("When updates fail"),
+            at("Repair the package management") + 1
+        );
+        assert_eq!(
+            at("When files went missing"),
+            at("Check the package files") + 1
+        );
+        press(&mut app, &[Key::Down]);
+        let shown = screen(&mut app, &mut term);
+        let row = shown
+            .lines()
+            .find(|l| l.contains("Check the package files"))
+            .unwrap_or_default();
+        assert!(row.contains(app.ctx.style.glyphs.cursor), "{shown}");
     }
 }

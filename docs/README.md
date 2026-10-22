@@ -20,7 +20,7 @@
 - Notification of new updates, or their count in the GNOME top bar
 - Next steps after every run, a restart hint after a kernel update
 - Common failures explained, with their fix
-- Packages installed and removed, the AUR included, older versions from the cache or the archive
+- Packages installed, removed or both in one run, the AUR included, older versions from the cache or the archive
 - Services of the system and the user, started, stopped or enabled
 - Errors of this boot, harmless ones hidden with one key
 - CPU, memory and disk in use, live

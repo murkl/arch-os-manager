@@ -1303,6 +1303,44 @@ fn packages_install_remove_and_go_back_through_pacman_or_the_helper() {
 }
 
 #[test]
+fn a_change_installs_first_and_removes_only_what_is_still_there_by_its_own_name() {
+    let s = Sandbox::new("packages-swap");
+    // After the installs b is gone, and sh is only what bash provides.
+    s.stub(
+        "pacman",
+        r#"if [ "$1" = -Qq ]; then printf '%s\n' a bash; fi"#,
+    );
+    s.stub("paru", "exit 0");
+    let args = [
+        "change",
+        "repo:extra/x",
+        "aur:y",
+        "remove:a",
+        "remove:b",
+        "remove:sh",
+    ];
+    let o = s.run("packages", &args, &[("SM_AUR", "paru")]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let calls: Vec<&str> = o
+        .calls
+        .lines()
+        .filter(|l| !l.starts_with("sudo "))
+        .collect();
+    assert_eq!(
+        calls,
+        [
+            "pacman -S --needed -- extra/x",
+            "paru --skipreview -S -- y",
+            "pacman -Qq",
+            "pacman -Rns -- a",
+        ]
+    );
+    let o = s.run("packages", &["change", "repo:extra/x", "remove:b"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(o.calls.ends_with("pacman -Qq\n"), "{}", o.calls);
+}
+
+#[test]
 fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
     let s = Sandbox::new("pacnew-merge");
     // Where this machine keeps snapshots, none is taken of the sandbox.

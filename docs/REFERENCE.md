@@ -132,6 +132,8 @@ A run holds shutdown and sleep off while it lasts, and a closed terminal does no
 
 An update takes the repositories, then the AUR, then Flatpak where `flatpak` is on. A failing AUR helper leaves Flatpak still to update and is then named. The list of updates names a source it could not ask, as the AUR during an outage, and shows what the others have.
 
+Packages marked to install and to remove go in one run. The installs come first, so a replacement takes the old package out in the same transaction or provides what depends on it.
+
 **esc**, **q** and **ctrl+c** ask whether to stop, and yes sends ctrl+c to the program. A failure shows the declared error or a recognised cause, the source line, the last output and the log, and offers the page the cause names, another try and the way back.
 
 After a run, the manager reads the system again and offers what may follow, none of it a must:
@@ -143,6 +145,8 @@ After a run, the manager reads the system again and offers what may follow, none
 | Services | A service failed |
 | Clean up | Marked unneeded packages, or 1 GiB to free in the marked parts, and not after a clean-up |
 
+Back after a success also closes the page the action was chosen on, so a package leads back to the search and the update to the main menu. An offer opens in its place. After a failure, back leads to that page.
+
 <img src="screenshots/done.png" width="720" alt="The end of an update: what may follow, each with its reason">
 
 **Note:** _A question in another shape still waits in the terminal view, which tab reaches._
@@ -153,7 +157,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 
 ### Repair and Configuration
 
-**Renew the keyring** removes a database lock no process holds, builds the keyring anew beside the old one and updates. **Check the files** runs `pacman -Qkk` as root and installs every native package again whose file lost its content, type or link, or is missing. Owner, mode and time do not count, as a filesystem such as the vfat of `/boot` keeps them its own way. A configuration changed by hand is a backup file pacman lists apart, and a package of the AUR is only named. Taking over or merging a configuration update first takes a snapshot where snapper keeps the root. A merge is written beside the configuration and renamed over it, and a sudoers file must pass `visudo` first.
+**Repair the package management** removes a database lock no process holds, builds the keyring anew beside the old one and updates. **Check the package files** runs `pacman -Qkk` as root and installs every native package again whose file lost its content, type or link, or is missing. Owner, mode and time do not count, as a filesystem such as the vfat of `/boot` keeps them its own way. A configuration changed by hand is a backup file pacman lists apart, and a package of the AUR is only named. Taking over or merging a configuration update first takes a snapshot where snapper keeps the root. A merge is written beside the configuration and renamed over it, and a sudoers file must pass `visudo` first.
 
 ## Files
 
