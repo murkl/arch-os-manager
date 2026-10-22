@@ -1,6 +1,9 @@
 # shellcheck shell=bash source=../lib/lib.sh
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
+# The homelab beside the profiles: homelab.yaml names the servers, each a folder with a folder per
+# stack. A secret lies beside what it belongs to as <file>.age, under a key of the homelab's own.
+lab=homelab
 # The dotfiles, and the profile of this machine in them: the one chosen, else the host's name.
 # The scripts of a profile get both.
 export SM_DOTFILES="${HOME}/.dotfiles"
@@ -93,6 +96,12 @@ changed() {
 # A list of the profile without comments and blank lines, nothing where there is none.
 listed() {
     if [ -f "$1" ]; then grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' -- "$1" || allow 1; fi
+}
+
+# Staged as it is added, as a global ignore file naming it, say CLAUDE.md, would keep it out of
+# every backup.
+track() {
+    git add --force -- "$1"
 }
 
 # What a command prints, into a file only once it succeeded: `keep <file> <command>`.
@@ -265,22 +274,27 @@ stow_home() {
     stow --dir="${here}/${profile}" --target="$HOME" --dotfiles --no-folding --restow home
 }
 
-# The age key of the profile's secrets on this machine.
+# The age key on this machine of the secrets of a folder of the dotfiles, a profile or the homelab.
 keyfile() {
-    printf '%s/%s.key\n' "$mine" "$profile"
+    printf '%s/%s.key\n' "$mine" "$1"
 }
 
-# The key unlocked on this machine: out of key.age with the passphrase, which age asks for, up to
-# three times.
+# Whether a folder holds secrets.
+sealed() {
+    [ -n "$(find "$1" -type f -name '*.age' ! -path "$1/key.age" -print -quit 2>/dev/null)" ]
+}
+
+# The key of a folder unlocked on this machine: out of its key.age with the passphrase, which age
+# asks for, up to three times.
 unlock() {
     local key
-    key="$(keyfile)"
+    key="$(keyfile "$1")"
     if [ -f "$key" ]; then return 0; fi
-    if [ ! -f "${profile}/key.age" ]; then exit 23; fi
+    if [ ! -f "$1/key.age" ]; then exit 23; fi
     mkdir -p -- "$mine"
     for _ in 1 2 3; do
         rm -f -- "${key}.new"
-        if (umask 077 && age --decrypt --output "${key}.new" "${profile}/key.age") 2>"${work}/said"; then
+        if (umask 077 && age --decrypt --output "${key}.new" "$1/key.age") 2>"${work}/said"; then
             mv -f -- "${key}.new" "$key"
             return 0
         fi
@@ -290,24 +304,24 @@ unlock() {
     exit 20
 }
 
-# The key behind a passphrase into key.age, which age asks for twice: the one of this machine, or
-# a new one for a profile without secrets.
+# The key of a folder behind a passphrase into its key.age, which age asks for twice: the one of
+# this machine, or a new one for a folder without secrets.
 wrap() {
     local key
-    key="$(keyfile)"
+    key="$(keyfile "$1")"
     mkdir -p -- "$mine"
     if [ ! -f "$key" ]; then
-        if [ -n "$(secrets)" ]; then exit 23; fi
+        if sealed "$1"; then exit 23; fi
         (umask 077 && age-keygen --output "${key}.new" 2>/dev/null)
         mv -f -- "${key}.new" "$key"
     fi
-    if ! age --passphrase --output "${profile}/key.age.new" "$key" 2>"${work}/said"; then
-        rm -f -- "${profile}/key.age.new"
+    if ! age --passphrase --output "$1/key.age.new" "$key" 2>"${work}/said"; then
+        rm -f -- "$1/key.age.new"
         cat -- "${work}/said" >&2
         if grep -q "didn't match" "${work}/said"; then exit 21; fi
         exit 1
     fi
-    mv -f -- "${profile}/key.age.new" "${profile}/key.age"
+    mv -f -- "$1/key.age.new" "$1/key.age"
 }
 
 # Every secret of the profile, by its place in $HOME and its path in the dotfiles after a tab.
@@ -324,8 +338,8 @@ secrets() {
 # profile changed since it was written here. What stands there otherwise goes into the backup.
 restore_secrets() {
     local place file target key
-    unlock
-    key="$(keyfile)"
+    unlock "$profile"
+    key="$(keyfile "$profile")"
     while IFS=$'\t' read -r -u 4 place file; do
         target="${HOME}/${place}"
         if [ -f "$target" ] && [ ! -L "$target" ] && ! changed "$file"; then continue; fi
@@ -343,13 +357,13 @@ restore_secrets() {
 
 # Whether a secret in $HOME differs from the profile's.
 differs() {
-    ! age --decrypt --identity "$(keyfile)" "$2" | cmp -s -- - "${HOME}/$1"
+    ! age --decrypt --identity "$(keyfile "$profile")" "$2" | cmp -s -- - "${HOME}/$1"
 }
 
 # Each secret whose file in $HOME differs from the profile's, encrypted anew into the profile.
 save_secrets() {
     local place file recipient
-    recipient="$(age-keygen -y "$(keyfile)")"
+    recipient="$(age-keygen -y "$(keyfile "$profile")")"
     while IFS=$'\t' read -r -u 4 place file; do
         if [ -f "${HOME}/${place}" ] && differs "$place" "$file"; then
             age --encrypt --recipient "$recipient" --output "${file}.new" "${HOME}/${place}"
@@ -409,9 +423,16 @@ lacking() {
     LC_ALL=C comm -23 <(listed "$1" | LC_ALL=C sort -u) <("${@:2}" | LC_ALL=C sort -u)
 }
 
-# A script of the profile in a shell of its own, in its folder, as the person would start it.
+# A script of the profile in a shell of its own, in its folder, as the person would start it, and
+# recorded where it succeeds. 75, EX_TEMPFAIL of sysexits.h, says not yet: it runs again next time.
 hook() {
-    (cd -- "$(dirname -- "$1")" && bash -- "./$(basename -- "$1")")
+    local status=0
+    (cd -- "$(dirname -- "$1")" && bash -- "./$(basename -- "$1")") || status=$?
+    case "$status" in
+    0) remember "$1" ;;
+    75) echo "Not yet: ${1#"${profile}/"}" ;;
+    *) return 1 ;;
+    esac
 }
 
 # A group's script as dotfiles.yaml names it: a file of the profile ending in .sh.
@@ -448,6 +469,7 @@ op_state() {
         fi
     fi
     printf 'changes\t%s\n' "$(git status --porcelain | wc -l)"
+    if [ -f "${lab}/homelab.yaml" ]; then printf 'homelab\tready\n'; fi
     if [ ! -d "$profile" ]; then
         printf 'new\tprofile\n'
         return 0
@@ -483,7 +505,7 @@ op_state() {
 # whether a backup would encrypt any anew.
 secrets_state() {
     local place file total=0 due=0 key
-    key="$(keyfile)"
+    key="$(keyfile "$profile")"
     while IFS=$'\t' read -r place file; do
         total=$((total + 1))
         if [ ! -f "${HOME}/${place}" ] || changed "$file"; then due=$((due + 1)); fi
@@ -605,7 +627,6 @@ op_setup() {
     if [ -f "${profile}/init.sh" ] && changed "${profile}/init.sh"; then
         step init
         hook "${profile}/init.sh" || exit 17
-        remember "${profile}/init.sh"
     fi
 
     step packages
@@ -642,7 +663,6 @@ op_setup() {
         step groups
         echo "$script"
         hook "${profile}/${script}" || exit 18
-        remember "${profile}/${script}"
     done < <(listed "${profile}/groups.txt")
 
     if [ -d "${profile}/gnome" ] && gnome_shell; then
@@ -710,7 +730,7 @@ op_backup() {
         done
         remember "${stale[@]}" "${profile}"/gnome/*
     fi
-    if [ -n "$(secrets)" ] && [ -f "$(keyfile)" ] && command -v age >/dev/null; then
+    if [ -n "$(secrets)" ] && [ -f "$(keyfile "$profile")" ] && command -v age >/dev/null; then
         step secrets
         save_secrets
     fi
@@ -733,7 +753,6 @@ op_group_on() {
     enter
     group "$1"
     hook "${profile}/$1" || exit 18
-    remember "${profile}/$1"
     { listed "${profile}/groups.txt" && printf '%s\n' "$1"; } | LC_ALL=C sort -u >"${profile}/groups.txt.new"
     mv -f -- "${profile}/groups.txt.new" "${profile}/groups.txt"
 }
@@ -806,6 +825,7 @@ op_add() {
         mv -- "$dest" "$path"
         exit 16
     fi
+    track "$dest"
     mkdir -p -- "$mine"
     leaves | cut -f1 >"${mine}/${profile}.links"
 }
@@ -887,14 +907,15 @@ op_secret_add() {
     ensure_repository
     enter
     ensure_profile
-    if [ -f "${profile}/key.age" ]; then unlock; else wrap; fi
-    recipient="$(age-keygen -y "$(keyfile)")"
+    if [ -f "${profile}/key.age" ]; then unlock "$profile"; else wrap "$profile"; fi
+    recipient="$(age-keygen -y "$(keyfile "$profile")")"
     mapfile -d '' files < <(find "$path" -type f -print0)
     for file in "${files[@]}"; do
         dest="${profile}/secrets/$(encode "${file#"$HOME"/}").age"
         mkdir -p -- "$(dirname -- "$dest")"
         age --encrypt --recipient "$recipient" --output "${dest}.new" "$file"
         mv -f -- "${dest}.new" "$dest"
+        track "$dest"
         remember "$dest"
     done
 }
@@ -918,8 +939,117 @@ op_secret_remove() {
 op_passphrase() {
     enter
     if [ ! -f "${profile}/key.age" ]; then exit 39; fi
-    unlock
-    wrap
+    unlock "$profile"
+    wrap "$profile"
+}
+
+# A server of the homelab, as homelab.yaml names it: a host name with a folder beside it.
+server() {
+    if [[ ! $1 =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then exit 40; fi
+    if [ ! -d "${lab}/$1" ]; then exit 41; fi
+}
+
+# The homelab for a server: homelab.yaml naming it with the address of its Cup where there is none
+# yet, and its stack cup, which tells what images have updates.
+op_homelab_init() {
+    local server="$1"
+    if [[ ! $server =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then exit 40; fi
+    ensure_repository
+    enter
+    mkdir -p -- "${lab}/${server}"
+    if [ ! -e "${lab}/${server}/cup" ]; then
+        cp -r -- "${BASH_SOURCE[0]%/*}/homelab/cup" "${lab}/${server}/"
+    fi
+    if [ ! -e "${lab}/homelab.yaml" ]; then
+        printf '%s\n' \
+            '# The servers of the homelab, each a folder beside this file with a folder' \
+            '# per stack. cup is where the Cup of the server answers, as its stack cup' \
+            '# publishes it.' \
+            'servers:' \
+            "  - name: ${server}" \
+            "    cup: http://${server}:8000" >"${lab}/homelab.yaml"
+    fi
+}
+
+# What the Cup of a server knows of its images, as JSON.
+op_homelab_cup() {
+    fetch --max-time 5 "${1%/}/api/v3/json"
+}
+
+# What a tree holds, by type, mode, path and link target.
+listing() {
+    (cd -- "$1" && find . -mindepth 1 -printf '%y %m %P %l\n' | LC_ALL=C sort)
+}
+
+# A server of the homelab for its own tools: its folder with each secret decrypted in place of its
+# .age, as <server>.tar in the downloads folder. Packed without anyone's name, unpacked again and
+# compared before it takes its place, and readable by its owner only, as it holds the secrets.
+op_homelab_export() {
+    local server="$1" dir stage file
+    enter
+    server "$server"
+    if [ -n "$(find "${lab}/${server}" ! -type d ! -type f -print -quit)" ]; then exit 42; fi
+    if sealed "${lab}/${server}"; then unlock "$lab"; fi
+    dir="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"
+    if [ ! -d "$dir" ]; then dir="$HOME"; fi
+    # Beside the archive rather than in /tmp: renamed there, it is never half written.
+    rm -rf -- "$work"
+    work="$(mktemp -d "${dir}/.system-manager.XXXXXX")"
+    trap 'rm -rf -- "$work"' EXIT
+    stage="${work}/stage"
+    cp -r --preserve=timestamps -- "${lab}/${server}" "$stage"
+    chmod -R u+rwX,go+rX,go-w "$stage"
+    while IFS= read -r -d '' file; do
+        (umask 077 && age --decrypt --identity "$(keyfile "$lab")" --output "${file%.age}" "$file")
+        rm -- "$file"
+    done < <(find "$stage" -type f -name '*.age' -print0)
+    find "$stage" -name .gitkeep -delete
+    (cd -- "$stage" && find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort) |
+        tar --create --file "${work}/archive" --directory "$stage" --no-recursion \
+            --verbatim-files-from --files-from - --format=ustar --owner=0 --group=0 --numeric-owner
+    mkdir -- "${work}/check"
+    tar --extract --preserve-permissions --file "${work}/archive" --directory "${work}/check"
+    if ! diff -r --no-dereference -- "$stage" "${work}/check" >&2 ||
+        ! diff <(listing "$stage") <(listing "${work}/check") >&2; then
+        exit 43
+    fi
+    chmod 600 -- "${work}/archive"
+    mv -f -- "${work}/archive" "${dir}/${server}.tar"
+    echo "${dir}/${server}.tar"
+}
+
+# A path in the folder of a server.
+within() {
+    case "$1" in
+    /* | *..* | '' | */) exit 44 ;;
+    esac
+}
+
+# A file of the home folder as a secret of a server, encrypted to <path>.age in its folder. One
+# there before is replaced.
+op_homelab_secret_add() {
+    local server="$1" file="$2" path="$3" dest
+    enter
+    server "$server"
+    within "$path"
+    if [ ! -f "$file" ]; then exit 28; fi
+    if [ -f "${lab}/key.age" ]; then unlock "$lab"; else wrap "$lab"; fi
+    dest="${lab}/${server}/${path}.age"
+    mkdir -p -- "$(dirname -- "$dest")"
+    age --encrypt --recipient "$(age-keygen -y "$(keyfile "$lab")")" --output "${dest}.new" "$file"
+    mv -f -- "${dest}.new" "$dest"
+    track "$dest"
+}
+
+# Takes a secret out of a server. Where it was rolled out it stays.
+op_homelab_secret_remove() {
+    local server="$1" path="$2"
+    enter
+    server "$server"
+    within "$path"
+    if [ ! -f "${lab}/${server}/${path}.age" ]; then exit 34; fi
+    rm -- "${lab}/${server}/${path}.age"
+    tidy "${lab}/${server}/${path}.age" "${lab}/${server}"
 }
 
 operation "$@"

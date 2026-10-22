@@ -1817,3 +1817,132 @@ msgid ""
 msgstr ""
 "Das Repository trennen?\n"
 "Die Dotfiles bleiben auf diesem Rechner. Das Repository behält, was es hat."
+
+msgid ""
+"Add {path} as a secret of {server}?\n"
+"It is encrypted into homelab/{server}/{path}.age, a secret there before is replaced. The first secret of the homelab asks for a new passphrase."
+msgstr ""
+"{path} als Secret von {server} hinzufügen?\n"
+"Es wird verschlüsselt nach homelab/{server}/{path}.age gelegt, ein Secret dort wird ersetzt. Das erste Secret des Homelabs fragt nach einer neuen Passphrase."
+
+msgid "Asking Cup"
+msgstr "Cup wird gefragt"
+
+msgid "Cup checked {n} days ago."
+msgstr "Cup hat vor {n} Tagen geprüft."
+
+msgid "Cup checked {n} h ago."
+msgstr "Cup hat vor {n} h geprüft."
+
+msgid "Cup checked {n} min ago."
+msgstr "Cup hat vor {n} min geprüft."
+
+msgid "Cup did not answer: {why}. It answers once the stack cup runs on the server: docker compose up -d in homelab/{server}/cup."
+msgstr "Cup antwortet nicht: {why}. Es antwortet, sobald der Stack cup auf dem Server läuft: docker compose up -d in homelab/{server}/cup."
+
+msgid "Cup names no check."
+msgstr "Cup nennt keine Prüfung."
+
+msgid "Export"
+msgstr "Exportieren"
+
+msgid ""
+"Export {server}?\n"
+"Packs its folder with every secret decrypted as {server}.tar into the downloads folder, readable by you only."
+msgstr ""
+"{server} exportieren?\n"
+"Packt seinen Ordner mit jedem Secret entschlüsselt als {server}.tar in den Download-Ordner, nur für dich lesbar."
+
+msgid "Exporting the server"
+msgstr "Server wird exportiert"
+
+msgid "Homelab"
+msgstr "Homelab"
+
+msgid "Its path in the folder of the server, such as traefik/.env."
+msgstr "Sein Pfad im Ordner des Servers, etwa traefik/.env."
+
+msgid "Make a homelab? The name of its server in the network, such as nas.fritz.box. Empty, the homelab stays off."
+msgstr "Ein Homelab anlegen? Der Name seines Servers im Netz, etwa nas.fritz.box. Leer bleibt das Homelab aus."
+
+msgid ""
+"Make the homelab with {server}?\n"
+"Writes ~/.dotfiles/homelab/homelab.yaml and the stack cup. Rolled out on the server with docker compose up -d in its folder, cup tells the manager which images have updates."
+msgstr ""
+"Das Homelab mit {server} anlegen?\n"
+"Schreibt ~/.dotfiles/homelab/homelab.yaml und den Stack cup. Auf dem Server mit docker compose up -d in seinem Ordner ausgerollt, sagt cup dem Manager, welche Images Updates haben."
+
+msgid "Making the homelab"
+msgstr "Homelab wird angelegt"
+
+msgid "No homelab yet. Switching it on under Settings makes one."
+msgstr "Noch kein Homelab. Einschalten unter Einstellungen legt eines an."
+
+msgid ""
+"No host name\n"
+"A server is named as the network knows it, such as nas.fritz.box.\n"
+msgstr ""
+"Kein Hostname\n"
+"Ein Server heißt, wie das Netz ihn kennt, etwa nas.fritz.box.\n"
+
+msgid ""
+"No path in the folder of the server\n"
+"A path such as traefik/.env, neither starting with / nor holding ..\n"
+msgstr ""
+"Kein Pfad im Ordner des Servers\n"
+"Ein Pfad wie traefik/.env, der weder mit / beginnt noch .. enthält.\n"
+
+msgid "Not in homelab.yaml any more."
+msgstr "Nicht mehr in homelab.yaml."
+
+msgid ""
+"Take the secret {path} out of {server}?\n"
+"Where it was rolled out, it stays."
+msgstr ""
+"Das Secret {path} aus {server} nehmen?\n"
+"Wo es ausgerollt ist, bleibt es."
+
+msgid ""
+"The archive differs\n"
+"Unpacked, it did not match its source and was dropped.\n"
+msgstr ""
+"Das Archiv weicht ab\n"
+"Ausgepackt stimmte es nicht mit seiner Quelle überein und wurde verworfen.\n"
+
+msgid ""
+"The folder of the server holds links, sockets or devices\n"
+"Only files and folders go into the archive.\n"
+msgstr ""
+"Der Ordner des Servers enthält Links, Sockets oder Geräte\n"
+"Ins Archiv kommen nur Dateien und Ordner.\n"
+
+msgid ""
+"The homelab has no such server\n"
+"Its folder lies beside homelab.yaml.\n"
+msgstr ""
+"Das Homelab hat keinen solchen Server\n"
+"Sein Ordner liegt neben homelab.yaml.\n"
+
+msgid "The server holds no secret."
+msgstr "Der Server hat kein Secret."
+
+msgid "homelab.yaml: {name} needs a folder beside it and an http or https address of its Cup"
+msgstr "homelab.yaml: {name} braucht einen Ordner daneben und eine http- oder https-Adresse seines Cup"
+
+msgid "not reached"
+msgstr "nicht erreicht"
+
+msgid "not set up"
+msgstr "nicht angelegt"
+
+msgid "optional, not running"
+msgstr "optional, läuft nicht"
+
+msgid "unchecked"
+msgstr "ungeprüft"
+
+msgid "update"
+msgstr "Update"
+
+msgid "{image} available"
+msgstr "{image} verfügbar"

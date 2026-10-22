@@ -9,7 +9,7 @@ use super::target::Target;
 use super::{
     Ctx, Does, Flow, Fresh, Key, Loaded, Msg, Nav, Page, PageId, Shared, Style, draw, pages,
 };
-use crate::data::{self, dotfiles::Dotfiles, features::Features};
+use crate::data::{self, dotfiles::Dotfiles, features::Features, homelab::Homelab};
 use crate::i18n::{self, Lang};
 use crate::script::{self, Failure, op, query};
 use crate::settings::Settings;
@@ -403,7 +403,24 @@ impl App {
             Fresh::Cleanup(r) => s.cleanup = Loaded::from(r),
             Fresh::Mirrors(r) => s.mirrors = Loaded::from(r),
             Fresh::Firmware(r) => s.firmware = Loaded::from(r),
-            Fresh::Dotfiles(r) => s.dotfiles = Loaded::from(r.map(|d| *d)),
+            Fresh::Dotfiles(r) => {
+                s.dotfiles = Loaded::from(r.map(|d| *d));
+                // The homelab lives in the dotfiles: asked once they are read here.
+                if let Some(d) = s.dotfiles.ready()
+                    && self.ctx.settings.homelab()
+                {
+                    match d.state.homelab {
+                        true => {
+                            let dir = d.state.dir.clone();
+                            self.ctx.remote(op::DOTFILES_HOMELAB_CUP, move || {
+                                Fresh::Homelab(Homelab::load(&dir).map(Box::new))
+                            });
+                        }
+                        false => s.homelab = Loaded::Ready(Homelab::default()),
+                    }
+                }
+            }
+            Fresh::Homelab(r) => s.homelab = Loaded::from(r.map(|h| *h)),
             // Unreached, the dotfiles as read here stay, with the reason beside them.
             Fresh::DotfilesFetched(Ok(d)) => {
                 s.dotfiles = Loaded::Ready(*d);
@@ -676,6 +693,7 @@ pub mod tests {
         });
         s.firmware = Loaded::Ready(Vec::new());
         s.dotfiles = Loaded::Ready(crate::data::dotfiles::example());
+        s.homelab = Loaded::Ready(crate::data::homelab::example());
     }
 
     #[test]

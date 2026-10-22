@@ -115,6 +115,10 @@ impl SettingsPage {
                 Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
                 Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
             },
+            Target::UseHomelab => {
+                let (text, tone) = on_off(ctx.settings.homelab());
+                (text.into(), tone, false)
+            }
             Target::Profile => {
                 match (&ctx.settings.dotfiles_profile, ctx.shared.dotfiles.ready()) {
                     (Some(chosen), _) => (chosen.clone(), Tone::Muted, false),
@@ -256,7 +260,7 @@ impl Page for SettingsPage {
         // only with the dotfiles on.
         let shown = |t: &Target| match t {
             Target::Flatpak => ctx.features().is_some_and(|f| f.ok("flatpak")),
-            Target::Repository | Target::Profile => ctx.settings.dotfiles(),
+            Target::Repository | Target::Profile | Target::UseHomelab => ctx.settings.dotfiles(),
             _ => true,
         };
         let mut rows: Vec<Row<Target>> = Vec::new();
@@ -358,6 +362,20 @@ impl Page for SettingsPage {
                 None => Flow::Push(repository(ctx)),
             },
             Target::Profile => Flow::Push(choice(Target::Profile, ctx)),
+            // On only with its files: where there are none yet, the question that makes them.
+            Target::UseHomelab => {
+                let there = ctx.shared.dotfiles.ready().is_some_and(|d| d.state.homelab);
+                if ctx.settings.homelab() {
+                    ctx.settings.homelab = None;
+                } else if there {
+                    ctx.settings.homelab = Some(true);
+                    ctx.reload();
+                } else {
+                    return Flow::Push(super::homelab::setup());
+                }
+                ctx.save_settings();
+                Flow::Stay
+            }
             // The check, the update and the notification follow at once.
             Target::Flatpak => {
                 let on = !ctx.settings.flatpak.unwrap_or(true);

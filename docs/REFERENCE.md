@@ -185,6 +185,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `~/.local/share/gnome-shell/extensions/arch-update@RaphaelRochet/` | The update indicator, when installed |
 | `~/.dotfiles/` | The dotfiles, with the dotfiles switched on **[➜ Dotfiles](#dotfiles)** |
 | `~/.dotfiles-backup/<time>/` | What stood where a set up put a link or a secret |
+| `<downloads>/<server>.tar` | A server of the homelab, exported |
 
 `SM_HOME` puts all of it elsewhere, for a throwaway run.
 
@@ -204,6 +205,7 @@ Asked once per session, before the first run that elevates, and proven with `sud
 | `hidden-log` | messages hidden from the system log | none |
 | `dotfiles` | `true`, `false` | `false` |
 | `dotfiles-profile` | a folder of `~/.dotfiles` | the host's name |
+| `homelab` | `true`, `false` | `false` |
 
 A file that does not parse is left alone and named under **Settings › About**, and the defaults apply until a setting is changed. A setting that cannot be written says so under the settings until a write succeeds. The first start or `init` takes the settings of the `arch-os` script before 2.0 over once, where none are chosen, and removes what it left. `scripts/migrate/migrate.sh` says how to remove this.
 
@@ -273,7 +275,7 @@ The footer names what each key does, in the same words on every page. **esc** re
 |---|---|
 | `system-manager` | The interface in the terminal, or in a window without one |
 | `system-manager --window` | In a window |
-| `system-manager <page>` | Opens on `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `dotfiles`, `settings`, `features` |
+| `system-manager <page>` | Opens on `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `dotfiles`, `homelab`, `settings`, `features` |
 | `system-manager init` | Puts the app menu entry, the update notification and the update indicator in place |
 | `system-manager check` | Pending updates as checkupdates prints them: an AUR package as `aur/name`, a Flatpak with its commits where the versions do not tell the change, an unknown version as `?`, exit 2 without any, and 1 where a source could not be asked and none had updates |
 | `system-manager notify` | Announces pending updates, with `--new` only those not announced before, as the timer runs it |
@@ -339,7 +341,7 @@ Docker is the system's, asked at the socket `docker.socket` listens on and only 
 
 **Settings › Dotfiles** switches them on, off by default. The start page then shows **Dotfiles** with what waits: new commits, a changed `init.sh`, missing links, or whether this machine is backed up.
 
-The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another. The manager makes a missing one at its first use, with `init.sh` and `dotfiles.yaml`.
+The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another, and a folder there is a profile when it holds one of the parts below. The manager makes a missing one at its first use, with `init.sh` and `dotfiles.yaml`.
 
 | In `~/.dotfiles/<profile>/` | Content | Written by |
 |---|---|---|
@@ -389,7 +391,7 @@ groups:
 | `description` | One sentence under it, optional |
 | `script` | A file of the profile ending in `.sh`, run as `bash` in its folder |
 
-**⏎** on a group switches it on and runs its script, or switches it off and leaves what it installed. `init.sh` and every script of a group get `SM_DOTFILES` and `SM_PROFILE`, run with `LC_ALL=C.UTF-8`, and may call `sudo`.
+**⏎** on a group switches it on and runs its script, or switches it off and leaves what it installed. `init.sh` and every script of a group get `SM_DOTFILES` and `SM_PROFILE`, run with `LC_ALL=C.UTF-8`, and may call `sudo`. A script ending with status 75 (`EX_TEMPFAIL`) has not applied yet, for example while a program it configures was never started. Set up goes on and runs it again next time.
 
 ### Files and Secrets
 
@@ -400,6 +402,34 @@ Without the manager, the files of a profile link the same way:
 ```sh
 stow --dir ~/.dotfiles/<profile> --target ~ --dotfiles --no-folding home
 ```
+
+## Homelab
+
+**Settings › Homelab** switches it on, off by default and only with the dotfiles. Without a homelab yet it asks for the name of a server, such as `nas.fritz.box`, and makes one in the dotfiles. Empty, it stays off.
+
+```
+~/.dotfiles/homelab/
+├── homelab.yaml                 the servers and where their Cup answers
+├── key.age                      the age key of its secrets, behind your passphrase
+└── <server>/<stack>/compose.yaml
+```
+
+```yaml
+servers:
+  - name: nas.fritz.box
+    cup: http://nas.fritz.box:8000
+```
+
+| Key | Meaning |
+|---|---|
+| `name` | The server as the network knows it, and its folder beside `homelab.yaml` |
+| `cup` | The address of its Cup, http or https |
+
+The manager makes the stack `cup` for the first server: [Cup](https://github.com/sergi0g/cup) behind a socket proxy that lets it read containers and images only. Rolled out on the server with `docker compose up -d` in its folder, it tells which images have updates. Until then **Homelab** names the server as not reached.
+
+The start page counts the updates of every server. A server's page shows each stack as its needed images running, then an update, a newer tag, an image not running, or a check older than 48 hours. Images only a compose profile starts may be missing. **⏎** on a stack shows its images.
+
+A secret of a server lies as `<file>.age` beside what it belongs to, under the key of the homelab, unlocked once per machine like a profile's. **Add a secret** encrypts a file of the home folder to a path in the server's folder and replaces one there. **Export** packs the server's folder with every secret decrypted as `<server>.tar` into the downloads folder, without anyone's names, readable by its owner only, and unpacks it once more to compare it with its source.
 
 ## Building
 

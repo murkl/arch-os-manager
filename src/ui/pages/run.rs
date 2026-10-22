@@ -29,6 +29,8 @@ pub struct Job {
     pub confirm: Option<String>,
     /// The action as the person chose it, which the header names.
     name: Option<String>,
+    /// What a success settles beyond the system, such as a setting it makes possible.
+    then: Option<fn(&mut Ctx)>,
 }
 
 impl Job {
@@ -38,11 +40,17 @@ impl Job {
             args,
             confirm: None,
             name: None,
+            then: None,
         }
     }
 
     pub fn confirm(mut self, text: String) -> Job {
         self.confirm = Some(text);
+        self
+    }
+
+    pub fn then(mut self, then: fn(&mut Ctx)) -> Job {
+        self.then = Some(then);
         self
     }
 
@@ -889,6 +897,9 @@ impl Page for RunPage {
                 (true, Err(_)) => format!("{}  ", icon::FAILED),
             };
             run.conclude(&format!("{lead}{}", headline(&result)), result.is_ok());
+            if let (Ok(()), Some(then)) = (&result, self.job.then) {
+                then(ctx);
+            }
             self.outcome = Some((result, Instant::now()));
             self.cancel = None;
             ctx.reload();

@@ -55,3 +55,6 @@ pub const SECRET_REMOVE: &str = "\u{f16aa}";
 pub const PASSPHRASE: &str = "\u{f0307}";
 pub const REPOSITORY: &str = "\u{f0ccf}";
 pub const PROFILE: &str = "\u{f0322}";
+pub const HOMELAB: &str = "\u{f048b}";
+pub const STACK: &str = "\u{f0868}";
+pub const EXPORT: &str = "\u{f0207}";

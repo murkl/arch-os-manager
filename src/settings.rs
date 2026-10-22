@@ -46,6 +46,9 @@ pub struct Settings {
     /// The profile of the dotfiles, the host's name unless chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dotfiles_profile: Option<String>,
+    /// The homelab of the dotfiles, off unless switched on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homelab: Option<bool>,
 }
 
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
@@ -174,6 +177,11 @@ impl Settings {
         self.dotfiles.unwrap_or(false)
     }
 
+    /// Whether the homelab is switched on, which lives in the dotfiles.
+    pub fn homelab(&self) -> bool {
+        self.dotfiles() && self.homelab.unwrap_or(false)
+    }
+
     /// Whether the clean-up takes a part, as chosen or by default.
     pub fn cleans(&self, part: Part) -> bool {
         self.cleanup
@@ -238,6 +246,7 @@ mod tests {
             hidden_log: vec!["ACPI Error: with space".into()],
             dotfiles: Some(true),
             dotfiles_profile: Some("work laptop".into()),
+            homelab: Some(true),
         };
         let yaml = serde_saphyr::to_string(&s).unwrap();
         assert_eq!(Settings::parse(&yaml).unwrap(), s);
@@ -259,6 +268,15 @@ mod tests {
         assert!(Settings::parse("dotfiles-profile: ''").is_err());
         assert!(!Settings::default().dotfiles());
         assert!(Settings::parse("dotfiles: true").unwrap().dotfiles());
+        assert!(
+            !Settings::parse("homelab: true").unwrap().homelab(),
+            "only with the dotfiles"
+        );
+        assert!(
+            Settings::parse("dotfiles: true\nhomelab: true")
+                .unwrap()
+                .homelab()
+        );
         assert_eq!(
             Settings::parse("notify: weekly").unwrap().notify(),
             "weekly"

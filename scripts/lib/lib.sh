@@ -115,9 +115,13 @@ scratch() {
     trap 'rm -rf "$work"' EXIT
 }
 
-# Every request leaving the machine, bound to https, redirects included.
+# Every request leaving the machine, bound to the protocol of its address,
+# redirects included: https stays https, the plain http of a server at home
+# stays at home.
 fetch() {
-    curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --connect-timeout 10 --max-time 60 "$@"
+    local url="${*: -1}"
+    local proto="${url%%://*}"
+    curl --proto "=${proto}" --proto-redir "=${proto}" --tlsv1.2 -fsSL --connect-timeout 10 --max-time 60 "$@"
 }
 
 # The AUR helper chosen in the settings, empty for none.

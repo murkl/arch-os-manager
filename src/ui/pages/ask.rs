@@ -193,6 +193,8 @@ pub fn home() -> PathBuf {
 /// by the dotfiles already or points elsewhere.
 pub struct BrowsePage {
     title: String,
+    /// A folder may be chosen as well as a file.
+    folders: bool,
     /// The folder shown, or being read.
     dir: PathBuf,
     list: List<Item>,
@@ -208,12 +210,21 @@ impl BrowsePage {
     pub fn new(title: &str, then: impl FnMut(PathBuf, &mut Ctx) -> Flow + 'static) -> BrowsePage {
         BrowsePage {
             title: title.to_string(),
+            folders: true,
             dir: home(),
             list: List::filterable(),
             focus: None,
             unread: true,
             task: None,
             then: Box::new(then),
+        }
+    }
+
+    /// A file only, the folders only to go through.
+    pub fn files(title: &str, then: impl FnMut(PathBuf, &mut Ctx) -> Flow + 'static) -> BrowsePage {
+        BrowsePage {
+            folders: false,
+            ..BrowsePage::new(title, then)
         }
     }
 
@@ -226,9 +237,11 @@ impl BrowsePage {
         let mut rows = Vec::new();
         if self.below_home() {
             rows.push(Row::new(Item::Up, t("Parent folder")).icon(icon::BACK, Tone::Normal));
-            rows.push(
-                Row::new(Item::Here, t("Choose this folder")).icon(icon::CHECK, Tone::Normal),
-            );
+            if self.folders {
+                rows.push(
+                    Row::new(Item::Here, t("Choose this folder")).icon(icon::CHECK, Tone::Normal),
+                );
+            }
         }
         rows.extend(dirs.into_iter().map(|d| {
             Row::new(Item::Dir(d.clone()), format!("{d}/")).icon(icon::FOLDER, Tone::Normal)

@@ -29,6 +29,7 @@
 - Mirrors ranked, firmware updated
 - A broken keyring renewed, damaged package files restored
 - [Dotfiles](REFERENCE.md#dotfiles) per machine in your git repository, set up and backed up in one run, secrets encrypted
+- [Homelab](REFERENCE.md#homelab) servers with their Docker stacks and updates, exported with their secrets
 - Terminal, Linux console or a window of its own
 - Runs in the terminal if you like, every command shown and every question yours
 - English and German

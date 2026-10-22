@@ -1,0 +1,41 @@
+# Tells which images of this server have updates. The System Manager reads its
+# API on port 8000. Roll it out on the server: docker compose up -d in this
+# folder.
+services:
+  cup:
+    image: ghcr.io/sergi0g/cup:v3.5.1
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command: serve
+    ports:
+      - 8000:8000
+    environment:
+      - CUP_SOCKET=tcp://socket-proxy:2375
+    networks:
+      - default
+      - docker
+    depends_on:
+      - socket-proxy
+
+  # Cup sees Docker through it, reading containers and images only.
+  socket-proxy:
+    image: ghcr.io/linuxserver/socket-proxy:3.4.7
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /run
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+    networks:
+      - docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  # No way out: only Cup reaches the proxy.
+  docker:
+    internal: true

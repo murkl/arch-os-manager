@@ -72,6 +72,8 @@ pub struct State {
     pub setup: Option<jiff::Timestamp>,
     /// Folders of `~/.dotfiles-backup`.
     pub backups: Vec<String>,
+    /// homelab.yaml is there.
+    pub homelab: bool,
 }
 
 fn timestamp(s: &str) -> Option<jiff::Timestamp> {
@@ -113,6 +115,7 @@ impl State {
                 ["unsaved", part] => s.unsaved.push(part.to_string()),
                 ["setup", at] => s.setup = timestamp(at),
                 ["backup", path] => s.backups.push(path.to_string()),
+                ["homelab", _] => s.homelab = true,
                 _ => {}
             }
         }
@@ -202,13 +205,27 @@ fn parse_groups(src: &str, exists: impl Fn(&str) -> bool) -> Result<Vec<Group>, 
     Ok(groups)
 }
 
-/// The profiles of the dotfiles: every folder at their top but the hidden ones, by name.
+/// What a profile holds, one of them at least, as the script of the dotfiles shapes it.
+const PARTS: [&str; 8] = [
+    "init.sh",
+    "dotfiles.yaml",
+    "home",
+    "secrets",
+    "key.age",
+    "packages",
+    "gnome",
+    "groups.txt",
+];
+
+/// The profiles of the dotfiles: every folder at their top holding a part of a profile, by name.
+/// Another folder there, as the homelab or pictures kept along, is none.
 pub fn profiles(dir: &Path) -> Vec<String> {
     let mut found: Vec<String> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter(|e| PARTS.iter().any(|part| e.path().join(part).exists()))
         .filter_map(|e| e.file_name().into_string().ok())
         .filter(|name| !name.starts_with('.'))
         .collect();
@@ -315,7 +332,7 @@ mod tests {
             "group\tgroups/gaming.sh\tapplied\ngroup\tgroups/office.sh\tmissing\n",
             "secrets\t3\nkey\tunlocked\npending\tsecrets\t1\npending\tgnome\n",
             "unsaved\tsecrets\nunsaved\tgnome\nunsaved\tpackages\n",
-            "backup\t/home/tux/.dotfiles-backup/2026-10-22-151020\n"
+            "backup\t/home/tux/.dotfiles-backup/2026-10-22-151020\nhomelab\tready\n"
         ));
         assert_eq!(s.dir, PathBuf::from("/home/tux/.dotfiles"));
         assert_eq!((s.profile.as_str(), s.repo), ("tux-notebook", Repo::Ready));
@@ -332,6 +349,7 @@ mod tests {
         assert_eq!((s.due_secrets, s.due_gnome), (1, true));
         assert_eq!(s.unsaved, ["secrets", "gnome", "packages"]);
         assert_eq!(s.backups.len(), 1);
+        assert!(s.homelab);
         assert!(!s.new && s.unsaved());
     }
 
@@ -433,9 +451,17 @@ mod tests {
     fn profiles_are_the_folders_at_the_top() {
         let dir = std::env::temp_dir().join(format!("sm-profiles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        for d in ["work", "home-pc", ".git"] {
+        for d in [
+            "work/home",
+            "home-pc",
+            ".git/home",
+            "res/wallpaper",
+            "homelab",
+        ] {
             std::fs::create_dir_all(dir.join(d)).unwrap();
         }
+        std::fs::write(dir.join("home-pc/init.sh"), "").unwrap();
+        std::fs::write(dir.join("homelab/homelab.yaml"), "").unwrap();
         std::fs::write(dir.join("README.md"), "").unwrap();
         assert_eq!(profiles(&dir), ["home-pc", "work"]);
         let _ = std::fs::remove_dir_all(&dir);

@@ -28,6 +28,7 @@ use crate::data::cleanup::Plan;
 use crate::data::dotfiles::Dotfiles;
 use crate::data::features::Features;
 use crate::data::firmware::Firmware;
+use crate::data::homelab::Homelab;
 use crate::data::journal::Entry;
 use crate::data::mirrors::Mirrors;
 use crate::data::news::Item;
@@ -208,6 +209,7 @@ pub enum Fresh {
     Dotfiles(Result<Box<Dotfiles>, Failure>),
     /// The dotfiles read after fetching their repository, or why it was not reached.
     DotfilesFetched(Result<Box<Dotfiles>, Failure>),
+    Homelab(Result<Box<Homelab>, Failure>),
     /// settings.yaml written, or why not.
     Saved(Result<(), String>),
 }
@@ -399,6 +401,7 @@ pub struct Shared {
     pub dotfiles: Loaded<Dotfiles>,
     /// Why the repository of the dotfiles was not reached at the last fetch.
     pub unreached: Option<Failure>,
+    pub homelab: Loaded<Homelab>,
 }
 
 /// A job reading a shared value or writing settings, until its value is in.

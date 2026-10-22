@@ -2169,6 +2169,72 @@ fn init_sh_and_the_groups_run_again_only_where_they_changed() {
 }
 
 #[test]
+fn what_is_added_is_backed_up_though_a_global_ignore_file_names_it() {
+    let s = dotfiles("dotfiles-ignored");
+    let config = s.read(".gitconfig");
+    s.write("ignore", "CLAUDE.md\n*.age\n");
+    s.write(
+        ".gitconfig",
+        &format!(
+            "{config}[core]\n\texcludesFile = {}\n",
+            s.dir.join("ignore").display()
+        ),
+    );
+    s.write(".claude/CLAUDE.md", "# Rules\n");
+    let file = s.dir.join(".claude/CLAUDE.md");
+    let o = s.dotfiles(&["add", file.to_str().unwrap()]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let key = s.dir.join(".dotfiles/.git/system-manager/tux.key");
+    let made = Command::new("age-keygen")
+        .arg("-o")
+        .arg(&key)
+        .output()
+        .unwrap();
+    assert!(made.status.success());
+    s.write(".dotfiles/tux/key.age", "the key behind a passphrase\n");
+    s.write(".ssh/id_ed25519", "PRIVATE\n");
+    let o = s.dotfiles(&[
+        "secret-add",
+        s.dir.join(".ssh/id_ed25519").to_str().unwrap(),
+    ]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let o = s.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let files = s.git(&["ls-files"]);
+    assert!(files.contains("tux/home/dot-claude/CLAUDE.md\n"), "{files}");
+    assert!(
+        files.contains("tux/secrets/dot-ssh/id_ed25519.age\n"),
+        "{files}"
+    );
+}
+
+#[test]
+fn a_script_ending_with_75_is_not_yet_applied_and_runs_at_the_next_setup() {
+    let s = dotfiles("dotfiles-later");
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    s.write(
+        ".dotfiles/tux/groups/firefox.sh",
+        "#!/bin/bash\necho group >>\"$HOME/ran\"\nexit 75\n",
+    );
+    assert_eq!(s.dotfiles(&["group-on", "groups/firefox.sh"]).code, 0);
+    assert_eq!(s.read(".dotfiles/tux/groups.txt"), "groups/firefox.sh\n");
+    s.write(
+        ".dotfiles/tux/init.sh",
+        "#!/bin/bash\necho init >>\"$HOME/ran\"\nexit 75\n",
+    );
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    let o = s.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(s.read("ran"), "group\ninit\ngroup\ninit\ngroup\n");
+    let state = s.dotfiles(&["state"]).out;
+    assert!(state.contains("init\tchanged\t"), "{state}");
+    assert!(
+        state.contains("group\tgroups/firefox.sh\tchanged\n"),
+        "{state}"
+    );
+}
+
+#[test]
 fn a_setup_installs_only_what_the_lists_name_and_this_machine_lacks() {
     let s = dotfiles("dotfiles-packages");
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
@@ -2416,4 +2482,140 @@ fn gnome_extensions_are_backed_up_and_what_the_profile_brings_is_loaded() {
         o.calls
     );
     assert!(!s.dotfiles(&["state"]).out.contains("pending\tgnome"));
+}
+
+/// The homelab key as unlocking leaves it, so no passphrase is asked.
+fn homelab_key(s: &Sandbox) {
+    let key = s.dir.join(".dotfiles/.git/system-manager/homelab.key");
+    std::fs::create_dir_all(key.parent().unwrap()).unwrap();
+    let made = Command::new("age-keygen")
+        .arg("-o")
+        .arg(&key)
+        .output()
+        .unwrap();
+    assert!(made.status.success());
+    s.write(".dotfiles/homelab/key.age", "the key behind a passphrase\n");
+}
+
+#[test]
+fn a_homelab_is_made_with_cup_and_its_server_exported_with_its_secrets() {
+    let s = dotfiles("homelab");
+    assert_eq!(s.dotfiles(&["homelab-init", "nas fritz"]).code, 40);
+    let o = s.dotfiles(&["homelab-init", "nas.fritz.box"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        s.read(".dotfiles/homelab/homelab.yaml")
+            .contains("  - name: nas.fritz.box\n    cup: http://nas.fritz.box:8000\n")
+    );
+    assert!(
+        s.read(".dotfiles/homelab/nas.fritz.box/cup/compose.yaml")
+            .contains("sergi0g/cup:v")
+    );
+    assert!(s.dotfiles(&["state"]).out.contains("homelab\tready\n"));
+    // A second server keeps homelab.yaml as the person wrote it.
+    s.write(".dotfiles/homelab/homelab.yaml", "servers: []\n");
+    assert_eq!(s.dotfiles(&["homelab-init", "pi.fritz.box"]).code, 0);
+    assert_eq!(s.read(".dotfiles/homelab/homelab.yaml"), "servers: []\n");
+    assert!(s.dir.join(".dotfiles/homelab/pi.fritz.box/cup").is_dir());
+
+    // Cup at home answers over plain http, and fetch keeps to it.
+    s.stub(
+        "curl",
+        r#"echo '{"images":[],"last_updated":"2026-10-22T10:00:00Z"}'"#,
+    );
+    let o = s.dotfiles(&["homelab-cup", "http://nas.fritz.box:8000/"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.calls.contains("--proto =http --proto-redir =http")
+            && o.calls.ends_with("http://nas.fritz.box:8000/api/v3/json\n"),
+        "{}",
+        o.calls
+    );
+
+    homelab_key(&s);
+    s.write("Downloads/env", "TOKEN=secret\n");
+    let add = |path: &str| {
+        let file = s.dir.join("Downloads/env");
+        s.dotfiles(&[
+            "homelab-secret-add",
+            "nas.fritz.box",
+            file.to_str().unwrap(),
+            path,
+        ])
+    };
+    assert_eq!(add("../escape").code, 44);
+    assert_eq!(add("/etc/passwd").code, 44);
+    let o = add("traefik/.env");
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let sealed = std::fs::read(
+        s.dir
+            .join(".dotfiles/homelab/nas.fritz.box/traefik/.env.age"),
+    )
+    .unwrap();
+    assert!(sealed.starts_with(b"age-encryption.org/v1\n"));
+    assert_eq!(
+        s.dotfiles(&["homelab-secret-add", "nas", "/x", "y"]).code,
+        41,
+        "no such server"
+    );
+
+    // The archive: the folder with the secret decrypted, nobody's names, for its owner only.
+    let o = s.dotfiles(&["homelab-export", "nas.fritz.box"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let archive = s.dir.join("nas.fritz.box.tar");
+    let mode = std::fs::metadata(&archive).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let list = Command::new("tar")
+        .arg("-tvf")
+        .arg(&archive)
+        .output()
+        .unwrap();
+    let list = String::from_utf8_lossy(&list.stdout);
+    assert!(
+        list.contains("-rw------- 0/0") && list.contains("traefik/.env\n"),
+        "{list}"
+    );
+    assert!(
+        list.contains("cup/compose.yaml") && !list.contains(".age"),
+        "{list}"
+    );
+    let env = Command::new("tar")
+        .arg("-xOf")
+        .arg(&archive)
+        .arg("traefik/.env")
+        .output()
+        .unwrap();
+    assert_eq!(env.stdout, b"TOKEN=secret\n");
+    let left = std::fs::read_dir(&s.dir)
+        .unwrap()
+        .flatten()
+        .filter(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with(".system-manager")
+        })
+        .count();
+    assert_eq!(left, 0, "no work folder stays");
+
+    // A link in the folder keeps the archive from being packed.
+    std::os::unix::fs::symlink(
+        "/etc/hosts",
+        s.dir.join(".dotfiles/homelab/nas.fritz.box/hosts"),
+    )
+    .unwrap();
+    assert_eq!(s.dotfiles(&["homelab-export", "nas.fritz.box"]).code, 42);
+    std::fs::remove_file(s.dir.join(".dotfiles/homelab/nas.fritz.box/hosts")).unwrap();
+
+    let o = s.dotfiles(&["homelab-secret-remove", "nas.fritz.box", "traefik/.env"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        !s.dir
+            .join(".dotfiles/homelab/nas.fritz.box/traefik")
+            .exists()
+    );
+    assert_eq!(
+        s.dotfiles(&["homelab-secret-remove", "nas.fritz.box", "traefik/.env"])
+            .code,
+        34
+    );
 }
