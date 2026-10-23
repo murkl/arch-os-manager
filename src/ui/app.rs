@@ -527,12 +527,6 @@ pub mod tests {
     /// An app without background loads, for pressing keys and reading the screen.
     pub fn app() -> (App, Terminal<TestBackend>) {
         let (tx, _rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
-        // One home per process, held as long as it runs: those of earlier runs go here.
-        let base = std::env::temp_dir();
-        crate::script::sweep(&base, "sm-test-");
-        let dir = base.join(format!("sm-test-{}", std::process::id()));
-        // SAFETY: tests that read the environment read only SM_HOME, set to the same value by all.
-        unsafe { std::env::set_var("SM_HOME", &dir) };
         let (themes, _) = crate::theme::all();
         let ctx = Ctx {
             settings: Settings::default(),
@@ -765,7 +759,6 @@ pub mod tests {
     #[ignore]
     fn preview() {
         let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
-        unsafe { std::env::set_var("SM_HOME", std::env::temp_dir().join("sm-preview")) };
         let mut app = App::new(tx, Arc::new(|| {}), false, None);
         app.start();
         press(&mut app, &[Key::Esc]);

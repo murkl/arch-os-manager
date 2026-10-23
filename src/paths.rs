@@ -6,10 +6,23 @@ use std::sync::OnceLock;
 static HOME: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn home() -> &'static PathBuf {
-    HOME.get_or_init(|| match std::env::var_os("SM_HOME") {
+    HOME.get_or_init(locate)
+}
+
+#[cfg(not(test))]
+fn locate() -> PathBuf {
+    match std::env::var_os("SM_HOME") {
         Some(dir) if !dir.is_empty() => PathBuf::from(dir),
         _ => PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".arch-os"),
-    })
+    }
+}
+
+/// One home per test process, held as long as it runs: those of earlier runs go here.
+#[cfg(test)]
+fn locate() -> PathBuf {
+    let base = std::env::temp_dir();
+    crate::script::sweep(&base, "sm-test-");
+    base.join(format!("sm-test-{}", std::process::id()))
 }
 
 pub fn settings() -> PathBuf {
@@ -65,6 +78,18 @@ pub fn write_atomic(path: &std::path::Path, content: &[u8]) -> std::io::Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Whichever test asks first, none writes the settings of the person running it.
+    #[test]
+    fn a_test_has_a_home_of_its_own() {
+        let person = PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".arch-os");
+        assert!(!home().starts_with(person), "{}", home().display());
+        assert!(
+            home().starts_with(std::env::temp_dir()),
+            "{}",
+            home().display()
+        );
+    }
 
     #[test]
     fn the_program_is_where_it_lay_at_the_start() {
