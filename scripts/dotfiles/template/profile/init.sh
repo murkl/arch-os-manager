@@ -4,4 +4,4 @@
 # run twice. Ending with 75 it runs again at the next set up.
 
 # sudo pacman -S --needed zsh
-# sudo chsh -s /usr/bin/zsh "$USER"
+# sudo chsh -s /usr/bin/zsh "$(id -un)"
