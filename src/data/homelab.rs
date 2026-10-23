@@ -672,7 +672,7 @@ mod tests {
     fn the_template_of_cup_is_a_stack_the_homelab_reads() {
         let template = crate::embedded::SCRIPTS
             .iter()
-            .find(|(f, _)| *f == "dotfiles/homelab/cup/compose.yaml")
+            .find(|(f, _)| *f == "dotfiles/template/homelab/cup/compose.yaml")
             .unwrap()
             .1;
         let compose: Compose =

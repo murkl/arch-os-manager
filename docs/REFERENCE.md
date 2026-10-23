@@ -341,13 +341,18 @@ Docker is the system's, asked at the socket `docker.socket` listens on and only 
 
 **Settings › Dotfiles** switches them on, off by default. The start page then shows **Dotfiles** with what waits: new commits, a changed `init.sh`, missing links, or whether this machine is backed up.
 
-The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another, and a folder there is a profile when it holds one of the parts below. The manager makes a missing one once something goes into it, with `init.sh` and `dotfiles.yaml`.
+The dotfiles are a git repository in `~/.dotfiles`: what every machine shares at the top, a folder per profile, and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another, and a folder there is a profile when it holds one of its parts below. The manager makes a missing one once something goes into it, with `init.sh`, and the two files at the top where they are missing.
+
+| In `~/.dotfiles/` | Content | Written by |
+|---|---|---|
+| `dotfiles.yaml` | The groups of the Dotfiles page, for every profile | you |
+| `dotfiles.sh` | The function of each group, and helpers for `init.sh` | you |
+| `home/` | Files of the home folder on every machine, `.foo` as `dot-foo` | **Add a file for every machine** |
 
 | In `~/.dotfiles/<profile>/` | Content | Written by |
 |---|---|---|
-| `init.sh` | Your commands for this machine, in functions | you |
-| `dotfiles.yaml` | The groups of the Dotfiles page | you |
-| `home/` | Files of the home folder, `.foo` as `dot-foo` | **Add a file** |
+| `init.sh` | Your commands for this machine | you |
+| `home/` | Files of the home folder on this machine, over those of every machine | **Add a file for this machine** |
 | `secrets/` | Files of the home folder encrypted with age, each `<name>.age` | **Add a secret** |
 | `key.age` | The age key of the secrets, behind your passphrase | the first secret |
 | `packages/` | `pacman.txt`, `aur.txt`, `flatpak.txt`: the packages installed on purpose | **Back up** |
@@ -363,20 +368,20 @@ The dotfiles are a git repository in `~/.dotfiles`, with a folder per profile an
 | Step | Does |
 |---|---|
 | Latest state | The remote's commits, as a fast-forward or a rebase of the commits here, open changes stashed and back |
-| Links | `stow --dotfiles --no-folding` from `home/`, folders real. What stands where a link goes moves to `~/.dotfiles-backup/<time>/`, links to files gone from `home/` go |
+| Links | `stow --dotfiles --no-folding` from the profile's `home/`, then from the one of every machine, folders real. What stands where a link goes moves to `~/.dotfiles-backup/<time>/`, links to files gone from a `home/` go |
 | Secrets | Each one missing here or changed in the profile, written for its owner only. The passphrase is asked once per machine |
-| `init` | The function `init` of `init.sh`, where it changed or never ran here |
+| `init.sh` | Where it changed or never ran here |
 | Packages | What the lists name and this machine lacks, from the repositories, the AUR and Flathub. One no repository has any more is named and left out |
 | Groups | The function of each group switched on, where it changed or never ran here |
 | GNOME | Missing extensions from extensions.gnome.org, settings and the list of extensions on where they changed |
 
 **Back up** writes the package lists, the GNOME extensions and each secret changed here into the profile, commits every change of the dotfiles as `Back up <profile>: <parts>`, takes in the remote's commits and uploads. A branch without an upstream gets it at its first push.
 
-What this machine applied lies in the clone and is never committed: `.git/system-manager/` holds the blob of each file as it was applied, the hash of each function of `init.sh` as it ran, the links of the last set up and the key once unlocked.
+What this machine applied lies in the clone and is never committed: `.git/system-manager/` holds the blob of each file as it was applied, the hash of each function of `dotfiles.sh` as it ran, the links of the last set up and the key once unlocked.
 
 ### Groups
 
-`dotfiles.yaml` names the groups of the profile, in their order at the foot of the Dotfiles page:
+`dotfiles.yaml` names the groups of every profile, in their order at the foot of the Dotfiles page:
 
 ```yaml
 groups:
@@ -389,32 +394,33 @@ groups:
 |---|---|
 | `name` | The row on the Dotfiles page |
 | `description` | One sentence under it, optional |
-| `install` | The function of `init.sh` that sets the group up, its line in `groups.txt` |
+| `install` | The function of `dotfiles.sh` that sets the group up, its line in `groups.txt` |
 
-`init.sh` holds functions as a PKGBUILD does. Set up reads it, then calls `init` and the function of each group switched on:
+`dotfiles.sh` holds functions as a PKGBUILD does, one per group and any helper. Set up reads it before every call, runs `init.sh` of the profile, then calls the function of each group switched on:
 
 ```bash
-init() {
-    sudo pacman -S --needed zsh
-}
-
+# dotfiles.sh
 gaming() {
     sudo pacman -S --needed steam
 }
+
+# <profile>/init.sh
+sudo pacman -S --needed zsh
 ```
 
-**⏎** on a group switches it on and calls its function, or switches it off and leaves what it installed. Set up calls a function again where it changed, a comment or a space aside. The functions run in the profile's folder with `set -euo pipefail`, get `SM_DOTFILES` and `SM_PROFILE`, run with `LC_ALL=C.UTF-8`, and may call `sudo`. Outside a function stand only definitions, as `init.sh` is read before every call. A function ending with status 75 (`EX_TEMPFAIL`) has not applied yet, for example while a program it configures was never started. Set up goes on and calls it again next time.
+**⏎** on a group switches it on and calls its function, or switches it off and leaves what it installed. Set up calls a function again where it changed, a comment or a space aside, and `init.sh` where the file changed. The functions run in `~/.dotfiles`, `init.sh` in the profile's folder with the functions at hand, all with `set -euo pipefail`, `SM_DOTFILES` and `SM_PROFILE` set, `LC_ALL=C.UTF-8`, and they may call `sudo`. Outside a function of `dotfiles.sh` stand only definitions. Ending with status 75 (`EX_TEMPFAIL`), a function or `init.sh` has not applied yet, for example while a program it configures was never started. Set up goes on and calls it again next time.
 
-**Note:** _A function named like a program, such as `docker`, hides the program in all of `init.sh`. A changed helper runs no function again that calls it._
+**Note:** _A function named like a program, such as `docker`, hides the program in `dotfiles.sh` and `init.sh`. A changed helper runs no function again that calls it._
 
 ### Files and Secrets
 
-**Dotfiles › Files** adds a file or folder of the home folder and takes one out. Its browser goes a folder up with **←**. Added, it moves into `home/` and a link of stow takes its place. Taken out, the file takes the place of its link again. A secret is encrypted into `secrets/` and its file stays where it is. **Change the passphrase** wraps the key anew, and a machine unlocked before keeps its key.
+**Dotfiles › Files** adds a file or folder of the home folder and takes one out. Its browser goes a folder up with **←**. Added for every machine, it moves into `home/` at the top, for this machine into the profile's `home/`, and a link of stow takes its place. Where both hold a place, the profile's file is linked. Taken out, the file takes the place of its link again. A secret is encrypted into `secrets/` and its file stays where it is. **Change the passphrase** wraps the key anew, and a machine unlocked before keeps its key.
 
-Without the manager, the files of a profile link the same way:
+Without the manager, the files link the same way, the profile's first:
 
 ```sh
 stow --dir ~/.dotfiles/<profile> --target ~ --dotfiles --no-folding home
+stow --dir ~/.dotfiles --target ~ --dotfiles --no-folding --defer='.*' home
 ```
 
 ## Homelab

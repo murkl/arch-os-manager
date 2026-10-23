@@ -1977,8 +1977,8 @@ fn dotfiles_go_into_the_profile_and_come_back_as_links_on_another_machine() {
     );
     a.write(".config/nvim/init.lua", "vim.o.number = true\n");
     a.write(".zshrc", "alias ll='ls -l'\n");
-    for path in [".config/nvim", ".zshrc"] {
-        let o = a.dotfiles(&["add", a.dir.join(path).to_str().unwrap()]);
+    for (scope, path) in [("profile", ".config/nvim"), ("shared", ".zshrc")] {
+        let o = a.dotfiles(&["add", scope, a.dir.join(path).to_str().unwrap()]);
         assert_eq!(o.code, 0, "{path}: {}{}", o.events, o.err);
     }
     // Relative, as stow links, and folders stay real.
@@ -1987,10 +1987,16 @@ fn dotfiles_go_into_the_profile_and_come_back_as_links_on_another_machine() {
         Some("../../.dotfiles/tux/home/dot-config/nvim/init.lua")
     );
     assert!(!a.dir.join(".config/nvim").is_symlink());
+    assert_eq!(
+        a.link(".zshrc").as_deref(),
+        Some(".dotfiles/home/dot-zshrc")
+    );
     assert_eq!(a.read(".zshrc"), "alias ll='ls -l'\n");
-    // A new profile starts with its two files, and the empty init.sh counts as run.
+    // New dotfiles start with their two files, a new profile with its init.sh, which does nothing
+    // and so counts as run.
+    assert!(a.read(".dotfiles/dotfiles.sh").starts_with("#!/bin/bash"));
+    assert!(a.read(".dotfiles/dotfiles.yaml").contains("groups: []"));
     assert!(a.read(".dotfiles/tux/init.sh").starts_with("#!/bin/bash"));
-    assert!(a.read(".dotfiles/tux/dotfiles.yaml").contains("groups: []"));
     let state = a.dotfiles(&["state"]).out;
     assert!(state.contains("init\tapplied\t"), "{state}");
     assert!(state.contains("files\t2\nlinks\t0\n"), "{state}");
@@ -2002,7 +2008,7 @@ fn dotfiles_go_into_the_profile_and_come_back_as_links_on_another_machine() {
     assert_eq!(a.read(".dotfiles/tux/packages/aur.txt"), "paru-bin\n");
     assert_eq!(
         a.git(&["log", "--format=%s"]),
-        "Back up tux: dotfiles.yaml, init.sh, nvim, packages, zshrc\n"
+        "Back up tux: dotfiles.sh, dotfiles.yaml, init.sh, nvim, packages, zshrc\n"
     );
     let url = remote(&a);
     assert_eq!(a.dotfiles(&["connect", &url]).code, 0);
@@ -2077,6 +2083,34 @@ fn dotfiles_go_into_the_profile_and_come_back_as_links_on_another_machine() {
             .is_err()
     );
     assert!(b.dir.join(".zshrc").is_symlink());
+
+    // A file of the profile's home/ takes the place of the one of every machine, and gives it
+    // back once it is gone.
+    a.write(".dotfiles/tux/home/dot-zshrc", "tux only\n");
+    assert_eq!(
+        a.dotfiles(&["add", "profile", a.dir.join(".zshrc").to_str().unwrap()])
+            .code,
+        33
+    );
+    let o = a.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(
+        a.link(".zshrc").as_deref(),
+        Some(".dotfiles/tux/home/dot-zshrc")
+    );
+    assert_eq!(a.read(".zshrc"), "tux only\n");
+    assert!(a.dotfiles(&["state"]).out.contains("files\t1\nlinks\t0\n"));
+    std::fs::remove_file(a.dir.join(".dotfiles/tux/home/dot-zshrc")).unwrap();
+    let o = a.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(
+        a.link(".zshrc").as_deref(),
+        Some(".dotfiles/home/dot-zshrc")
+    );
+    let o = a.dotfiles(&["remove", a.dir.join(".zshrc").to_str().unwrap()]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(!a.dir.join(".zshrc").is_symlink());
+    assert!(!a.dir.join(".dotfiles/home/dot-zshrc").exists());
 }
 
 #[test]
@@ -2086,10 +2120,18 @@ fn dotfiles_name_what_they_keep_and_refuse_what_is_no_configuration() {
     s.write(".config/app/b.conf", "b\n");
     s.write(".gitconfig.local", "x\n");
     let home = s.dir.display().to_string();
-    let add = |path: &str| s.dotfiles(&["add", &format!("{home}/{path}")]).code;
+    let add = |path: &str| {
+        s.dotfiles(&["add", "profile", &format!("{home}/{path}")])
+            .code
+    };
     assert_eq!(add(".config/app"), 0);
     assert_eq!(add(".config/app"), 33, "kept already");
-    assert_eq!(s.dotfiles(&["add", "/etc/hosts"]).code, 24);
+    assert_eq!(s.dotfiles(&["add", "profile", "/etc/hosts"]).code, 24);
+    assert_eq!(
+        s.dotfiles(&["add", "x", &format!("{home}/.gitconfig.local")])
+            .code,
+        46
+    );
     std::os::unix::fs::symlink("/etc/hosts", s.dir.join("hosts")).unwrap();
     assert_eq!(add("hosts"), 27);
     // The cache as XDG_CACHE_HOME puts it.
@@ -2118,72 +2160,72 @@ fn dotfiles_name_what_they_keep_and_refuse_what_is_no_configuration() {
     assert_eq!(s.dotfiles(&["remove", &format!("{home}/.zshrc")]).code, 34);
 }
 
-/// init.sh of the functions given, each a line of its own body, as `name: body`.
+/// dotfiles.sh of the functions given, each a line of its own body, as `name: body`.
 fn functions(s: &Sandbox, functions: &[(&str, &str)]) {
     let text: String = functions
         .iter()
         .map(|(name, body)| format!("{name}() {{\n    {body}\n}}\n\n"))
         .collect();
-    s.write(".dotfiles/tux/init.sh", &text);
+    s.write(".dotfiles/dotfiles.sh", &text);
 }
 
 #[test]
-fn init_and_the_groups_run_again_only_where_their_function_changed() {
+fn init_and_the_groups_run_again_only_where_they_changed() {
     let s = dotfiles("dotfiles-run");
     assert_eq!(s.dotfiles(&["backup"]).code, 0);
-    let init = (
-        "init",
-        r#"echo "init in $PWD as $SM_PROFILE" >>"$HOME/ran""#,
+    // init.sh runs in the profile's folder, with the functions of dotfiles.sh at hand.
+    let note = (
+        "note",
+        r#"echo "$1 in ${PWD##*/} as $SM_PROFILE" >>"$HOME/ran""#,
     );
-    functions(&s, &[init]);
+    functions(&s, &[note]);
+    s.write(".dotfiles/tux/init.sh", "note init\n");
     assert!(s.dotfiles(&["state"]).out.contains("init\tchanged\t"));
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
-    let here = s.dir.join(".dotfiles/tux");
-    assert_eq!(
-        s.read("ran"),
-        format!("init in {} as tux\n", here.display())
-    );
+    assert_eq!(s.read("ran"), "init in tux as tux\n");
     let state = s.dotfiles(&["state"]).out;
     assert!(state.contains("init\tapplied\t1"), "{state}");
+    assert!(!state.contains("functions\t"), "no group on: {state}");
 
-    // A group beside init: switched on it runs at once, and init, unchanged, not again.
-    let gaming = ("gaming", r#"echo gaming >>"$HOME/ran""#);
-    functions(&s, &[init, gaming]);
+    // A group: switched on it runs at once, in the dotfiles, and init.sh, unchanged, not again.
+    let gaming = ("gaming", "note gaming");
+    functions(&s, &[note, gaming]);
     for wrong in ["../gaming", "init", "office"] {
         assert_eq!(s.dotfiles(&["group-on", wrong]).code, 38, "{wrong}");
     }
     let o = s.dotfiles(&["group-on", "gaming"]);
     assert_eq!(o.code, 0, "{}{}", o.events, o.err);
     assert_eq!(s.read(".dotfiles/tux/groups.txt"), "gaming\n");
+    let state = s.dotfiles(&["state"]).out;
     assert!(
-        s.dotfiles(&["state"])
-            .out
-            .contains("group\tgaming\tapplied\n")
+        state.contains("group\tgaming\tapplied\nfunctions\tapplied\n"),
+        "{state}"
     );
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
-    assert_eq!(s.read("ran").lines().count(), 2, "neither function changed");
-    // A comment and a space change no function, a command does.
-    functions(
-        &s,
-        &[
-            init,
-            ("gaming", "# Steam\n      echo gaming   >>\"$HOME/ran\""),
-        ],
+    assert_eq!(
+        s.read("ran"),
+        "init in tux as tux\ngaming in .dotfiles as tux\n",
+        "nothing changed"
     );
+    // A comment and a space change no function, a command does.
+    functions(&s, &[note, ("gaming", "# Steam\n      note   gaming")]);
+    assert!(s.dotfiles(&["state"]).out.contains("functions\tchanged\n"));
     let o = s.dotfiles(&["setup"]);
     assert!(!o.events.contains("step\tgroups"), "{}", o.events);
-    functions(
-        &s,
-        &[init, ("gaming", r#"echo "gaming again" >>"$HOME/ran""#)],
-    );
+    assert!(s.dotfiles(&["state"]).out.contains("functions\tapplied\n"));
+    let again = ("gaming", "note again");
+    functions(&s, &[note, again]);
     let o = s.dotfiles(&["setup"]);
     assert!(o.events.contains("step\tgroups\n"), "{}", o.events);
-    assert!(s.read("ran").ends_with("tux\ngaming\ngaming again\n"));
+    assert!(
+        s.read("ran")
+            .ends_with("gaming in .dotfiles as tux\nagain in .dotfiles as tux\n")
+    );
 
     // Switched on elsewhere, a group that never ran here is due.
-    let office = ("office", r#"echo office >>"$HOME/ran""#);
-    functions(&s, &[init, gaming, office]);
+    let office = ("office", "note office");
+    functions(&s, &[note, again, office]);
     s.write(".dotfiles/tux/groups.txt", "gaming\noffice\n");
     assert!(
         s.dotfiles(&["state"])
@@ -2191,42 +2233,74 @@ fn init_and_the_groups_run_again_only_where_their_function_changed() {
             .contains("group\toffice\tchanged\n")
     );
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
-    assert!(s.read("ran").ends_with("gaming\noffice\n"));
+    assert!(
+        s.read("ran")
+            .ends_with("again in .dotfiles as tux\noffice in .dotfiles as tux\n")
+    );
     assert_eq!(s.dotfiles(&["group-off", "gaming"]).code, 0);
     assert_eq!(s.read(".dotfiles/tux/groups.txt"), "office\n");
     assert_eq!(s.dotfiles(&["group-off", "office"]).code, 0);
     assert!(!s.dir.join(".dotfiles/tux/groups.txt").exists());
 
-    functions(&s, &[init, ("gaming", "exit 3")]);
+    // 75 says not yet: init.sh runs again next time.
+    s.write(".dotfiles/tux/init.sh", "note init\nexit 75\n");
+    let o = s.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(s.dotfiles(&["state"]).out.contains("init\tchanged\t"));
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert!(
+        s.read("ran")
+            .ends_with("init in tux as tux\ninit in tux as tux\n")
+    );
+
+    functions(&s, &[note, ("gaming", "exit 3")]);
     assert_eq!(s.dotfiles(&["group-on", "gaming"]).code, 18);
-    functions(&s, &[("init", "exit 4")]);
+    s.write(".dotfiles/tux/init.sh", "exit 4\n");
     assert_eq!(s.dotfiles(&["setup"]).code, 17);
-    s.write(".dotfiles/tux/init.sh", "init() {\n");
-    assert_eq!(s.dotfiles(&["setup"]).code, 17, "init.sh does not read");
-    functions(&s, &[init]);
+    s.write(".dotfiles/tux/init.sh", "");
+    s.write(".dotfiles/tux/groups.txt", "gaming\n");
+    s.write(".dotfiles/dotfiles.sh", "gaming() {\n");
+    assert_eq!(s.dotfiles(&["setup"]).code, 45, "dotfiles.sh does not read");
+    functions(&s, &[note, gaming]);
     s.write(".dotfiles/tux/groups.txt", "groups/gaming.sh\n");
     assert_eq!(s.dotfiles(&["setup"]).code, 38, "a path is no function");
 }
 
-/// The example of the new profile's init.sh, uncommented, is the group the example of its
-/// dotfiles.yaml installs.
+/// The examples of new dotfiles, uncommented, are the group the example of dotfiles.yaml
+/// installs and an init.sh that runs.
 #[test]
-fn the_example_group_of_a_new_profile_runs_as_written() {
+fn the_examples_of_new_dotfiles_run_as_written() {
     let s = dotfiles("dotfiles-example");
     assert_eq!(s.dotfiles(&["backup"]).code, 0);
-    let template = s.read(".dotfiles/tux/init.sh");
-    let example: String = template
-        .lines()
-        .skip_while(|l| !l.starts_with("# gaming() {"))
-        .filter_map(|l| l.strip_prefix("# ").or_else(|| l.strip_prefix("#")))
-        .map(|l| format!("{l}\n"))
-        .collect();
+    let uncommented = |template: &str, from: &str| -> String {
+        template
+            .lines()
+            .skip_while(|l| !l.starts_with(from))
+            .filter_map(|l| l.strip_prefix("# ").or_else(|| l.strip_prefix("#")))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    };
+    let template = s.read(".dotfiles/dotfiles.sh");
+    let example = uncommented(&template, "# gaming() {");
     assert!(example.starts_with("gaming() {\n"), "{template}");
-    s.write(".dotfiles/tux/init.sh", &format!("{template}\n{example}"));
+    s.write(".dotfiles/dotfiles.sh", &format!("{template}\n{example}"));
     let o = s.dotfiles(&["group-on", "gaming"]);
     assert_eq!(o.code, 0, "{}{}", o.events, o.err);
     assert!(
         o.calls.contains("sudo pacman -S --needed steam\n"),
+        "{}",
+        o.calls
+    );
+    let template = s.read(".dotfiles/tux/init.sh");
+    s.stub("chsh", "exit 0");
+    let example = uncommented(&template, "# sudo ");
+    assert!(example.starts_with("sudo pacman"), "{template}");
+    s.write(".dotfiles/tux/init.sh", &example);
+    let o = s.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.calls.contains("sudo pacman -S --needed zsh\n")
+            && o.calls.contains("sudo chsh -s /usr/bin/zsh "),
         "{}",
         o.calls
     );
@@ -2246,7 +2320,7 @@ fn what_is_added_is_backed_up_though_a_global_ignore_file_names_it() {
     );
     s.write(".claude/CLAUDE.md", "# Rules\n");
     let file = s.dir.join(".claude/CLAUDE.md");
-    let o = s.dotfiles(&["add", file.to_str().unwrap()]);
+    let o = s.dotfiles(&["add", "profile", file.to_str().unwrap()]);
     assert_eq!(o.code, 0, "{}{}", o.events, o.err);
     let key = s.dir.join(".dotfiles/.git/system-manager/tux.key");
     let made = Command::new("age-keygen")
@@ -2280,12 +2354,9 @@ fn a_function_ending_with_75_is_not_yet_applied_and_runs_at_the_next_setup() {
     functions(&s, &[firefox]);
     assert_eq!(s.dotfiles(&["group-on", "firefox"]).code, 0);
     assert_eq!(s.read(".dotfiles/tux/groups.txt"), "firefox\n");
-    functions(
-        &s,
-        &[
-            ("init", "echo init >>\"$HOME/ran\"\n    return 75"),
-            firefox,
-        ],
+    s.write(
+        ".dotfiles/tux/init.sh",
+        "echo init >>\"$HOME/ran\"\nexit 75\n",
     );
     assert_eq!(s.dotfiles(&["setup"]).code, 0);
     let o = s.dotfiles(&["setup"]);
@@ -2302,7 +2373,7 @@ fn nothing_is_made_before_something_goes_into_it() {
     let a = dotfiles("dotfiles-lazy-a");
     a.write(".zshrc", "x\n");
     assert_eq!(
-        a.dotfiles(&["add", a.dir.join(".zshrc").to_str().unwrap()])
+        a.dotfiles(&["add", "profile", a.dir.join(".zshrc").to_str().unwrap()])
             .code,
         0
     );
@@ -2331,9 +2402,12 @@ fn nothing_is_made_before_something_goes_into_it() {
     );
     let o = b.run("dotfiles", &["backup"], &other);
     assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    // The two files at the top came with the first profile and are not made again.
     for (path, there) in [
         ("other/init.sh", true),
-        ("other/dotfiles.yaml", true),
+        ("other/dotfiles.yaml", false),
+        ("dotfiles.yaml", true),
+        ("dotfiles.sh", true),
         ("other/packages/pacman.txt", true),
         ("other/packages/aur.txt", true),
         ("other/packages/flatpak.txt", false),
@@ -2492,7 +2566,7 @@ fn a_repository_that_does_not_fit_is_refused_and_the_address_taken_back() {
     let s = dotfiles("dotfiles-connect");
     s.write(".zshrc", "x\n");
     assert_eq!(
-        s.dotfiles(&["add", s.dir.join(".zshrc").to_str().unwrap()])
+        s.dotfiles(&["add", "profile", s.dir.join(".zshrc").to_str().unwrap()])
             .code,
         0
     );

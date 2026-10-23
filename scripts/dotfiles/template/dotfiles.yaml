@@ -1,0 +1,8 @@
+# The groups of the Dotfiles page, for every profile. Switched on there, a group runs the function
+# of dotfiles.sh that install names, and set up runs it again where it changed. For example:
+#
+# groups:
+#   - name: Gaming
+#     description: Steam, Lutris and Wine
+#     install: gaming
+groups: []

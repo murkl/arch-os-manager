@@ -83,17 +83,17 @@ remember() {
     record
 }
 
-# Notes a function of init.sh as run here in the state its hash names.
+# Notes a function of dotfiles.sh as run here in the state its hash names.
 ran() {
-    local key="${profile}/init.sh/$1"
+    local key="dotfiles.sh/$1"
     blob["$key"]="$2"
     when["$key"]="$EPOCHSECONDS"
     record
 }
 
-# The hash a function of init.sh last ran with here, empty where it never did.
+# The hash a function of dotfiles.sh last ran with here, empty where it never did.
 applied() {
-    local key="${profile}/init.sh/$1"
+    local key="dotfiles.sh/$1"
     printf '%s\n' "${blob[$key]:-}"
 }
 
@@ -146,14 +146,17 @@ ensure_repository() {
     fi
 }
 
-# The profile, made where it is missing as something goes into it, with the two files a new one
-# starts with. They are the person's from then on: one deleted stays deleted. The template's
-# init.sh does nothing, so it counts as run.
+# The profile, made where it is missing as something goes into it, with its init.sh, and with
+# dotfiles.yaml and dotfiles.sh beside it where the dotfiles lack them. They are the person's from
+# then on: one deleted stays deleted. The template's init.sh does nothing, so it counts as run.
 ensure_profile() {
-    local template="${BASH_SOURCE[0]%/*}/profile"
+    local template="${BASH_SOURCE[0]%/*}/template" file
     if [ -d "$profile" ]; then return 0; fi
+    for file in dotfiles.yaml dotfiles.sh; do
+        if [ ! -e "$file" ]; then cp -- "${template}/${file}" .; fi
+    done
     mkdir -p -- "$profile"
-    cp -- "${template}/init.sh" "${template}/dotfiles.yaml" "${profile}/"
+    cp -- "${template}/profile/init.sh" "${profile}/"
     remember "${profile}/init.sh"
 }
 
@@ -248,13 +251,27 @@ aside() {
     echo "${HOME}/$1 -> ${backup}/$1"
 }
 
+# The home/ folders of this machine that exist: the profile's, then the one of every machine
+# beside the profiles. A place in both is the profile's.
+homes() {
+    local dir
+    for dir in "${profile}/home" home; do
+        if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
+    done
+}
+
 # Every file of home/, by its place in $HOME and its path in the dotfiles after a tab.
 leaves() {
-    local leaf
-    if [ ! -d "${profile}/home" ]; then return 0; fi
-    while IFS= read -r -d '' leaf; do
-        printf '%s\t%s\n' "$(decode "${leaf#"$profile"/home/}")" "$leaf"
-    done < <(find "${profile}/home" -mindepth 1 \( -type f -o -type l \) -print0)
+    local dir leaf place
+    local -A seen=()
+    while IFS= read -r -u 4 dir; do
+        while IFS= read -r -d '' leaf; do
+            place="$(decode "${leaf#"$dir"/}")"
+            if [ -n "${seen[$place]:-}" ]; then continue; fi
+            seen["$place"]=1
+            printf '%s\t%s\n' "$place" "$leaf"
+        done < <(find "$dir" -mindepth 1 \( -type f -o -type l \) -print0)
+    done 4< <(homes)
 }
 
 # Every place of home/ in $HOME, a line each, as the record of the links keeps them.
@@ -267,42 +284,59 @@ linked() {
     [ -L "${HOME}/$1" ] && [ "$(realpath -m -- "${HOME}/$1")" = "${here}/$2" ]
 }
 
+# Whether a place in $HOME is a link into a home/ of this machine.
+ours() {
+    local target
+    if [ ! -L "${HOME}/$1" ]; then return 1; fi
+    target="$(realpath -m -- "${HOME}/$1")"
+    [[ $target == "${here}/home/"* || $target == "${here}/${profile}/home/"* ]]
+}
+
 # Takes the links to files that left home/ since the last link here: each place the record of it
-# names that is a link into the profile with nothing behind it.
+# names that is a link into a home/ with nothing behind it.
 prune() {
     local place
     if [ ! -f "${mine}/${profile}.links" ]; then return 0; fi
     while IFS= read -r place; do
-        if [ -L "${HOME}/${place}" ] && [ ! -e "${HOME}/${place}" ] &&
-            [[ "$(realpath -m -- "${HOME}/${place}")" == "${here}/${profile}/home/"* ]]; then
-            rm -- "${HOME}/${place}"
-        fi
+        if ours "$place" && [ ! -e "${HOME}/${place}" ]; then rm -- "${HOME}/${place}"; fi
     done <"${mine}/${profile}.links"
 }
 
 # home/ into $HOME through stow, folders real, files linked. What stands where a link goes, a file
-# of its own or a link elsewhere, goes into the backup first.
+# of its own or a link elsewhere, goes into the backup first. A link of the other home/ makes way
+# for the profile's and stays where the profile has nothing.
 link() {
-    local entry place
+    local dir entry place
     prune
-    if [ -d "${profile}/home" ]; then
+    while IFS= read -r -u 4 dir; do
         while IFS= read -r -d '' entry; do
-            place="$(decode "${entry#"$profile"/home/}")"
+            place="$(decode "${entry#"$dir"/}")"
             if [ -d "$entry" ] && [ ! -L "$entry" ]; then
                 if [ -L "${HOME}/${place}" ] || { [ -e "${HOME}/${place}" ] && [ ! -d "${HOME}/${place}" ]; }; then
                     aside "$place"
                 fi
             elif { [ -e "${HOME}/${place}" ] || [ -L "${HOME}/${place}" ]; } && ! linked "$place" "$entry"; then
-                aside "$place"
+                if ! ours "$place"; then
+                    aside "$place"
+                elif [ "$dir" = "${profile}/home" ]; then
+                    rm -- "${HOME}/${place}"
+                fi
             fi
-        done < <(find "${profile}/home" -mindepth 1 -print0)
-        stow_home || exit 16
-    fi
+        done < <(find "$dir" -mindepth 1 -print0)
+    done 4< <(homes)
+    stow_home || exit 16
     keep "${mine}/${profile}.links" places
 }
 
+# The profile's home/ first, then the one of every machine, which leaves the places the profile
+# took.
 stow_home() {
-    stow --dir="${here}/${profile}" --target="$HOME" --dotfiles --no-folding --restow home
+    if [ -d "${profile}/home" ]; then
+        stow --dir="${here}/${profile}" --target="$HOME" --dotfiles --no-folding --restow home || return 1
+    fi
+    if [ -d home ]; then
+        stow --dir="$here" --target="$HOME" --dotfiles --no-folding --restow --defer='.*' home || return 1
+    fi
 }
 
 # The age key on this machine of the secrets of a folder of the dotfiles, a profile or the homelab.
@@ -457,18 +491,18 @@ lacking() {
     LC_ALL=C comm -23 <(listed "$1" | LC_ALL=C sort -u) <("${@:2}" | LC_ALL=C sort -u)
 }
 
-# A command after init.sh, in a shell of its own in the profile's folder: init.sh holds functions
-# as a PKGBUILD does, read first and run strict as makepkg runs those. What init.sh prints as it is
-# read goes to the details.
-sourced() {
-    (cd -- "$profile" && bash -c 'set -euo pipefail; . ./init.sh >&2; "$@"' init.sh "$@")
+# A command in a shell of its own in a folder of the dotfiles, strict as makepkg runs a PKGBUILD,
+# with dotfiles.sh read first where there is one: `strict <folder> <command>`. What dotfiles.sh
+# prints as it is read goes to the details.
+strict() {
+    (cd -- "$1" && bash -c 'set -euo pipefail; if [ -f "$1" ]; then . "$1" >&2; fi; "${@:2}"' bash "${here}/dotfiles.sh" "${@:2}")
 }
 
-# The hash of a function of init.sh as bash reads it, so a comment or a space changes nothing.
-# Empty where init.sh lacks it.
+# The hash of a function of dotfiles.sh as bash reads it, so a comment or a space changes nothing.
+# Empty where dotfiles.sh lacks it.
 fingerprint() {
     local text
-    text="$(sourced declare -f "$1" 2>/dev/null)" || return 0
+    text="$(strict . declare -f "$1" 2>/dev/null)" || return 0
     git hash-object --stdin <<<"$text"
 }
 
@@ -480,11 +514,11 @@ known() {
     done
 }
 
-# Runs a function of init.sh and records it where it succeeds: `hook <function> <hash>`. 75,
+# Runs a function of dotfiles.sh and records it where it succeeds: `hook <function> <hash>`. 75,
 # EX_TEMPFAIL of sysexits.h, says not yet: it runs again next time.
 hook() {
     local status=0
-    sourced "$1" || status=$?
+    strict . "$1" || status=$?
     case "$status" in
     0) ran "$1" "$2" ;;
     75)
@@ -495,10 +529,9 @@ hook() {
     esac
 }
 
-# A group's function as dotfiles.yaml names it after install: a name bash takes for a function,
-# other than init, which set up calls anyway.
+# A group's function as dotfiles.yaml names it after install: a name bash takes for a function.
 group() {
-    if [[ ! $1 =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || [ "$1" = init ]; then exit 38; fi
+    if [[ ! $1 =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; then exit 38; fi
 }
 
 # groups.txt with a function more.
@@ -515,6 +548,7 @@ without() {
 # where it or the profile is missing.
 op_state() {
     local t counts place file files=0 missing=0 name status
+    local -a on=()
     printf 'dir\t%s\nprofile\t%s\nhost\t%s\n' "$SM_DOTFILES" "$SM_PROFILE" "$(</proc/sys/kernel/hostname)"
     if [ ! -e "$SM_DOTFILES" ]; then
         printf 'repo\tmissing\n'
@@ -554,12 +588,19 @@ op_state() {
         if changed "$file"; then status=changed; fi
         printf 'init\t%s\t%s\n' "$status" "${when[$file]:-}"
     fi
-    # A group switched on is due where it never ran here. A change of its function is one of init.sh.
-    while IFS= read -r name; do
+    # A group switched on is due where it never ran here. Whether its function changed shows only
+    # as dotfiles.sh is read, which a run does, so dotfiles.sh is due where it changed since.
+    mapfile -t on < <(listed "${profile}/groups.txt")
+    for name in "${on[@]}"; do
         status=applied
         if ! known "$name"; then status=changed; fi
         printf 'group\t%s\t%s\n' "$name" "$status"
-    done < <(listed "${profile}/groups.txt")
+    done
+    if [ ${#on[@]} -gt 0 ] && [ -f dotfiles.sh ]; then
+        status=applied
+        if changed dotfiles.sh; then status=changed; fi
+        printf 'functions\t%s\n' "$status"
+    fi
     secrets_state
     gnome_state
     packages_state
@@ -670,7 +711,7 @@ fits() {
 # packages, the groups and GNOME. What the profile brought since the last time is applied, what
 # this machine changed since stays for a backup.
 op_setup() {
-    local name file uuid present lack repos later=0
+    local name file uuid present lack repos status later=0
     local -a on=() wanted=() repo=() gone=() missing=() apps=()
     local -A hash=()
     enter
@@ -686,18 +727,26 @@ op_setup() {
         restore_secrets
     fi
 
-    # The functions of init.sh where it changed since its last setup here or a group switched on
-    # never ran here. init.sh is read on its own first, so a failure of its own is no missing
-    # function.
+    # The functions of the groups switched on where dotfiles.sh changed since its last setup here
+    # or one of them never ran here. dotfiles.sh is read on its own first, so a failure of its own
+    # is no missing function.
     mapfile -t on < <(listed "${profile}/groups.txt")
     for name in "${on[@]}"; do group "$name"; done
-    if { [ -f "${profile}/init.sh" ] && changed "${profile}/init.sh"; } || ! known "${on[@]}"; then
-        step init
-        if [ -f "${profile}/init.sh" ]; then sourced true || exit 17; fi
-        for name in init "${on[@]}"; do hash["$name"]="$(fingerprint "$name")"; done
+    if [ ${#on[@]} -gt 0 ] && { ! known "${on[@]}" || changed dotfiles.sh; }; then
+        if [ ! -f dotfiles.sh ]; then exit 38; fi
+        strict . true || exit 45
+        for name in "${on[@]}"; do hash["$name"]="$(fingerprint "$name")"; done
     fi
-    if [ -n "${hash[init]:-}" ] && [ "$(applied init)" != "${hash[init]}" ]; then
-        hook init "${hash[init]}" || exit 17
+    # init.sh where it changed since it last ran here, remembered as it is where it is done.
+    if [ -f "${profile}/init.sh" ] && changed "${profile}/init.sh"; then
+        step init
+        status=0
+        strict "$profile" . ./init.sh || status=$?
+        case "$status" in
+        0) remember "${profile}/init.sh" ;;
+        75) echo "Not yet: init.sh" ;;
+        *) exit 17 ;;
+        esac
     fi
 
     step packages
@@ -736,7 +785,7 @@ op_setup() {
         echo "$name"
         hook "$name" "${hash[$name]}" || exit 18
     done
-    if [ ${#hash[@]} -gt 0 ] && [ "$later" = 0 ]; then remember "${profile}/init.sh"; fi
+    if [ ${#hash[@]} -gt 0 ] && [ "$later" = 0 ]; then remember dotfiles.sh; fi
 
     if [ -d "${profile}/gnome" ] && gnome_shell; then
         step gnome
@@ -763,12 +812,15 @@ op_setup() {
 }
 
 # The parts of the dotfiles that changed, for the commit message: `nvim, packages`. A file of
-# home/ counts by its program, the folder below .config or .local/share or its own name.
+# a home/ counts by its program, the folder below .config or .local/share or its own name.
 areas() {
     git status --porcelain --untracked-files=all | cut -c4- | awk -F/ -v p="$profile" '
-        $1 == p && $2 == "home" && NF >= 3 {
-            path = $3
-            for (i = 4; i <= NF; i++) path = path "/" $i
+        { n = 0 }
+        $1 == "home" { n = 2 }
+        $1 == p && $2 == "home" { n = 3 }
+        n && NF >= n {
+            path = $n
+            for (i = n + 1; i <= NF; i++) path = path "/" $i
             sub(/^dot-config\//, "", path)
             sub(/^dot-local\/share\//, "", path)
             sub(/^dot-local\//, "", path)
@@ -825,15 +877,20 @@ op_backup() {
 # Runs the function of a group and switches it on in the profile, so a setup runs it again where
 # it changed.
 op_group_on() {
-    local hash later=0
+    local hash name later=0
     enter
     group "$1"
-    if [ ! -f "${profile}/init.sh" ]; then exit 38; fi
-    sourced true || exit 17
+    if [ ! -f dotfiles.sh ]; then exit 38; fi
+    strict . true || exit 45
     hash="$(fingerprint "$1")"
     if [ -z "$hash" ]; then exit 38; fi
     hook "$1" "$hash" || exit 18
     keep "${profile}/groups.txt" with "$1"
+    # dotfiles.sh is applied here once every group on ran with its function as it is now.
+    while IFS= read -r name; do
+        if [ "$(applied "$name")" != "$(fingerprint "$name")" ]; then return 0; fi
+    done < <(listed "${profile}/groups.txt")
+    remember dotfiles.sh
 }
 
 # Switches a group off in the profile. What its function installed stays.
@@ -883,15 +940,21 @@ kept() {
     return 1
 }
 
-# Moves a file or folder of $HOME into home/ and links it back.
+# Moves a file or folder of $HOME into a home/ and links it back: `add shared|profile <path>`,
+# the one of every machine or the profile's.
 op_add() {
-    local path="$1" dest
+    local scope="$1" path="$2" dest
+    case "$scope" in
+    shared) dest=home ;;
+    profile) dest="${profile}/home" ;;
+    *) exit 46 ;;
+    esac
     if kept "$path"; then exit 33; fi
     refuse "$path"
     ensure_repository
     enter
     ensure_profile
-    dest="${profile}/home/$(encode "${path#"$HOME"/}")"
+    dest="${dest}/$(encode "${path#"$HOME"/}")"
     mkdir -p -- "$(dirname -- "$dest")"
     mv -- "$path" "$dest"
     # Taken back whole where stow finds something else in the way.
@@ -953,9 +1016,9 @@ tidy() {
 }
 
 # Gives a link back as the file it points to, or every link of a folder, and takes the file out of
-# home/.
+# its home/.
 op_remove() {
-    local chosen="${1%/}" place file new found=0
+    local chosen="${1%/}" place file new base found=0
     enter
     while IFS=$'\t' read -r -u 4 place file; do
         if [[ ${HOME}/$place != "$chosen" && ${HOME}/$place != "$chosen"/* ]] || ! linked "$place" "$file"; then
@@ -965,7 +1028,9 @@ op_remove() {
         cp --preserve=mode,timestamps -- "$file" "$new"
         mv -f -- "$new" "${HOME}/${place}"
         rm -- "$file"
-        tidy "$file" "${profile}/home"
+        base="${file%%/*}"
+        if [ "$base" != home ]; then base="${base}/home"; fi
+        tidy "$file" "$base"
         found=1
     done 4< <(leaves)
     if [ "$found" = 0 ]; then exit 34; fi
@@ -1033,7 +1098,7 @@ op_homelab_init() {
     enter
     mkdir -p -- "${lab}/${server}"
     if [ ! -e "${lab}/${server}/cup" ]; then
-        cp -r -- "${BASH_SOURCE[0]%/*}/homelab/cup" "${lab}/${server}/"
+        cp -r -- "${BASH_SOURCE[0]%/*}/template/homelab/cup" "${lab}/${server}/"
     fi
     if [ ! -e "${lab}/homelab.yaml" ]; then
         printf '%s\n' \

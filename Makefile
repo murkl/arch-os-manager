@@ -8,7 +8,7 @@ BIN := target/release/system-manager
 # this way. Bash: the scripts the runtime runs, the files they put in place,
 # and the tools.
 POSIX_SCRIPTS := $(wildcard .github/*.sh)
-BASH_SCRIPTS  := $(wildcard scripts/*/*.sh scripts/*/*/*.sh tools/*.sh)
+BASH_SCRIPTS  := $(wildcard scripts/*/*.sh scripts/*/*/*.sh scripts/*/*/*/*.sh tools/*.sh)
 
 .PHONY: all build check secrets-check fmt fmt-check lint test aur-check run install screenshots banner github clean
 

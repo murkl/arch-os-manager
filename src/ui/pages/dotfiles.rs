@@ -46,6 +46,9 @@ pub fn due(s: &State) -> Option<(String, Tone)> {
     if s.groups.iter().any(|(_, ran)| changed(ran)) {
         return Some((t("group changed").into(), Tone::Accent));
     }
+    if s.functions.is_some_and(|ran| changed(&ran)) {
+        return Some((t("dotfiles.sh changed").into(), Tone::Accent));
+    }
     s.due_gnome
         .then(|| (t("GNOME changed").into(), Tone::Accent))
 }
@@ -194,7 +197,7 @@ impl DotfilesPage {
 /// The question before a setup: exactly what happens.
 fn setup_job(s: &State) -> Job {
     let text = tf(
-        "Set up this machine from {profile}?\nFetches the latest state, links the files, writes the secrets, calls init and the groups switched on where they changed, and installs what the package lists name. What stands in the way of a link goes to ~/.dotfiles-backup.",
+        "Set up this machine from {profile}?\nFetches the latest state, links the files, writes the secrets, runs init.sh and the groups switched on where they changed, and installs what the package lists name. What stands in the way of a link goes to ~/.dotfiles-backup.",
         &[("profile", &place(s))],
     );
     Job::new(op::DOTFILES_SETUP, Vec::new())
@@ -228,14 +231,14 @@ fn group_job(s: &State, name: &str, install: &str) -> Job {
     if s.on(install) {
         Job::new(op::DOTFILES_GROUP_OFF, args)
             .confirm(tf(
-                "Switch {name} off?\nSet up no longer calls {install} of init.sh. What it installed stays.",
+                "Switch {name} off?\nSet up no longer calls {install} of dotfiles.sh. What it installed stays.",
                 what,
             ))
             .named(name)
     } else {
         Job::new(op::DOTFILES_GROUP_ON, args)
             .confirm(tf(
-                "Set up {name}?\nCalls {install} of init.sh and switches the group on in the profile {profile}, so set up calls it on its other machines too.",
+                "Set up {name}?\nCalls {install} of dotfiles.sh and switches the group on in the profile {profile}, so set up calls it on its other machines too.",
                 what,
             ))
             .named(name)
@@ -334,7 +337,10 @@ impl Page for DotfilesPage {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Act {
-    AddFile,
+    /// A file into the home/ of every machine.
+    AddShared,
+    /// A file into the profile's home/.
+    AddOwn,
     RemoveFile,
     AddSecret,
     RemoveSecret,
@@ -385,7 +391,10 @@ impl Page for FilesPage {
             n => n.to_string(),
         };
         let rows = vec![
-            Row::new(Act::AddFile, t("Add a file")).icon(icon::FILE_ADD, Tone::Normal),
+            Row::new(Act::AddShared, t("Add a file for every machine"))
+                .icon(icon::FILE_ADD, Tone::Normal),
+            Row::new(Act::AddOwn, t("Add a file for this machine"))
+                .icon(icon::FILE_ADD, Tone::Normal),
             Row::new(Act::RemoveFile, t("Remove a file"))
                 .icon(icon::FILE_REMOVE, Tone::Normal)
                 .detail(count(s.files), Tone::Muted)
@@ -419,17 +428,32 @@ impl Page for FilesPage {
         };
         let profile = place(&s);
         match act {
-            Act::AddFile => Flow::Push(Box::new(BrowsePage::new(
-                t("Add a file"),
-                move |path, ctx| {
+            Act::AddShared | Act::AddOwn => {
+                let (title, scope, dir) = match act {
+                    Act::AddShared => (
+                        t("Add a file for every machine"),
+                        "shared",
+                        tilde(&s.dir.join("home").display().to_string()),
+                    ),
+                    _ => (
+                        t("Add a file for this machine"),
+                        "profile",
+                        tilde(&s.dir.join(&s.profile).join("home").display().to_string()),
+                    ),
+                };
+                Flow::Push(Box::new(BrowsePage::new(title, move |path, ctx| {
                     let shown = tilde(&path.display().to_string());
-                    let job = Job::new(op::DOTFILES_ADD, vec![path.display().to_string()]).confirm(tf(
-                    "Add {path} to the dotfiles?\nIt moves into {profile} and a link takes its place.",
-                    &[("path", &shown), ("profile", &profile)],
-                ));
+                    let job = Job::new(
+                        op::DOTFILES_ADD,
+                        vec![scope.to_string(), path.display().to_string()],
+                    )
+                    .confirm(tf(
+                        "Add {path} to the dotfiles?\nIt moves into {dir} and a link takes its place.",
+                        &[("path", &shown), ("dir", &dir)],
+                    ));
                     Flow::Push(start(job, ctx))
-                },
-            ))),
+                })))
+            }
             Act::RemoveFile if s.files == 0 => Flow::Stay,
             Act::RemoveFile => Flow::Push(Box::new(SelectPage::reading(
                 t("Remove a file"),
@@ -491,6 +515,8 @@ mod tests {
         crate::i18n::set(crate::i18n::Lang::En);
         let mut s = example().state;
         assert_eq!(due(&s), None);
+        s.functions = Some(Ran::Changed);
+        assert_eq!(due(&s).unwrap().0, "dotfiles.sh changed");
         s.links = 2;
         assert_eq!(due(&s).unwrap().0, "2 links missing");
         s.init = Some((Ran::Changed, None));
@@ -549,7 +575,7 @@ mod tests {
         );
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("Set up Gaming?") && shown.contains("Calls gaming of init.sh"),
+            shown.contains("Set up Gaming?") && shown.contains("Calls gaming of dotfiles.sh"),
             "{shown}"
         );
         let no = shown

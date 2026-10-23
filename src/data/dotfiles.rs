@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::i18n::{t, tf};
+use crate::i18n::tf;
 use crate::script::{Failure, op, query};
 
 /// The repository, as the script finds it.
@@ -18,7 +18,7 @@ pub enum Repo {
     Ready,
 }
 
-/// Whether this machine ran init.sh as it is now, or a group at all.
+/// Whether this machine ran init.sh as it is now, or a group with dotfiles.sh as it is now.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Ran {
     Applied,
@@ -59,6 +59,8 @@ pub struct State {
     pub init: Option<(Ran, Option<jiff::Timestamp>)>,
     /// The groups switched on, by function.
     pub groups: Vec<(String, Ran)>,
+    /// dotfiles.sh, where a group is on: whether a setup read it as it is now.
+    pub functions: Option<Ran>,
     /// Secrets a setup would write.
     pub due_secrets: usize,
     /// GNOME settings or extensions the profile brings that this machine has not loaded.
@@ -107,6 +109,7 @@ impl State {
                 ["key", v] => s.unlocked = Some(*v == "unlocked"),
                 ["init", ran, at] => s.init = Some((Ran::parse(ran), timestamp(at))),
                 ["group", install, ran] => s.groups.push((install.to_string(), Ran::parse(ran))),
+                ["functions", ran] => s.functions = Some(Ran::parse(ran)),
                 ["pending", "secrets", _] => s.due_secrets = n(2),
                 ["pending", "gnome"] => s.due_gnome = true,
                 ["unsaved", part] => s.unsaved.push(part.to_string()),
@@ -130,8 +133,7 @@ impl State {
     }
 }
 
-/// A group of the profile's dotfiles.yaml: a name, a sentence, and the function of init.sh that
-/// sets it up.
+/// A group of dotfiles.yaml: a name, a sentence, and the function of dotfiles.sh that sets it up.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
@@ -158,10 +160,10 @@ fn function(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || "_-".contains(c))
 }
 
-/// The groups of a profile's dotfiles.yaml. None without the file. Whether init.sh holds each
-/// function shows only once it is read, which a run does.
-pub fn groups(profile: &Path) -> Result<Vec<Group>, String> {
-    let path = profile.join("dotfiles.yaml");
+/// The groups of dotfiles.yaml at the top of the dotfiles, for every profile. None without the
+/// file. Whether dotfiles.sh holds each function shows only once it is read, which a run does.
+pub fn groups(dotfiles: &Path) -> Result<Vec<Group>, String> {
+    let path = dotfiles.join("dotfiles.yaml");
     let src = match std::fs::read_to_string(&path) {
         Ok(src) => src,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -190,9 +192,6 @@ fn parse_groups(src: &str) -> Result<Vec<Group>, String> {
                 install,
             ));
         }
-        if g.install == "init" {
-            return Err(t("dotfiles.yaml: init is no group, set up calls it anyway").into());
-        }
         if groups[..i].iter().any(|o| o.install == g.install) {
             return Err(tf("dotfiles.yaml: {install} sets up two groups", install));
         }
@@ -201,9 +200,8 @@ fn parse_groups(src: &str) -> Result<Vec<Group>, String> {
 }
 
 /// What a profile holds, one of them at least, as the script of the dotfiles shapes it.
-const PARTS: [&str; 8] = [
+const PARTS: [&str; 7] = [
     "init.sh",
-    "dotfiles.yaml",
     "home",
     "secrets",
     "key.age",
@@ -213,7 +211,7 @@ const PARTS: [&str; 8] = [
 ];
 
 /// The profiles of the dotfiles: every folder at their top holding a part of a profile, by name.
-/// Another folder there, as the homelab or pictures kept along, is none.
+/// Another folder there, as `home` of every machine, the homelab or pictures kept along, is none.
 pub fn profiles(dir: &Path) -> Vec<String> {
     let mut found: Vec<String> = std::fs::read_dir(dir)
         .into_iter()
@@ -222,7 +220,7 @@ pub fn profiles(dir: &Path) -> Vec<String> {
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
         .filter(|e| PARTS.iter().any(|part| e.path().join(part).exists()))
         .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|name| !name.starts_with('.'))
+        .filter(|name| !name.starts_with('.') && name != "home")
         .collect();
     found.sort();
     found
@@ -268,10 +266,7 @@ impl Dotfiles {
     pub fn load() -> Result<Dotfiles, Failure> {
         let state = State::parse(&query(op::DOTFILES_STATE, &[])?);
         let (groups, profiles) = match state.repo {
-            Repo::Ready => (
-                groups(&state.dir.join(&state.profile)),
-                profiles(&state.dir),
-            ),
+            Repo::Ready => (groups(&state.dir), profiles(&state.dir)),
             _ => (Ok(Vec::new()), Vec::new()),
         };
         Ok(Dotfiles {
@@ -324,7 +319,7 @@ mod tests {
             "dir\t/home/tux/.dotfiles\nprofile\ttux-notebook\nhost\ttux\nrepo\tready\n",
             "remote\tgit@github.com:tux/dotfiles.git\nahead\t1\nbehind\t2\nchanges\t3\n",
             "files\t12\nlinks\t2\nsetup\t1792130400\ninit\tchanged\t1792130000\n",
-            "group\tgaming\tapplied\ngroup\toffice\tchanged\n",
+            "group\tgaming\tapplied\ngroup\toffice\tchanged\nfunctions\tchanged\n",
             "secrets\t3\nkey\tunlocked\npending\tsecrets\t1\npending\tgnome\n",
             "unsaved\tsecrets\nunsaved\tgnome\nunsaved\tpackages\n",
             "backup\t/home/tux/.dotfiles-backup/2026-10-22-151020\nhomelab\tready\n"
@@ -341,6 +336,7 @@ mod tests {
         assert_eq!((ran, at.unwrap().as_second()), (Ran::Changed, 1792130000));
         assert!(s.on("gaming") && !s.on("development"));
         assert_eq!(s.groups[1].1, Ran::Changed);
+        assert_eq!(s.functions, Some(Ran::Changed));
         assert_eq!((s.due_secrets, s.due_gnome), (1, true));
         assert_eq!(s.unsaved, ["secrets", "gnome", "packages"]);
         assert_eq!(s.backups.len(), 1);
@@ -390,10 +386,6 @@ mod tests {
                 "groups:\n  - name: G\n    install: ''\n",
                 "no name of a function",
             ),
-            (
-                "groups:\n  - name: G\n    install: init\n",
-                "init is no group",
-            ),
             ("groups:\n  - name: ' '\n    install: office\n", "no name"),
             (
                 "groups:\n  - name: G\n    install: office\n  - name: H\n    install: office\n",
@@ -414,11 +406,11 @@ mod tests {
     }
 
     #[test]
-    fn the_template_of_a_new_profile_has_no_group_yet() {
+    fn the_template_of_new_dotfiles_has_no_group_yet() {
         let template = std::str::from_utf8(
             crate::embedded::SCRIPTS
                 .iter()
-                .find(|(f, _)| *f == "dotfiles/profile/dotfiles.yaml")
+                .find(|(f, _)| *f == "dotfiles/template/dotfiles.yaml")
                 .unwrap()
                 .1,
         )
@@ -461,6 +453,7 @@ mod tests {
         for d in [
             "work/home",
             "home-pc",
+            "home/dot-config",
             ".git/home",
             "res/wallpaper",
             "homelab",
@@ -468,7 +461,10 @@ mod tests {
             std::fs::create_dir_all(dir.join(d)).unwrap();
         }
         std::fs::write(dir.join("home-pc/init.sh"), "").unwrap();
+        // The home/ of every machine is no profile, whatever it keeps.
+        std::fs::write(dir.join("home/key.age"), "").unwrap();
         std::fs::write(dir.join("homelab/homelab.yaml"), "").unwrap();
+        std::fs::write(dir.join("dotfiles.yaml"), "").unwrap();
         std::fs::write(dir.join("README.md"), "").unwrap();
         assert_eq!(profiles(dir), ["home-pc", "work"]);
     }

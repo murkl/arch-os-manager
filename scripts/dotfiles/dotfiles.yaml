@@ -143,8 +143,8 @@ errors:
     Plain http and git:// are refused
     They carry the dotfiles unencrypted. Take the https or ssh address.
   38: |
-    init.sh has no such function
-    dotfiles.yaml names a function of init.sh after install, other than init.
+    dotfiles.sh has no such function
+    dotfiles.yaml names a function of dotfiles.sh after install.
   39: |
     The profile has no secrets yet
   40: |
@@ -162,3 +162,9 @@ errors:
   44: |
     No path in the folder of the server
     A path such as traefik/.env, neither starting with / nor holding ..
+  45: |
+    dotfiles.sh does not read
+    Outside its functions stand only definitions. Its output in the details names the line.
+  46: |
+    No such home folder
+    A file goes to shared, the home folder of every machine, or to profile, the one of this machine.
