@@ -45,13 +45,32 @@ asks() {
 }
 
 # A closed terminal stops no run: sudo, on a terminal of its own by default,
-# passes pacman no hangup. A run, which $SM_RUN names, holds shutdown and sleep
-# off where logind answers, through a lock that ends with the script.
+# passes pacman no hangup. A run, which $SM_RUN names, holds its run_lock and,
+# where logind answers, shutdown and sleep off. Each through a process that
+# ends with the script, so nothing the run starts, such as a build server,
+# keeps it. The run lock is shared, so runs never wait for each other.
 sm_hold() {
+    local lock held
     trap '' HUP
-    if [ -z "${SM_RUN:-}" ] || ! systemd-inhibit --list >/dev/null 2>&1; then return 0; fi
+    if [ -z "${SM_RUN:-}" ]; then return 0; fi
+    if lock="$(run_lock)"; then
+        exec {held}>>"$lock"
+        flock --shared "$held"
+        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
+        exec {held}>&-
+    fi
+    if ! systemd-inhibit --list >/dev/null 2>&1; then return 0; fi
     systemd-inhibit --what=shutdown:sleep --mode=block --who="System Manager" --why="$SM_RUN" \
         tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
+}
+
+# The lock a run of this script holds while it lasts, for a query to wait on.
+# In this user's runtime folder, which every session has and only this user
+# writes. Without one of its own, as for root through sudo, there is none.
+run_lock() {
+    local dir="${BASH_SOURCE[-1]%/*}"
+    if ! [ -O "${XDG_RUNTIME_DIR:-}" ]; then return 1; fi
+    echo "${XDG_RUNTIME_DIR}/system-manager-${dir##*/}.lock"
 }
 
 # In the terminal the person sees every program before it runs, as

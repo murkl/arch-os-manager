@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::data::features::Features;
 use crate::data::updates::{self, Pending, Source};
 use crate::i18n::{self, Lang, t, tn};
-use crate::script::{self, Failure, op, query};
+use crate::script::{self, Failure, op, query, query_within};
 use crate::settings::Settings;
 use crate::state::State;
 use crate::ui::Target;
@@ -239,11 +239,22 @@ fn init() -> ExitCode {
     }
 }
 
-/// The pending updates, with the AUR helper the settings choose.
+/// How long a check waits for an upgrade of this user to end.
+const UPGRADE: Duration = Duration::from_secs(60 * 60);
+
+/// The pending updates, with the AUR helper the settings choose, once an upgrade of this user has
+/// ended.
 fn pending(features: &Features) -> Result<Pending, Failure> {
     if let Some(p) = script::missing(op::UPGRADE_LIST, features) {
         return Err(Failure::new(op::UPGRADE_LIST, format!("needs {p}")));
     }
+    // The query outlasts the script's own wait, which says why it gave up.
+    let wait = UPGRADE.as_secs().to_string();
+    query_within(
+        op::UPGRADE_IDLE,
+        &[&wait],
+        UPGRADE + Duration::from_secs(60),
+    )?;
     Ok(updates::parse(&query(op::UPGRADE_LIST, &[])?))
 }
 

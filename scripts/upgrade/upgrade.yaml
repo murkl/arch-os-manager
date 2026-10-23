@@ -1,6 +1,8 @@
 ops:
   list:
     title: Checking for updates
+  idle:
+    title: Waiting for the running update
   run:
     title: Updating the system
     root: true
@@ -15,3 +17,6 @@ errors:
   11: |
     The AUR packages could not be updated
     Everything else is up to date. The details show what the AUR helper reported.
+  12: |
+    The update check waited too long
+    An update is still running. Check again once it has ended.

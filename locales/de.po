@@ -848,6 +848,13 @@ msgstr ""
 "Die Paketserver sind nicht erreichbar. Prüfe die Internetverbindung.\n"
 
 msgid ""
+"The update check waited too long\n"
+"An update is still running. Check again once it has ended.\n"
+msgstr ""
+"Die Update-Prüfung hat zu lange gewartet\n"
+"Ein Update läuft noch. Prüfe erneut, sobald es beendet ist.\n"
+
+msgid ""
 "The update indicator could not be set up\n"
 "GNOME did not keep the commands it was given.\n"
 msgstr ""
@@ -928,6 +935,9 @@ msgstr "Version"
 
 msgid "Votes"
 msgstr "Stimmen"
+
+msgid "Waiting for the running update"
+msgstr "Auf das laufende Update wird gewartet"
 
 msgid "Website"
 msgstr "Website"

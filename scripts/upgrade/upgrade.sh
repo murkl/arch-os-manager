@@ -64,6 +64,20 @@ op_list() {
     fi
 }
 
+# Waits the seconds given at most while an upgrade of this user runs, as the
+# update indicator checks a few seconds after pacman, while Flatpak may still
+# update. flock ends with 1 when the time runs out.
+op_idle() {
+    local lock status=0
+    lock="$(run_lock)" || return 0
+    flock --wait "$1" "$lock" true || status=$?
+    case "$status" in
+    0) ;;
+    1) exit 12 ;;
+    *) false ;;
+    esac
+}
+
 # Repositories first, then what is built on top of them. A failing AUR helper
 # leaves Flatpak still to update.
 op_run() {
