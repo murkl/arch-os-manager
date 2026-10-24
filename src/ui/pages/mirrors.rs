@@ -44,7 +44,7 @@ impl Page for MirrorsPage {
         let weekly = if m.timer {
             (t("every week by itself"), Tone::Ok)
         } else {
-            (t("only by hand"), Tone::Muted)
+            (t("manual only"), Tone::Muted)
         };
         body.push(Block::Field(t("Ranking").into(), weekly.0.into(), weekly.1));
         body.push(Block::Blank);

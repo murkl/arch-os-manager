@@ -4,13 +4,13 @@ use std::time::{Duration, Instant};
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier};
+use ratatui::style::{Color, Modifier, Style as Cell};
 
 use crate::data::cleanup::Part;
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
 use crate::ui::detail::{Act, Block, Detail, done, failure, show};
-use crate::ui::draw::{card, center, cut, cut_front, put, waiting, wrap};
+use crate::ui::draw::{card, center, cut, cut_front, put, waiting, width, wrap};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::Lead;
@@ -25,7 +25,7 @@ const SETTLE: Duration = Duration::from_millis(618);
 pub struct Job {
     pub op: Op,
     pub args: Vec<String>,
-    /// Asked before the run, replacing the yaml's confirm: question, then what happens.
+    /// Asked before the run, replacing the yaml's confirm: question, then the irreversible effect.
     pub confirm: Option<String>,
     /// The action as the person chose it, which the header names.
     name: Option<String>,
@@ -143,6 +143,87 @@ impl Page for ConfirmPage {
     }
 }
 
+/// Why the typed password was not taken.
+fn note(empty: bool, rejected: bool) -> Option<&'static str> {
+    if empty {
+        Some(t("Password cannot be empty."))
+    } else if rejected {
+        Some(t("Wrong password."))
+    } else {
+        None
+    }
+}
+
+/// The password in a card, the same before a run and within one. Without a box it is checked.
+fn password_card(
+    area: Rect,
+    buf: &mut Buffer,
+    input: Option<&Input>,
+    note: Option<&str>,
+    ctx: &Ctx,
+) {
+    let s = ctx.style;
+    let (heading, text) = (
+        Prompt::Password.friendly(),
+        t("Enter the sudo password for this action."),
+    );
+    let indent = if s.glyphs.icons { 3 } else { 0 };
+    let widest = width(&heading).max(width(text)) as u16;
+    let w = (widest + indent + 6).min(area.width);
+    let room = w.saturating_sub(6 + indent) as usize;
+    let lines: Vec<(String, Cell)> = wrap(&heading, room)
+        .into_iter()
+        .map(|l| (l, s.bold(Tone::Normal)))
+        .chain(
+            wrap(text, room)
+                .into_iter()
+                .map(|l| (l, s.tone(Tone::Muted))),
+        )
+        .collect();
+    let inner = card(area, buf, w, lines.len() as u16 + 6, ctx);
+    let (x, end) = (inner.x + indent, inner.bottom());
+    let room = inner.width.saturating_sub(indent);
+    if indent > 0 {
+        put(
+            buf,
+            inner.x,
+            inner.y + 1,
+            icon::LOCK,
+            1,
+            s.tone(Tone::Accent),
+        );
+    }
+    let mut y = inner.y + 1;
+    for (line, style) in &lines {
+        if y < end {
+            put(buf, x, y, line, room, *style);
+        }
+        y += 1;
+    }
+    y += 1;
+    if y >= end {
+        return;
+    }
+    match input {
+        Some(input) => input.draw(buf, x, y, room, ctx),
+        None => {
+            let after = put(buf, x, y, s.spinner(), 2, s.tone(Tone::Accent));
+            put(
+                buf,
+                after + 1,
+                y,
+                t("Checking"),
+                room.saturating_sub(3),
+                s.tone(Tone::Muted),
+            );
+        }
+    }
+    if let Some(note) = note.filter(|_| y + 1 < end) {
+        let note = cut(note, room as usize, s.glyphs.ellipsis);
+        put(buf, x, y + 1, &note, room, s.tone(Tone::Error));
+    }
+}
+
 /// The password, proven by sudo before the run that needs it, once per session. sudo starts only
 /// with one to give: a prompt left unanswered counts towards the lock of pam_faillock.
 pub struct PasswordPage {
@@ -156,18 +237,21 @@ pub struct PasswordPage {
     failed: Option<Failure>,
     /// ⏎ came with nothing typed.
     empty: bool,
+    /// Since when sudo checks the password, and how many letters it had.
+    checking: Option<(Instant, usize)>,
 }
 
 impl PasswordPage {
     fn new(job: Job) -> PasswordPage {
         PasswordPage {
             job,
-            input: Input::masked(""),
+            input: Input::masked(t("Password")),
             probe: None,
             needed: false,
             auth: None,
             failed: None,
             empty: false,
+            checking: None,
         }
     }
 
@@ -192,7 +276,6 @@ impl Page for PasswordPage {
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
-        let s = ctx.style;
         if !self.needed && self.probe.is_none() && self.failed.is_none() {
             match Run::start(op::SYSTEM_NOPASSWD, &[], (24, 80), ctx.run_sink()) {
                 Ok(run) => self.probe = Some(run),
@@ -203,45 +286,23 @@ impl Page for PasswordPage {
             show(failure(f), area, buf, ctx);
             return;
         }
-        let mut y = area.y;
-        for line in wrap(t("This needs the password for sudo."), area.width as usize) {
-            put(buf, area.x, y, &line, area.width, s.bold(Tone::Normal));
-            y += 1;
-        }
-        for line in wrap(
-            t(
-                "It goes straight to sudo and is kept in memory for this session only, so it is asked once.",
-            ),
-            area.width as usize,
-        ) {
-            put(buf, area.x, y, &line, area.width, s.tone(Tone::Muted));
-            y += 1;
-        }
-        y += 1;
-        if self.asking() {
-            self.input.draw(buf, area.x, y, area.width, ctx);
-            let note = if self.empty {
-                Some(t("The password cannot be empty."))
-            } else if self.auth.as_ref().is_some_and(|r| r.rejected) {
-                Some(t("Wrong password, try again."))
-            } else {
-                None
-            };
-            if let Some(note) = note {
-                let note = cut(note, area.width as usize, s.glyphs.ellipsis);
-                put(buf, area.x, y + 2, &note, area.width, s.tone(Tone::Error));
+        if !self.needed {
+            if ctx.page_waited() {
+                password_card(area, buf, None, None, ctx);
             }
-        } else {
-            let x = put(buf, area.x, y, s.spinner(), 2, s.tone(Tone::Accent));
-            put(
-                buf,
-                x + 1,
-                y,
-                t("Checking"),
-                area.width,
-                s.tone(Tone::Muted),
-            );
+            return;
         }
+        let rejected = self.auth.as_ref().is_some_and(|r| r.rejected);
+        let mut typed = Input::masked(t("Password"));
+        let input = match self.checking {
+            _ if self.asking() => Some(&self.input),
+            Some((since, letters)) if !ctx.waited(since) => {
+                typed.text = "x".repeat(letters);
+                Some(&typed)
+            }
+            _ => None,
+        };
+        password_card(area, buf, input, note(self.empty, rejected), ctx);
     }
 
     fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
@@ -266,6 +327,7 @@ impl Page for PasswordPage {
             }
             Key::Enter => {
                 let password = self.input.take();
+                self.checking = Some((Instant::now(), password.chars().count()));
                 match self.auth.as_mut() {
                     Some(run) => run.answer(&password),
                     None => {
@@ -507,6 +569,19 @@ impl RunPage {
         let Some(prompt) = self.prompt().cloned() else {
             return;
         };
+        self.input.masked = prompt == Prompt::Password;
+        self.input.placeholder = prompt.placeholder().to_string();
+        if prompt == Prompt::Password {
+            let rejected = self.run.as_ref().is_some_and(|r| r.rejected);
+            password_card(
+                area,
+                buf,
+                Some(&self.input),
+                note(self.empty, rejected),
+                ctx,
+            );
+            return;
+        }
         let s = ctx.style;
         let w = area.width.min(68);
         let question = wrap(&prompt.friendly(), w.saturating_sub(6) as usize);
@@ -525,36 +600,21 @@ impl RunPage {
         }
         y += 1;
         match &prompt {
-            Prompt::YesNo { .. } | Prompt::Choice { .. } => self.choices.draw(
-                Rect::new(
-                    inner.x + 2,
-                    y,
-                    inner.width.saturating_sub(2),
-                    answers.min(inner.bottom().saturating_sub(y)),
-                ),
-                buf,
-                ctx,
-            ),
-            Prompt::Password => {
-                self.input.masked = true;
+            Prompt::YesNo { .. } | Prompt::Choice { .. } => {
+                self.choices.draw(
+                    Rect::new(
+                        inner.x + 2,
+                        y,
+                        inner.width.saturating_sub(2),
+                        answers.min(inner.bottom().saturating_sub(y)),
+                    ),
+                    buf,
+                    ctx,
+                );
+            }
+            Prompt::Password | Prompt::Text { .. } => {
                 self.input.draw(buf, inner.x, y, inner.width, ctx);
             }
-            Prompt::Text { .. } => {
-                self.input.masked = false;
-                self.input.draw(buf, inner.x, y, inner.width, ctx);
-            }
-        }
-        let note = if prompt != Prompt::Password {
-            None
-        } else if self.empty {
-            Some(t("The password cannot be empty."))
-        } else if self.run.as_ref().is_some_and(|r| r.rejected) {
-            Some(t("Wrong password, try again."))
-        } else {
-            None
-        };
-        if let Some(note) = note {
-            put(buf, inner.x, y + 1, note, inner.width, s.tone(Tone::Error));
         }
     }
 
@@ -630,11 +690,13 @@ impl RunPage {
             Ok(()) => {
                 let mut body = vec![done(headline(outcome))];
                 if ctx.busy() {
-                    body.push(Block::Blank);
-                    body.push(Block::Text(
-                        format!("{}  {}", s.spinner(), t("Looking at the system")),
-                        Tone::Muted,
-                    ));
+                    if ctx.busy_shown() {
+                        body.push(Block::Blank);
+                        body.push(Block::Text(
+                            format!("{}  {}", s.spinner(), t("Reading the system")),
+                            Tone::Muted,
+                        ));
+                    }
                     (body, Vec::new())
                 } else {
                     let mut acts = next_steps(self.job.op, ctx);
@@ -670,7 +732,8 @@ impl RunPage {
             }
         };
         self.result.set(body, acts);
-        // In the terminal it lies on a card over the last output, which stays readable around it.
+        // With verbose output it lies on a card over the last output, which stays readable around
+        // it.
         let area = if ctx.settings.terminal() {
             let w = area.width.min(68);
             let h = self.result.height(w.saturating_sub(6), ctx) + 2;
@@ -724,7 +787,7 @@ impl Page for RunPage {
                 buf,
                 inner.x,
                 inner.y + 1,
-                &line(t("Stop the run?")),
+                &line(t("Stop the operation?")),
                 inner.width,
                 s.bold(Tone::Normal),
             );
@@ -732,7 +795,7 @@ impl Page for RunPage {
                 buf,
                 inner.x,
                 inner.y + 2,
-                &line(t("It is interrupted as with Ctrl+C.")),
+                &line(t("Sends Ctrl+C.")),
                 inner.width,
                 s.tone(Tone::Muted),
             );
@@ -746,11 +809,11 @@ impl Page for RunPage {
 
     fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
         let details = if self.details {
-            Does::Overview
+            Does::Compact
         } else {
             Does::Details
         };
-        // In the terminal there is no overview to switch to.
+        // Verbose output has no compact view to switch to.
         let terminal = ctx.settings.terminal();
         if self.cancel.is_some() {
             return vec![("↑↓", Does::Choose), ("⏎", Does::Answer)];
@@ -1000,7 +1063,104 @@ mod tests {
         open(&mut app, Box::new(page));
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);
-        assert!(shown.contains("The password cannot be empty."), "{shown}");
+        assert!(shown.contains("Password cannot be empty."), "{shown}");
+    }
+
+    #[test]
+    fn the_password_reads_the_same_before_a_run_and_within_it() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let card = |page: Box<dyn Page>| {
+            let (mut app, mut term) = app();
+            open(&mut app, page);
+            let shown = screen(&mut app, &mut term);
+            let lines: Vec<String> = shown
+                .lines()
+                .skip_while(|l| !l.contains('╭'))
+                .take_while(|l| !l.contains('╰'))
+                .map(String::from)
+                .collect();
+            assert!(
+                lines.iter().any(|l| l.contains("Authentication required")),
+                "{shown}"
+            );
+            lines
+        };
+        let mut before = PasswordPage::new(Job::new(op::UPGRADE_RUN, Vec::new()));
+        before.needed = true;
+        let run = Run::fed(op::UPGRADE_RUN, "repo", sudo::PROMPT);
+        let within = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        assert_eq!(card(Box::new(before)), card(Box::new(within)));
+    }
+
+    /// sudo is asked whether it needs the password, and then whether it takes it: each wait shows
+    /// only once it lasts, the typed letters stay meanwhile.
+    #[test]
+    fn the_password_card_waits_without_flashing() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let long_ago = Instant::now() - Duration::from_secs(1);
+        let (mut probing, mut term) = app();
+        probing.ctx.grace = Duration::from_millis(300);
+        let mut page = PasswordPage::new(Job::new(op::UPGRADE_RUN, Vec::new()));
+        page.probe = Some(Run::fed(op::SYSTEM_NOPASSWD, "", ""));
+        open(&mut probing, Box::new(page));
+        assert!(!screen(&mut probing, &mut term).contains("Authentication required"));
+        probing.ctx.shown.1 = long_ago;
+        assert!(screen(&mut probing, &mut term).contains("Checking"));
+
+        let (mut app, mut term) = app();
+        app.ctx.grace = Duration::from_millis(300);
+        let mut page = PasswordPage::new(Job::new(op::UPGRADE_RUN, Vec::new()));
+        page.needed = true;
+        page.auth = Some(Run::fed(op::SYSTEM_AUTH, "", ""));
+        page.checking = Some((Instant::now(), 4));
+        open(&mut app, Box::new(page));
+        let mask = app.ctx.style.glyphs.mask.repeat(4);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains(&mask) && !shown.contains("Checking"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn backspace_in_the_password_box_never_leaves_it() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
+        page.needed = true;
+        open(&mut app, Box::new(page));
+        press(&mut app, &[Key::Char('x'), Key::Backspace, Key::Backspace]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Password"), "{shown}");
+    }
+
+    #[test]
+    fn the_password_box_names_what_it_takes_until_something_is_typed() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
+        page.needed = true;
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        let (y, line) = shown
+            .lines()
+            .enumerate()
+            .find(|(_, l)| l.contains("Password"))
+            .unwrap_or_else(|| panic!("{shown}"));
+        let x = crate::ui::draw::width(&line[..line.find("Password").unwrap()]);
+        let cell = &term.backend().buffer()[(x as u16, y as u16)];
+        assert_eq!(cell.fg, app.ctx.style.muted, "dimmed: {shown}");
+        press(&mut app, &[Key::Char('x')]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("Password") && shown.contains(app.ctx.style.glyphs.mask),
+            "{shown}"
+        );
     }
 
     #[test]
@@ -1051,14 +1211,14 @@ mod tests {
         );
     }
 
-    /// In the terminal the run shows as it is from the start, its question typed rather than
+    /// With verbose output the run shows as it is from the start, its prompt typed rather than
     /// chosen, tab changes nothing, and the outcome lies on a card over the last output.
     #[test]
     fn in_the_terminal_the_run_shows_as_it_is_and_the_outcome_lies_over_it() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
-        app.ctx.settings.runs = Some("terminal".into());
+        app.ctx.settings.output = Some("verbose".into());
         let asked = ":: Proceed with installation? [Y/n] ";
         let footer = |shown: &str| {
             shown
@@ -1197,8 +1357,28 @@ mod tests {
             &mut app,
             Box::new(RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run)),
         );
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Password"),
+            "the empty box names it: {shown}"
+        );
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);
-        assert!(shown.contains("The password cannot be empty."), "{shown}");
+        assert!(shown.contains("Password cannot be empty."), "{shown}");
+    }
+
+    #[test]
+    fn a_menu_of_the_helper_names_what_enter_keeps() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let run = Run::fed(op::UPGRADE_RUN, "aur", "==> ");
+        assert!(matches!(run.prompt, Some(Prompt::Text { .. })));
+        open(
+            &mut app,
+            Box::new(RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run)),
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Empty for default"), "{shown}");
     }
 }

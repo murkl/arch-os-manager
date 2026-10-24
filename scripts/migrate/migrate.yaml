@@ -6,5 +6,5 @@ ops:
     title: Removing what the Arch OS Manager left
 errors:
   10: |
-    The GNOME dock still shows the Arch OS Manager
-    GNOME did not keep the change. Replace it in the dock by hand.
+    GNOME dock still shows the Arch OS Manager
+    Replace it in the dock manually.

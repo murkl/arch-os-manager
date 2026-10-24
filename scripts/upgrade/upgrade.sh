@@ -5,9 +5,9 @@
 # one to come. A source that cannot be asked is a line `failed` and its name, so the
 # others still count.
 op_list() {
-    # checkupdates syncs a copy of the databases, so nothing half-synced is left
-    # behind. It ends with 2 when there is nothing to update. Two at once, as the
-    # timer and the interface may run, would share that copy.
+    # checkupdates syncs a copy of the databases, so nothing half-synced is
+    # left, and ends with 2 when nothing is pending. Two at once, as the timer
+    # and the interface may run, share that copy.
     local status=0 repo pending apps
     repo="$(flock --wait 100 "${TMPDIR:-/tmp}/checkup-db-${UID}.lock" checkupdates)" || status=$?
     case "$status" in
@@ -16,8 +16,8 @@ op_list() {
     *) exit 10 ;;
     esac
 
-    # The helper ends with 1 both when nothing is pending and when it failed. Only
-    # a failure says why. A package pacman ignores stays as it is.
+    # The helper ends with 1 both when nothing is pending and when it failed,
+    # and only a failure says why. A package pacman ignores stays as it is.
     if [ -n "$SM_AUR" ]; then
         scratch
         pending="$(aur -Qua 2>"${work}/errors")" || true

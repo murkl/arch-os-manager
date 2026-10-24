@@ -1,5 +1,3 @@
-//! The pages.
-
 pub mod cleanup;
 pub mod features;
 pub mod firmware;

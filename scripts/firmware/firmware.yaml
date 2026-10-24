@@ -7,12 +7,11 @@ ops:
     root: true
     confirm: |
       Update the firmware?
-      The device writes the new firmware now or during the next restart. Keep it plugged in until it is done.
+      Keep the device connected until done.
     needs: [fwupd]
     steps:
       refresh: Loading the firmware catalogue
       update: Installing the firmware
 errors:
   10: |
-    The firmware catalogue could not be loaded
-    Check the internet connection.
+    Firmware catalogue not loaded

@@ -6,9 +6,9 @@ set -Eeuo pipefail
 shopt -s inherit_errexit nullglob
 export LC_ALL=C.UTF-8
 
-# An unexpected failure: code, file as upgrade/upgrade.sh, line, command. Nested
-# shells report from the inside out, so the runtime reads the first line. Quiet
-# on stderr, where the terminal would echo it as a program.
+# An unexpected failure: code, file as upgrade/upgrade.sh, line, command, quiet
+# on stderr, where the terminal would echo it as a program. Nested shells report
+# from the inside out, so the runtime reads the first line.
 trap '{ sm_failed $? "$LINENO" "$BASH_COMMAND"; } 2>/dev/null' ERR
 sm_failed() {
     local frame=1 line="$2" file dir
@@ -37,18 +37,16 @@ operation() {
     "op_${name//-/_}" "$@"
 }
 
-# Whether the tools ask, the person answering in the terminal. Else a script
-# spares each question with the tool's flag:
-# `if asks; then yes=(); else yes=(--noconfirm); fi`.
+# Whether tools prompt, as with verbose output. Else a script spares each prompt
+# with the tool's flag: `if asks; then yes=(); else yes=(--noconfirm); fi`.
 asks() {
     [ "${SM_TERMINAL:-}" = on ]
 }
 
-# A closed terminal stops no run: sudo, on a terminal of its own by default,
-# passes pacman no hangup. A run, which $SM_RUN names, holds its run_lock and,
-# where logind answers, shutdown and sleep off. Each through a process that
-# ends with the script, so nothing the run starts, such as a build server,
-# keeps it. The run lock is shared, so runs never wait for each other.
+# A closed terminal stops no run: sudo passes pacman no hangup. A run, named by
+# $SM_RUN, holds its run_lock, shared so runs never wait for each other, and
+# where logind answers shutdown and sleep off, each through a process that ends
+# with the script.
 sm_hold() {
     local lock held
     trap '' HUP
@@ -64,18 +62,18 @@ sm_hold() {
         tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
 }
 
-# The lock a run of this script holds while it lasts, for a query to wait on.
-# In this user's runtime folder, which every session has and only this user
-# writes. Without one of its own, as for root through sudo, there is none.
+# The lock a run of this script holds, for a query to wait on, in this user's
+# runtime folder, which only this user writes. None without one, as for root
+# through sudo.
 run_lock() {
     local dir="${BASH_SOURCE[-1]%/*}"
     if ! [ -O "${XDG_RUNTIME_DIR:-}" ]; then return 1; fi
     echo "${XDG_RUNTIME_DIR}/system-manager-${dir##*/}.lock"
 }
 
-# In the terminal the person sees every program before it runs, as
-# `$ sudo pacman -Syu`: xtrace, which sm_trace turns on for a program alone.
-# The space first, as bash repeats the first character of PS4 for a subshell.
+# Verbose output shows every program before it runs, as `$ sudo pacman -Syu`,
+# through xtrace, which sm_trace turns on for a program alone. The space first,
+# as bash repeats the first character of PS4 for a subshell.
 sm_terminal() {
     PS4=$' \e[90m$\e[0m '
     set -o functrace
@@ -125,8 +123,8 @@ aur() {
     "$SM_AUR" "$@"
 }
 
-# The helper on AUR packages, without the review and menus a run cannot answer.
-# In the terminal the person answers them.
+# The helper on AUR packages, without the review and menus a run cannot answer,
+# with them in verbose output.
 aur_sync() {
     if asks; then
         aur "$@"

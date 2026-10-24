@@ -101,9 +101,18 @@ impl Prompt {
     /// The question in the interface language, where its wording is known.
     pub fn friendly(&self) -> String {
         match self {
-            Prompt::Password => t("The password for sudo").to_string(),
+            Prompt::Password => t("Authentication required").to_string(),
             Prompt::YesNo { question, .. } | Prompt::Choice { question, .. } => translate(question),
             Prompt::Text { question } => question.clone(),
+        }
+    }
+
+    /// What the box of a typed answer shows while it is empty.
+    pub fn placeholder(&self) -> &'static str {
+        match self {
+            Prompt::Password => t("Password"),
+            Prompt::Text { .. } => t("Empty for default"),
+            Prompt::YesNo { .. } | Prompt::Choice { .. } => "",
         }
     }
 }
@@ -122,7 +131,7 @@ fn translate(q: &str) -> String {
             .map(|(_, r)| r.trim_end_matches('?'))
     {
         return tf(
-            "{a} and {b} cannot be installed together. Remove {remove}?",
+            "{a} and {b} conflict. Remove {remove}?",
             &[("a", &a), ("b", &b), ("remove", &remove)],
         );
     }
@@ -259,13 +268,28 @@ mod tests {
         );
         assert_eq!(
             ask("foo and bar are in conflict (baz). Remove bar?"),
-            "foo and bar cannot be installed together. Remove bar?"
+            "foo and bar conflict. Remove bar?"
         );
         assert_eq!(
             ask("Import PGP key 1234ABCD, \"Jane <j@x>\"?"),
             "Import the PGP key 1234ABCD of Jane <j@x>?"
         );
         assert_eq!(ask("Something new?"), "Something new?");
+    }
+
+    #[test]
+    fn an_empty_answer_box_names_what_it_takes() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        for (line, shows) in [
+            (format!("x{}", sudo::PROMPT), "Password"),
+            ("==> ".into(), "Empty for default"),
+        ] {
+            let p = Prompt::detect(&line, &[]).unwrap();
+            assert_eq!(p.placeholder(), shows, "{line}");
+        }
+        let chosen = Prompt::detect(":: Proceed with installation? [Y/n] ", &[]).unwrap();
+        assert_eq!(chosen.placeholder(), "", "chosen, not typed");
     }
 
     #[test]

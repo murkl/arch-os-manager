@@ -65,16 +65,19 @@ impl PackagesPage {
             return Vec::new();
         };
         let q = self.input.text.trim().to_lowercase();
+        let dropped = ctx.shared.dropped.ready();
         let local = |p: &crate::data::packages::Installed| {
-            let detail = if p.foreign {
-                format!("{}  AUR", p.version)
+            let (detail, tone) = if dropped.is_some_and(|d| d.contains(&p.name)) {
+                (format!("{}  {}", p.version, t("no source")), Tone::Warn)
+            } else if p.foreign {
+                (format!("{}  AUR", p.version), Tone::Muted)
             } else {
-                p.version.clone()
+                (p.version.clone(), Tone::Muted)
             };
             let glyph = if p.foreign { icon::ARCH } else { icon::PACKAGE };
             Row::new(Pick::Local(p.name.clone()), p.name.clone())
                 .icon(glyph, Tone::Ok)
-                .detail(detail, Tone::Muted)
+                .detail(detail, tone)
         };
         if q.is_empty() {
             let mut rows = vec![Row::heading(t("Installed by choice"))];
@@ -417,10 +420,19 @@ impl PackagePage {
         let mut acts = Vec::new();
         if info.local.is_some() {
             let name = n.clone();
-            acts.push(Act::new(t("Remove"), move |ctx: &mut Ctx| {
-                let text = tf("Remove {name}?\nWhat it alone needed goes with it, and its saved configuration too.", &[("name", &name)]);
-                Flow::Push(start(Job::new(op::PACKAGES_REMOVE, vec![name.clone()]).confirm(text), ctx))
-            }).icon(icon::REMOVE));
+            acts.push(
+                Act::new(t("Remove"), move |ctx: &mut Ctx| {
+                    let text = tf(
+                        "Remove {name}?\nRemoves with pacman -Rns.",
+                        &[("name", &name)],
+                    );
+                    Flow::Push(start(
+                        Job::new(op::PACKAGES_REMOVE, vec![name.clone()]).confirm(text),
+                        ctx,
+                    ))
+                })
+                .icon(icon::REMOVE),
+            );
             if info.sync.is_some() {
                 let name = n.clone();
                 acts.push(
@@ -557,7 +569,7 @@ impl MarkedPage {
                 &[("n", &installs.len()), ("m", &local.len())],
             );
             let text = tf(
-                "Install {install} and remove {remove}?\nWhat the removed ones alone needed goes with them, and their saved configuration too.",
+                "Install {install} and remove {remove}?\nRemoves with pacman -Rns.",
                 &[
                     ("install", &installs.join(", ")),
                     ("remove", &local.join(", ")),
@@ -621,10 +633,22 @@ impl MarkedPage {
             );
         }
         if !local.is_empty() {
-            acts.push(Act::new(tf("Remove {n}", &[("n", &local.len())]), move |ctx: &mut Ctx| {
-                let text = tf("Remove {names}?\nWhat they alone needed goes with them, and their saved configuration too.", &[("names", &local.join(", "))]);
-                Flow::Push(start(Job::new(op::PACKAGES_REMOVE, local.clone()).confirm(text), ctx))
-            }).icon(icon::REMOVE));
+            acts.push(
+                Act::new(
+                    tf("Remove {n}", &[("n", &local.len())]),
+                    move |ctx: &mut Ctx| {
+                        let text = tf(
+                            "Remove {names}?\nRemoves with pacman -Rns.",
+                            &[("names", &local.join(", "))],
+                        );
+                        Flow::Push(start(
+                            Job::new(op::PACKAGES_REMOVE, local.clone()).confirm(text),
+                            ctx,
+                        ))
+                    },
+                )
+                .icon(icon::REMOVE),
+            );
         }
         let mut detail = Detail::default();
         detail.set(body, acts);
@@ -688,7 +712,7 @@ impl Page for VersionsPage {
         if versions.is_empty() {
             crate::ui::detail::show(
                 vec![Block::Text(
-                    t("No other version is at hand.").into(),
+                    t("No other version available.").into(),
                     Tone::Muted,
                 )],
                 area,
@@ -741,7 +765,7 @@ impl Page for VersionsPage {
                     return Flow::Stay;
                 };
                 let text = tf(
-                    "Install {name} {version}?\nThe next update brings the current version back.",
+                    "Install {name} {version}?",
                     &[("name", &self.name), ("version", &version)],
                 );
                 Flow::Push(start(
@@ -830,6 +854,45 @@ impl Page for PkgbuildPage {
 mod tests {
     use super::*;
     use crate::data::packages::parse_installed;
+
+    #[test]
+    fn a_foreign_package_without_source_says_so() {
+        use crate::ui::app::tests::{app, open, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        app.ctx.shared.installed = Loaded::Ready(parse_installed(
+            "pkg	paru	2-1
+pkg	gone	1-1
+explicit	paru
+explicit	gone
+foreign	paru
+foreign	gone
+",
+        ));
+        app.ctx.shared.dropped = Loaded::Ready(vec!["gone".into()]);
+        open(&mut app, Box::new(PackagesPage::new()));
+        let shown = screen(&mut app, &mut term);
+        let row = |name: &str| shown.lines().find(|l| l.contains(name)).unwrap_or_default();
+        assert!(row("gone").ends_with("1-1  no source"), "{shown}");
+        assert!(row("paru").ends_with("2-1  AUR"), "{shown}");
+    }
+
+    #[test]
+    fn the_search_takes_letters_where_the_cursor_stands() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let (mut app, mut term) = app();
+        app.ctx.shared.installed = Loaded::Ready(Vec::new());
+        open(&mut app, Box::new(PackagesPage::new()));
+        let keys: Vec<Key> = "fire".chars().map(Key::Char).collect();
+        press(&mut app, &keys);
+        press(
+            &mut app,
+            &[Key::Left, Key::Left, Key::Char('x'), Key::CtrlBackspace],
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("› re"), "{shown}");
+    }
 
     #[test]
     fn a_search_lists_the_installed_then_the_repositories_then_the_aur() {

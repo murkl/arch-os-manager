@@ -1,5 +1,7 @@
 //! Settings: what is written to settings.yaml, and what follows from it on the system.
 
+use std::time::Instant;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -7,9 +9,9 @@ use super::features::FeaturesPage;
 use super::log::HiddenPage;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
-use crate::settings::{AUR_HELPERS, NOTIFY, RUNS};
+use crate::settings::{AUR_HELPERS, NOTIFY, OUTPUT};
 use crate::ui::detail::{Block, Detail};
-use crate::ui::draw::put;
+use crate::ui::draw::{cut, put};
 use crate::ui::fetch::Task;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{SETTINGS, Target};
@@ -28,7 +30,7 @@ pub struct SettingsPage {
     list: List<Target>,
     focus: Option<Target>,
     /// The app menu entry is being put in place. Its row waits and takes no press.
-    applying: Option<Task<Result<crate::integration::Applied, Failure>>>,
+    applying: Option<(Instant, Task<Result<crate::integration::Applied, Failure>>)>,
     /// Why the last switch could not be put in place.
     failed: Option<String>,
 }
@@ -56,6 +58,10 @@ impl SettingsPage {
                 let (text, tone) = on_off(ctx.settings.usage.unwrap_or(true));
                 (text.into(), tone, false)
             }
+            Target::Status => {
+                let (text, tone) = on_off(ctx.settings.status.unwrap_or(true));
+                (text.into(), tone, false)
+            }
             Target::AurHelper => {
                 let helper = script::aur().unwrap_or_else(|| t("none").into());
                 let text = if ctx.settings.aur_helper.is_none() {
@@ -65,7 +71,11 @@ impl SettingsPage {
                 };
                 (text, Tone::Muted, false)
             }
-            Target::Runs => (runs_label(ctx.settings.runs()).0.into(), Tone::Muted, false),
+            Target::Output => (
+                output_label(ctx.settings.output()).0.into(),
+                Tone::Muted,
+                false,
+            ),
             Target::Flatpak => {
                 let (text, tone) = on_off(ctx.settings.flatpak.unwrap_or(true));
                 (text.into(), tone, false)
@@ -88,7 +98,14 @@ impl SettingsPage {
                     (label(every).into(), tone, false)
                 }
             }
-            Target::Desktop if self.applying.is_some() => ctx.loading(),
+            Target::Desktop
+                if self
+                    .applying
+                    .as_ref()
+                    .is_some_and(|(since, _)| ctx.waited(*since)) =>
+            {
+                ctx.loading()
+            }
             Target::Desktop => {
                 let (text, tone) = on_off(ctx.settings.app_menu.unwrap_or(true));
                 (text.into(), tone, false)
@@ -123,9 +140,8 @@ impl SettingsPage {
         };
         let settings = ctx.settings.clone();
         self.failed = None;
-        self.applying = Some(Task::start(ctx, move || {
-            crate::integration::apply(&settings, &features)
-        }));
+        let task = Task::start(ctx, move || crate::integration::apply(&settings, &features));
+        self.applying = Some((Instant::now(), task));
     }
 }
 
@@ -146,14 +162,11 @@ fn label(every: &str) -> &'static str {
     }
 }
 
-/// What a way of `RUNS` is called, and what it does.
-fn runs_label(way: &str) -> (&'static str, &'static str) {
+/// What a way of `OUTPUT` is called, and what it does.
+fn output_label(way: &str) -> (&'static str, &'static str) {
     match way {
-        "terminal" => (
-            t("Terminal"),
-            t("every command shown, every question yours"),
-        ),
-        _ => (t("Overview"), t("the steps, questions answered for you")),
+        "verbose" => (t("Verbose"), t("terminal, every command and prompt")),
+        _ => (t("Compact"), t("progress, prompts as dialogs")),
     }
 }
 
@@ -164,18 +177,20 @@ impl Page for SettingsPage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         // Flatpak's row only once Flatpak is known to be installed.
-        let rows: Vec<Row<Target>> = SETTINGS
-            .iter()
-            .filter(|t| **t != Target::Flatpak || ctx.features().is_some_and(|f| f.ok("flatpak")))
-            .map(|&target| {
+        let flatpak = ctx.features().is_some_and(|f| f.ok("flatpak"));
+        let mut rows = Vec::new();
+        for (heading, group) in [t("Appearance"), t("System"), ""].into_iter().zip(SETTINGS) {
+            rows.push(Row::heading(heading));
+            for &target in group.iter().filter(|t| **t != Target::Flatpak || flatpak) {
                 let (detail, tone, dim) = self.value(target, ctx);
-                Row::new(target, target.label())
-                    .icon(target.icon(), Tone::Normal)
-                    .detail(detail, tone)
-                    .dim(dim)
-            })
-            .collect();
-        let height = rows.len() as u16;
+                rows.push(
+                    Row::new(target, target.label())
+                        .icon(target.icon(), Tone::Normal)
+                        .detail(detail, tone)
+                        .dim(dim),
+                );
+            }
+        }
         // A row still to come keeps the focus waiting.
         let focus = self.focus.filter(|t| rows.iter().any(|r| r.id == Some(*t)));
         self.list.set(rows);
@@ -183,25 +198,27 @@ impl Page for SettingsPage {
             self.focus = None;
             self.list.focus(&target);
         }
-        self.list.draw(
-            Rect {
-                height: area.height.min(height),
-                ..area
-            },
-            buf,
-            ctx,
-        );
         let unsaved = ctx
             .settings_unsaved
             .as_ref()
             .map(|e| tf("settings.yaml not saved: {error}", &[("error", e)]));
-        if let Some(e) = self.failed.clone().or(unsaved) {
+        let error = self.failed.clone().or(unsaved);
+        let room = Rect {
+            height: area
+                .height
+                .saturating_sub(if error.is_some() { 2 } else { 0 }),
+            ..area
+        };
+        let drawn = self.list.draw(room, buf, ctx);
+        if let Some(e) = error {
+            let width = area.width.saturating_sub(2);
+            let e = cut(&e, width.into(), ctx.style.glyphs.ellipsis);
             put(
                 buf,
                 area.x + 2,
-                area.y + height + 1,
+                area.y + drawn + 1,
                 &e,
-                area.width.saturating_sub(2),
+                width,
                 ctx.style.tone(Tone::Error),
             );
         }
@@ -218,7 +235,7 @@ impl Page for SettingsPage {
             Picked::Ignored => return Flow::Ignored,
         };
         match target {
-            t @ (Target::Language | Target::Theme | Target::AurHelper | Target::Runs) => {
+            t @ (Target::Language | Target::Theme | Target::AurHelper | Target::Output) => {
                 Flow::Push(choice(t, ctx))
             }
             Target::Notifications | Target::Desktop
@@ -244,6 +261,12 @@ impl Page for SettingsPage {
                 ctx.save_settings();
                 Flow::Stay
             }
+            Target::Status => {
+                let on = ctx.settings.status.unwrap_or(true);
+                ctx.settings.status = crate::settings::switch(!on);
+                ctx.save_settings();
+                Flow::Stay
+            }
             // The check, the update and the notification follow at once.
             Target::Flatpak => {
                 let on = !ctx.settings.flatpak.unwrap_or(true);
@@ -263,7 +286,7 @@ impl Page for SettingsPage {
     }
 
     fn done(&mut self, _: &mut Ctx) -> Flow {
-        if let Some(result) = self.applying.as_mut().and_then(Task::take) {
+        if let Some(result) = self.applying.as_mut().and_then(|(_, task)| task.take()) {
             self.applying = None;
             self.failed = result
                 .err()
@@ -312,14 +335,15 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
                 .collect(),
             ctx.settings.notify().into(),
         ),
-        Target::Runs => (
-            RUNS.iter()
+        Target::Output => (
+            OUTPUT
+                .iter()
                 .map(|way| {
-                    let (name, does) = runs_label(way);
+                    let (name, does) = output_label(way);
                     Row::new(way.to_string(), name).detail(does, Tone::Muted)
                 })
                 .collect(),
-            ctx.settings.runs().into(),
+            ctx.settings.output().into(),
         ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
@@ -381,8 +405,8 @@ impl ChoicePage {
                 ctx.settings.notify = (id != NOTIFY[0]).then(|| id.to_string());
                 ctx.reload();
             }
-            Target::Runs => {
-                ctx.settings.runs = (id != RUNS[0]).then(|| id.to_string());
+            Target::Output => {
+                ctx.settings.output = (id != OUTPUT[0]).then(|| id.to_string());
                 script::set_terminal(ctx.settings.terminal());
             }
             _ => {
@@ -576,7 +600,7 @@ mod tests {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (app, _) = crate::ui::app::tests::app();
         let mut page = SettingsPage::new(None);
-        page.applying = Some(Task::pending());
+        page.applying = Some((Instant::now(), Task::pending()));
         let spinning = |target| {
             let (text, ..) = page.value(target, &app.ctx);
             app.ctx.style.glyphs.spinner.contains(&text.as_str())
@@ -647,34 +671,33 @@ mod tests {
         assert_eq!(app.ctx.settings.notify, None);
     }
 
-    /// The way a run shows is chosen from a list, the overview being the default, and the
-    /// scripts follow at once.
+    /// The scripts follow the choice at once.
     #[test]
-    fn the_runs_are_chosen_from_a_list_and_the_overview_is_the_default() {
+    fn the_output_is_chosen_from_a_list_and_compact_is_the_default() {
         use crate::ui::app::tests::{app, open, press, screen};
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(Lang::En);
         let (mut app, mut term) = app();
-        for page in Target::Runs.open(&mut app.ctx) {
+        for page in Target::Output.open(&mut app.ctx) {
             open(&mut app, page);
         }
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("Overview") && shown.contains("every question yours"),
+            shown.contains("Compact") && shown.contains("every command and prompt"),
             "{shown}"
         );
         press(&mut app, &[Key::Down, Key::Enter]);
-        assert_eq!(app.ctx.settings.runs.as_deref(), Some("terminal"));
+        assert_eq!(app.ctx.settings.output.as_deref(), Some("verbose"));
         assert!(script::terminal());
         let shown = screen(&mut app, &mut term);
-        let row = shown.lines().find(|l| l.contains("Runs"));
-        assert!(row.is_some_and(|r| r.ends_with("Terminal")), "{shown}");
-        for page in Target::Runs.open(&mut app.ctx) {
+        let row = shown.lines().find(|l| l.contains("Output"));
+        assert!(row.is_some_and(|r| r.ends_with("Verbose")), "{shown}");
+        for page in Target::Output.open(&mut app.ctx) {
             open(&mut app, page);
         }
         screen(&mut app, &mut term);
         press(&mut app, &[Key::Up, Key::Enter]);
-        assert_eq!(app.ctx.settings.runs, None);
+        assert_eq!(app.ctx.settings.output, None);
         assert!(!script::terminal());
     }
 
@@ -734,7 +757,75 @@ mod tests {
         assert!(screen(&mut app, &mut term).contains("CPU"));
     }
 
-    /// A setting that could not be written says so under the list, until a write succeeds.
+    #[test]
+    fn appearance_and_system_stand_apart_and_about_last_on_its_own() {
+        use crate::ui::app::tests::{app, open, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, _) = app();
+        open(&mut app, Box::new(SettingsPage::new(None)));
+        let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 30)).unwrap();
+        let shown = screen(&mut app, &mut term);
+        let lines: Vec<&str> = shown.lines().map(str::trim).collect();
+        let at = |text: &str| {
+            lines
+                .iter()
+                .position(|l| l.contains(text))
+                .unwrap_or_else(|| panic!("{text}: {shown}"))
+        };
+        let heading = |text: &str| lines.iter().position(|l| *l == text).unwrap_or(0);
+        let (appearance, system) = (heading("Appearance"), heading("System"));
+        assert!(appearance > 0 && appearance < at("Language"), "{shown}");
+        assert!(
+            at("Hidden messages") < system && system < at("AUR helper"),
+            "{shown}"
+        );
+        assert_eq!(lines[system - 1], "", "{shown}");
+        assert!(at("Optional packages") < at("About"), "{shown}");
+        assert_eq!(lines[at("Optional packages") + 1], "", "{shown}");
+        assert_eq!(
+            at("Optional packages") + 2,
+            at("About"),
+            "one blank line: {shown}"
+        );
+    }
+
+    #[test]
+    fn the_status_switch_clears_the_right_of_the_start_page_and_back() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        let update = |shown: &str| {
+            let row = shown
+                .lines()
+                .find(|l| l.contains("Update"))
+                .unwrap_or_default();
+            row.trim_end().to_string()
+        };
+        assert!(update(&screen(&mut app, &mut term)).ends_with("updates"));
+        for page in Target::Status.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.ctx.settings.status, Some(false));
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("Main menu status"));
+        assert!(row.is_some_and(|r| r.ends_with("off")), "{shown}");
+        press(&mut app, &[Key::Esc]);
+        let shown = screen(&mut app, &mut term);
+        assert!(update(&shown).ends_with("Update"), "{shown}");
+        for page in Target::Status.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter, Key::Esc]);
+        assert_eq!(app.ctx.settings.status, None, "on is the default");
+        assert!(update(&screen(&mut app, &mut term)).ends_with("updates"));
+    }
+
     #[test]
     fn a_setting_not_written_says_so_until_a_write_succeeds() {
         use crate::ui::app::tests::{app, open, screen};

@@ -1,8 +1,6 @@
-//! The start of the interface and of every reload, until what the machine says is in: the Arch
-//! logo drawn line by line in a sweep of the accent, the name typed after it. What comes from
-//! outside, such as the updates, loads behind the start page. A reading that takes longer turns a
-//! spinner and names what it does. Any key but **r**, which asks for the reading under way, ends it
-//! at once. Nothing waits on it.
+//! The start of the interface and of every reload, until the machine is read: the Arch logo drawn
+//! line by line, the name typed after it, a spinner naming a reading that takes longer. Any key but
+//! **r** ends it, and nothing waits on it.
 
 use std::time::{Duration, Instant};
 
@@ -88,7 +86,7 @@ impl Page for SplashPage {
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         let s = &ctx.style;
         let at = self.at();
-        let logo = s.logo();
+        let logo = s.logo(area.width, area.height);
         let rows = logo.len() as u16;
         // The logo, the gap, the name and the version as one block in the middle.
         let top = area.y + area.height.saturating_sub(rows + GAP + 2) / 2;
@@ -149,7 +147,7 @@ impl Page for SplashPage {
             }
             // Where the other pages name their keys.
             if let Some((.., bottom)) = geometry(area).filter(|g| g.3 > y + 1) {
-                centred(buf, bottom, t("Any key continues"));
+                centred(buf, bottom, t("Press any key"));
             }
         }
     }
@@ -253,7 +251,7 @@ mod tests {
         let last = first.lines().rfind(|l| !l.trim().is_empty());
         assert!(first.contains("Reading the system state"), "{first}");
         assert!(!first.contains("Checking for updates"), "{first}");
-        assert_eq!(last.map(str::trim), Some("Any key continues"), "{first}");
+        assert_eq!(last.map(str::trim), Some("Press any key"), "{first}");
         assert!(matches!(page.tick(&mut app.ctx), Flow::Stay), "the machine");
         let ids: Vec<u64> = app.ctx.loads.iter().map(|l| l.id).collect();
         app.handle(Msg::Loaded(ids[1]));

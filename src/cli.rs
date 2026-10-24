@@ -12,7 +12,6 @@ use crate::settings::Settings;
 use crate::state::State;
 use crate::ui::Target;
 
-/// The pages the command line opens on.
 pub const PAGES: [&str; 12] = [
     "upgrade", "news", "packages", "services", "log", "cleanup", "pacnew", "mirrors", "firmware",
     "repair", "settings", "features",
@@ -33,10 +32,7 @@ pub fn commands() -> [(&'static str, Vec<(&'static str, String)>); 2] {
         (
             t("Commands"),
             vec![
-                (
-                    "init",
-                    s(t("Puts the menu entry and the notification in place")),
-                ),
+                ("init", s(t("Sets up the menu entry and the notification"))),
                 (
                     "check",
                     s(t("Prints pending updates (exit code 2 without any)")),
@@ -62,7 +58,6 @@ fn help() -> String {
     help
 }
 
-/// What the command line asks for.
 #[derive(Debug, PartialEq)]
 enum Ask {
     Help,
@@ -361,8 +356,8 @@ fn notify(only_new: bool) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let text = tn(
-        "{n} update is ready.",
-        "{n} updates are ready.",
+        "{n} update available.",
+        "{n} updates available.",
         list.len(),
         &[],
     );

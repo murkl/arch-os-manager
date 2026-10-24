@@ -1,6 +1,5 @@
-//! A page's own values, read in the background: one read anew after every run, one awaited once.
-//! Each comes back through a channel of its type, and the page is told when to look. Beside them
-//! the one thread that writes.
+//! A page's own values, read in the background: one read anew after every run, one awaited once,
+//! each through a channel of its type. Beside them the one thread that writes.
 
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, OnceLock};

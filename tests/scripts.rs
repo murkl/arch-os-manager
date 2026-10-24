@@ -591,7 +591,7 @@ fn a_notification_nobody_answers_stands_until_the_next() {
     let args = [
         "notify",
         "System update",
-        "6 updates are ready.",
+        "6 updates available.",
         "Update",
         "1",
     ];
@@ -627,7 +627,7 @@ fn a_notification_closes_the_one_its_server_still_shows_first() {
         let args = [
             "notify",
             "System update",
-            "6 updates are ready.",
+            "6 updates available.",
             "Update",
             "1",
             handle,
@@ -1690,24 +1690,30 @@ fn cleanup_drops_unused_runtimes_only_when_asked() {
 }
 
 /// The system's Docker is asked only while it runs, at the socket systemd listens on, and only
-/// its unused images and build cache go, never a container or a volume.
+/// its unused images and build cache go, never a container or a volume. A run starts what was
+/// inactive for the clean-up alone and stops it again, also when the clean-up fails.
 #[test]
 fn docker_is_asked_only_while_it_runs_and_keeps_containers_and_volumes() {
     let s = Sandbox::new("cleanup-docker");
     nothing_of_pacman(&s);
     let socket = s.dir.join("docker.sock");
-    let state = s.dir.join("docker-state");
+    let units = s.dir.join("units");
+    std::fs::create_dir_all(&units).unwrap();
+    // Each unit a file, active where it holds `active`. Starting the service pulls in what it
+    // requires and wants, as systemd does.
     s.stub(
         "systemctl",
         &format!(
-            r#"read -r unit active listen <'{}'
-case "$*" in
-"cat docker.service") [ "$unit" = yes ] ;;
-"is-active --quiet docker.service") [ "$active" = yes ] ;;
-"show --property=Listen --value docker.socket") echo "$listen (Stream)" ;;
+            r#"d='{}'
+case "$1" in
+cat) [ -e "$d/$2" ] ;;
+is-active) grep -qx active "$d/$3" 2>/dev/null ;;
+start) for u in "$2" docker.socket containerd.service; do echo active >"$d/$u"; done ;;
+stop) shift; for u; do echo inactive >"$d/$u"; done ;;
+show) echo "$(cat "$d/listen") (Stream)" ;;
 *) exit 1 ;;
 esac"#,
-            state.display()
+            units.display()
         ),
     );
     s.stub(
@@ -1716,11 +1722,32 @@ esac"#,
 --version) echo 'Docker version 29.9.1' ;;
 *" system df --format json") [ ! -e "$HOME/broken" ] && echo '{"Type":"Images","Reclaimable":"1GB (50%)"}' ;;
 *" system df --verbose --format json") echo '{"Images":[]}' ;;
+*" image prune "*) [ ! -e "$HOME/broken" ] ;;
 esac"#,
     );
     std::fs::write(&socket, "").unwrap();
-    let plan = |unit: &str, active: &str, listen: &str| {
-        std::fs::write(&state, format!("{unit} {active} {listen}\n")).unwrap();
+    let set = |service: &str, others: &str, listen: &str| {
+        for (unit, state) in [
+            ("docker.service", service),
+            ("docker.socket", others),
+            ("containerd.service", others),
+        ] {
+            let path = units.join(unit);
+            match state {
+                "none" => drop(std::fs::remove_file(&path)),
+                _ => std::fs::write(&path, format!("{state}\n")).unwrap(),
+            }
+        }
+        std::fs::write(units.join("listen"), listen).unwrap();
+    };
+    let active = |unit: &str| std::fs::read_to_string(units.join(unit)).unwrap() == "active\n";
+    let plan = |unit: &str, running: &str, listen: &str| {
+        let service = match (unit, running) {
+            ("no", _) => "none",
+            (_, "yes") => "active",
+            _ => "inactive",
+        };
+        set(service, "active", listen);
         let o = s.run("cleanup", &["plan"], &[]);
         assert_eq!(o.code, 0, "{}", o.events);
         o
@@ -1757,30 +1784,76 @@ esac"#,
     assert!(plan("yes", "yes", &sock).out.ends_with("docker\tfailed\n"));
     std::fs::remove_file(s.dir.join("broken")).unwrap();
 
+    let prune = format!(
+        "sudo docker --host unix://{sock} image prune --all --force\nsudo docker --host unix://{sock} builder prune --all --force\n"
+    );
+    let sudo = |o: &Outcome| -> String {
+        o.calls
+            .lines()
+            .filter(|l| l.starts_with("sudo "))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    };
+    let run = || {
+        let _ = std::fs::remove_file(s.dir.join("calls"));
+        s.run("cleanup", &["run", "docker"], &[])
+    };
     let o = s.run("cleanup", &["run", "orphans"], &[]);
     assert!(!o.calls.contains("prune"), "{}", o.calls);
-    let o = s.run("cleanup", &["run", "docker"], &[]);
+
+    set("active", "active", &sock);
+    let o = run();
     assert_eq!(
         (o.code, o.events.as_str()),
         (0, "step\tdocker\n"),
         "{}",
         o.calls
     );
+    assert_eq!(sudo(&o), prune, "a running Docker is only pruned");
+    let docker: Vec<&str> = o
+        .calls
+        .lines()
+        .filter(|l| l.contains("docker --host"))
+        .collect();
     assert!(
-        o.calls.ends_with(&format!(
-            "docker --host unix://{sock} image prune --all --force\ndocker --host unix://{sock} builder prune --all --force\n"
-        )),
+        docker
+            .iter()
+            .all(|l| !l.contains("volume") && !l.contains("container")),
+        "{docker:?}"
+    );
+
+    // Socket activated: the service starts for the clean-up and stops again, the socket stays.
+    set("inactive", "active", &sock);
+    let o = run();
+    assert_eq!(
+        (o.code, o.events.as_str()),
+        (0, "step\tdocker\n"),
         "{}",
         o.calls
     );
-    assert!(!o.calls.contains("volume") && !o.calls.contains("container"));
-    std::fs::write(&state, format!("yes no {sock}\n")).unwrap();
-    let o = s.run("cleanup", &["run", "docker"], &[]);
     assert_eq!(
-        (o.code, o.events.as_str()),
-        (0, ""),
-        "a stopped Docker is left alone"
+        sudo(&o),
+        format!("sudo systemctl start docker.service\n{prune}sudo systemctl stop docker.service\n")
     );
+    assert!(!active("docker.service") && active("docker.socket"));
+
+    // All of it off: everything started comes down again, also after a failed prune.
+    set("inactive", "inactive", &sock);
+    std::fs::write(s.dir.join("broken"), "").unwrap();
+    let o = run();
+    std::fs::remove_file(s.dir.join("broken")).unwrap();
+    assert_ne!(o.code, 0, "{}", o.calls);
+    assert!(
+        sudo(&o).ends_with("sudo systemctl stop docker.socket docker.service containerd.service\n"),
+        "{}",
+        o.calls
+    );
+    assert!(!active("docker.service") && !active("docker.socket") && !active("containerd.service"));
+
+    // Without the group docker the run still cleans up, as root.
+    set("active", "active", &gone);
+    let o = run();
+    assert_eq!(sudo(&o), prune.replace(&sock, &gone), "{}", o.calls);
 }
 
 /// This user's Podman lists the images no container uses, and only those go.

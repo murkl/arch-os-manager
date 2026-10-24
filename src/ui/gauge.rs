@@ -41,10 +41,9 @@ impl Block {
     }
 }
 
-/// The fullest three blocks that fit `width` with gaps of at least `GAP`, the first at its left
-/// edge and the last at its right. The bar says what the value says and goes first, then the name
-/// where an icon says it. A cell an odd width leaves over comes off the bar, or without one goes
-/// to the value, so both gaps stay equal.
+/// The fullest three blocks that fit `width` with gaps of at least `GAP`, the first and the last at
+/// the edges. The bar goes first, then the name where an icon says it, and an odd cell comes off
+/// the bar, else the value, so both gaps stay equal.
 fn layout(width: u16, icons: bool) -> Option<Block> {
     [(true, BAR), (true, 0), (false, 0)]
         .into_iter()
