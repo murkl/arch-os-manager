@@ -171,10 +171,7 @@ impl Page for HiddenPage {
             .collect();
         if rows.is_empty() {
             show(
-                vec![Block::Text(
-                    t("Nothing is hidden. Hide a message on the system log with x.").into(),
-                    Tone::Muted,
-                )],
+                vec![Block::Text(t("Nothing hidden.").into(), Tone::Muted)],
                 area,
                 buf,
                 ctx,

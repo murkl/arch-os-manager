@@ -60,8 +60,8 @@ fn parse(id: &str, src: &str) -> Result<Theme, String> {
     })
 }
 
-/// Built-in themes and the user's, by name. A user file with a built-in's id replaces it.
-/// The second list says which user files were skipped and why.
+/// Built-in themes and the user's, by name, a user file replacing the built-in of its id. The
+/// second list names the skipped user files and why.
 pub fn all() -> (Vec<Theme>, Vec<String>) {
     let mut themes: Vec<Theme> = crate::embedded::THEMES
         .iter()

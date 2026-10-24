@@ -13,5 +13,4 @@ ops:
       podman: Removing unused Podman images
 errors:
   11: |
-    A path to remove lies outside the caches
-    Nothing outside the package cache and the AUR build directories is removed.
+    Path outside the caches

@@ -9,6 +9,7 @@ mod highlight;
 pub(crate) mod icon;
 mod input;
 mod list;
+mod logo;
 mod pages;
 mod style;
 mod target;
@@ -47,6 +48,8 @@ pub enum Key {
     Enter,
     Esc,
     Backspace,
+    /// Many terminals send it as ^H.
+    CtrlBackspace,
     Delete,
     Tab,
     BackTab,
@@ -54,6 +57,8 @@ pub enum Key {
     Down,
     Left,
     Right,
+    CtrlLeft,
+    CtrlRight,
     PageUp,
     PageDown,
     Home,
@@ -108,7 +113,18 @@ impl Key {
         matches!(
             self.nav(false),
             Some(Nav::Up | Nav::Down | Nav::PageUp | Nav::PageDown)
-        ) || typing && matches!(self, Key::Char(_) | Key::Backspace | Key::Delete)
+        ) || typing
+            && matches!(
+                self,
+                Key::Char(_)
+                    | Key::Backspace
+                    | Key::CtrlBackspace
+                    | Key::Delete
+                    | Key::Left
+                    | Key::Right
+                    | Key::CtrlLeft
+                    | Key::CtrlRight
+            )
     }
 
     /// The bytes a terminal sends for the key, for the details view of a run.
@@ -119,6 +135,7 @@ impl Key {
             Key::Enter => b"\r".to_vec(),
             Key::Esc => b"\x1b".to_vec(),
             Key::Backspace => b"\x7f".to_vec(),
+            Key::CtrlBackspace => b"\x08".to_vec(),
             Key::Delete => b"\x1b[3~".to_vec(),
             Key::Tab => b"\t".to_vec(),
             Key::BackTab => b"\x1b[Z".to_vec(),
@@ -128,6 +145,8 @@ impl Key {
             Key::Down => b"\x1b[B".to_vec(),
             Key::Right => b"\x1b[C".to_vec(),
             Key::Left => b"\x1b[D".to_vec(),
+            Key::CtrlRight => b"\x1b[1;5C".to_vec(),
+            Key::CtrlLeft => b"\x1b[1;5D".to_vec(),
             Key::PageUp => b"\x1b[5~".to_vec(),
             Key::PageDown => b"\x1b[6~".to_vec(),
             Key::Home => b"\x1b[H".to_vec(),
@@ -197,6 +216,7 @@ pub enum Fresh {
     Updates(Result<Pending, Failure>),
     News(Result<(Vec<Item>, bool), Failure>),
     Installed(Result<Vec<Installed>, Failure>),
+    Dropped(Result<Vec<String>, Failure>),
     Services(Result<Vec<Service>, Failure>),
     Journal(Result<Vec<Entry>, Failure>),
     Pacnew(Result<Vec<String>, Failure>),
@@ -247,7 +267,7 @@ pub enum Does {
     Read,
     Unread,
     Details,
-    Overview,
+    Compact,
     Search,
     Filter,
     CloseSearch,
@@ -278,7 +298,7 @@ impl Does {
             Does::Read => t("read"),
             Does::Unread => t("unread"),
             Does::Details => t("details"),
-            Does::Overview => t("overview"),
+            Does::Compact => t("compact"),
             Does::Search => t("search"),
             Does::Filter => t("filter"),
             Does::CloseSearch => t("close search"),
@@ -382,6 +402,8 @@ pub struct Shared {
     /// The news, and whether they came from the cache because the feed was out of reach.
     pub news: Loaded<(Vec<Item>, bool)>,
     pub installed: Loaded<Vec<Installed>>,
+    /// Foreign packages the AUR does not know either: no update reaches them.
+    pub dropped: Loaded<Vec<String>>,
     pub services: Loaded<Vec<Service>>,
     pub journal: Loaded<Vec<Entry>>,
     pub pacnew: Loaded<Vec<String>>,
@@ -390,9 +412,13 @@ pub struct Shared {
     pub firmware: Loaded<Vec<Firmware>>,
 }
 
+/// A wait shorter than this never shows, so nothing flashes.
+pub const GRACE: Duration = Duration::from_millis(300);
+
 /// A job reading a shared value or writing settings, until its value is in.
 struct Load {
     id: u64,
+    started: Instant,
     /// What it runs, none for a write.
     op: Option<Op>,
     /// From outside the machine: the splash does not wait for it.
@@ -422,7 +448,6 @@ pub struct Ctx {
     reload: bool,
     /// Jobs reading shared values or writing settings, oldest first.
     loads: Vec<Load>,
-    /// The id of the last load.
     load: u64,
     tx: SyncSender<Msg>,
     wake: Arc<dyn Fn() + Send + Sync>,
@@ -431,6 +456,10 @@ pub struct Ctx {
     pub action: Option<String>,
     /// Where a text box is typed into this frame, for the terminal's own cursor.
     pub cursor: std::cell::Cell<Option<(u16, u16)>>,
+    /// `GRACE`, none in tests unless they ask for it.
+    grace: Duration,
+    /// The page on top and since when it shows.
+    shown: (PageId, Instant),
 }
 
 impl Ctx {
@@ -470,7 +499,12 @@ impl Ctx {
     fn begin(&mut self, op: Option<Op>, remote: bool) -> impl FnOnce(Fresh) + Send + 'static {
         self.load += 1;
         let id = self.load;
-        self.loads.push(Load { id, op, remote });
+        self.loads.push(Load {
+            id,
+            started: Instant::now(),
+            op,
+            remote,
+        });
         let (tx, wake) = (self.tx.clone(), self.wake.clone());
         move |fresh| {
             let _ = tx.send(Msg::Fresh(fresh));
@@ -485,9 +519,24 @@ impl Ctx {
         self.reload = true;
     }
 
-    /// Something loads in the background, which the header shows.
+    /// Something loads in the background.
     pub fn busy(&self) -> bool {
         !self.loads.is_empty() || self.reload
+    }
+
+    /// Whether a wait begun at `since` lasted long enough to show.
+    pub fn waited(&self, since: Instant) -> bool {
+        since.elapsed() >= self.grace
+    }
+
+    /// Whether the page on top waited long enough to show that it waits.
+    pub fn page_waited(&self) -> bool {
+        self.waited(self.shown.1)
+    }
+
+    /// Something loads long enough in the background for the header to show it.
+    pub fn busy_shown(&self) -> bool {
+        self.loads.iter().any(|l| self.waited(l.started))
     }
 
     /// Something of this machine still loads, which the splash waits for.
@@ -502,9 +551,14 @@ impl Ctx {
     }
 
     /// What a row says while its value is still being read: the spinner, in the accent colour,
-    /// and not dimmed.
+    /// and not dimmed, once the page waited long enough.
     pub fn loading(&self) -> (String, Tone, bool) {
-        (self.style.spinner().into(), Tone::Accent, false)
+        let spinner = if self.page_waited() {
+            self.style.spinner()
+        } else {
+            ""
+        };
+        (spinner.into(), Tone::Accent, false)
     }
 
     /// Writes on the thread of `fetch::serial`, and sends what came of it as a shared value.

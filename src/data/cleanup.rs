@@ -40,8 +40,8 @@ impl Part {
         Part::ALL.into_iter().find(|p| p.id() == id)
     }
 
-    /// Taken unless someone chose otherwise: what the system no longer needs. An image is pulled
-    /// or built on purpose, as a package is installed on purpose, and no clean-up removes that.
+    /// Taken unless chosen otherwise: what the system no longer needs. Images are pulled or built
+    /// on purpose, as packages are installed, so no engine is taken by default.
     pub fn default(self) -> bool {
         !matches!(self, Part::Docker | Part::Podman)
     }
@@ -55,7 +55,7 @@ pub enum Engine {
         unused: Vec<String>,
         bytes: Option<u64>,
     },
-    /// Docker's service is not running, and asking its socket would start it.
+    /// Docker's service is not running, and asking its socket would start it. A run starts it.
     Stopped,
     /// This user may not write to Docker's socket.
     Denied,
@@ -188,10 +188,12 @@ impl Plan {
         }
     }
 
-    /// Whether a part can be cleaned up now: an engine only once it answered.
+    /// Whether a part can be cleaned up now: an engine unless it failed to answer.
     pub fn ready(&self, part: Part) -> bool {
         match part {
-            Part::Docker | Part::Podman => matches!(self.engine(part), Some(Engine::Ready { .. })),
+            Part::Docker | Part::Podman => {
+                matches!(self.engine(part), Some(e) if *e != Engine::Failed)
+            }
             _ => true,
         }
     }
@@ -318,15 +320,16 @@ mod tests {
     }
 
     #[test]
-    fn an_engine_that_cannot_be_asked_frees_nothing_known() {
-        for (state, engine) in [
-            ("stopped", Engine::Stopped),
-            ("denied", Engine::Denied),
-            ("failed", Engine::Failed),
+    fn an_engine_not_asked_is_cleaned_up_without_a_known_size() {
+        for (state, engine, ready) in [
+            ("stopped", Engine::Stopped, true),
+            ("denied", Engine::Denied, true),
+            ("failed", Engine::Failed, false),
         ] {
             let p = Plan::parse(&format!("docker\t{state}\n"));
             assert_eq!(p.docker, Some(engine));
-            assert!(!p.ready(Part::Docker));
+            assert_eq!(p.ready(Part::Docker), ready, "{state}");
+            assert_eq!(p.bytes(Part::Docker), None);
             assert_eq!(p.frees(|_| true), 0);
         }
         let garbled = Plan::parse("docker\tready\ndocker-du\t{\"Images\":\n");

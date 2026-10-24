@@ -55,8 +55,8 @@ pub fn withdraw() {
     });
 }
 
-/// What the settings ask for, as far as the system offers it. The entry opens the window, so it
-/// needs a Wayland session, the timer a desktop and libnotify. Without them the settings wait.
+/// What the settings ask for, as far as the system offers it: the entry needs a Wayland session,
+/// the timer a desktop and libnotify. Without them the settings wait.
 fn plan(settings: &Settings, features: &Features) -> Applied {
     let desktop = features.lacks("desktop").is_none();
     Applied {

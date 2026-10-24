@@ -109,6 +109,19 @@ impl Features {
 mod tests {
     use super::*;
 
+    /// Shown as a sentence above the package's state.
+    #[test]
+    fn every_package_says_in_a_sentence_what_it_adds() {
+        for (_, name, probe) in packages() {
+            let adds = &probe.adds;
+            let first = adds.chars().next().unwrap_or(' ');
+            assert!(
+                first.is_uppercase() && adds.ends_with('.'),
+                "{name}: {adds}"
+            );
+        }
+    }
+
     #[test]
     fn the_pkgbuild_offers_exactly_the_probed_packages() {
         let pkgbuild = include_str!("../../aur/PKGBUILD");

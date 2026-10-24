@@ -16,11 +16,14 @@ pub struct Settings {
     /// The usage under the header of the start page, on unless switched off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub usage: Option<bool>,
+    /// What each row of the start page says on its right, on unless switched off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aur_helper: Option<String>,
-    /// How a run shows, one of `RUNS`, the overview unless chosen.
+    /// How a run shows, one of `OUTPUT`, compact unless chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runs: Option<String>,
+    pub output: Option<String>,
     /// The entry in the app menu, which opens the window, on unless switched off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_menu: Option<bool>,
@@ -45,9 +48,9 @@ pub struct Settings {
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
 /// How often updates are announced, `off` for never. The first is the default.
 pub const NOTIFY: [&str; 4] = ["hourly", "daily", "weekly", "off"];
-/// How a run shows: as the overview, or in the terminal only, where the person answers every
-/// question. The first is the default.
-pub const RUNS: [&str; 2] = ["overview", "terminal"];
+/// How a run shows: compact, or verbose in the terminal with every prompt typed. The first is the
+/// default.
+pub const OUTPUT: [&str; 2] = ["compact", "verbose"];
 
 /// A switch stored only as an exception: absent is on.
 pub fn switch(on: bool) -> Option<bool> {
@@ -115,15 +118,14 @@ impl Settings {
         {
             return Err(format!("notify: {n} is not one of {}", NOTIFY.join(", ")));
         }
-        if let Some(r) = &s.runs
-            && !RUNS.contains(&r.as_str())
+        if let Some(o) = &s.output
+            && !OUTPUT.contains(&o.as_str())
         {
-            return Err(format!("runs: {r} is not one of {}", RUNS.join(", ")));
+            return Err(format!("output: {o} is not one of {}", OUTPUT.join(", ")));
         }
         Ok(s)
     }
 
-    /// How often updates are announced, as one of `NOTIFY`.
     /// The time between two announcements, which the timer keeps and a notification waits for an
     /// answer: as `notify` says, an hour where the timer is off.
     pub fn every(&self) -> std::time::Duration {
@@ -143,17 +145,18 @@ impl Settings {
             .unwrap_or(NOTIFY[0])
     }
 
-    /// How a run shows, as one of `RUNS`.
-    pub fn runs(&self) -> &'static str {
-        RUNS.iter()
+    /// How a run shows, as one of `OUTPUT`.
+    pub fn output(&self) -> &'static str {
+        OUTPUT
+            .iter()
             .copied()
-            .find(|r| Some(*r) == self.runs.as_deref())
-            .unwrap_or(RUNS[0])
+            .find(|o| Some(*o) == self.output.as_deref())
+            .unwrap_or(OUTPUT[0])
     }
 
-    /// Whether a run shows in the terminal only, where the person answers every question.
+    /// Whether runs use verbose output.
     pub fn terminal(&self) -> bool {
-        self.runs() == "terminal"
+        self.output() == "verbose"
     }
 
     /// Whether the clean-up takes a part, as chosen or by default.
@@ -211,8 +214,9 @@ mod tests {
             language: Some("de".into()),
             theme: Some("nord".into()),
             usage: Some(false),
+            status: Some(false),
             aur_helper: Some("yay".into()),
-            runs: Some("terminal".into()),
+            output: Some("verbose".into()),
             app_menu: Some(false),
             notify: Some("daily".into()),
             flatpak: Some(false),
@@ -229,7 +233,7 @@ mod tests {
         assert!(Settings::parse("language: fr").is_err());
         assert!(Settings::parse("aur-helper: pikaur").is_err());
         assert!(Settings::parse("notify: often").is_err());
-        assert!(Settings::parse("runs: console").is_err());
+        assert!(Settings::parse("output: quiet").is_err());
         assert!(Settings::parse("flatpak: updates").is_err());
         assert!(Settings::parse("cleanup: {trash: true}").is_err());
         assert!(Settings::parse("cleanup: {docker: maybe}").is_err());
@@ -238,7 +242,7 @@ mod tests {
             "weekly"
         );
         assert_eq!(Settings::default().notify(), "hourly");
-        assert!(Settings::parse("runs: terminal").unwrap().terminal());
+        assert!(Settings::parse("output: verbose").unwrap().terminal());
         assert!(!Settings::default().terminal());
     }
 

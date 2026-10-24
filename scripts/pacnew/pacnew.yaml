@@ -19,14 +19,13 @@ ops:
       snapshot: Taking a snapshot
 errors:
   10: |
-    The files cannot be compared
-    One of them can only be read as root, or the original no longer exists. Take over or keep the new version without comparing, or merge it in Meld.
+    Files not comparable
   11: |
-    This is no configuration update
-    Only the files pacman leaves beside a configuration, such as .pacnew and .pacsave, are taken over, removed or merged.
+    Not a configuration update
+    Only .pacnew and .pacsave files.
   12: |
-    Nothing was merged
-    The configuration was not changed in Meld, so the new version stays for later.
+    Nothing merged
+    The new version stays pending.
   13: |
-    The merged configuration does not parse
-    visudo found an error in it, so the configuration stays as it was. Merge again.
+    Merged configuration invalid
+    visudo reports an error, nothing changed.

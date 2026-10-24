@@ -42,7 +42,6 @@ fn mark(ctx: &mut Ctx, link: &str, read: bool) {
     });
 }
 
-/// Whether an item was read.
 fn is_read(ctx: &Ctx, link: &str) -> bool {
     ctx.state
         .news_read
@@ -91,7 +90,7 @@ impl Page for NewsPage {
                 area.x,
                 area.y,
                 &crate::ui::draw::cut(
-                    t("Offline: the news as last loaded."),
+                    t("Offline: from cache."),
                     area.width.into(),
                     ctx.style.glyphs.ellipsis,
                 ),

@@ -123,7 +123,6 @@ impl Detail {
             .map_or(0, |at| at + 1);
     }
 
-    /// Puts the cursor on an action, by its position.
     pub fn focus(&mut self, index: usize) {
         self.list.focus(&index);
     }
@@ -397,7 +396,9 @@ pub fn loaded<'a, T>(
     match value {
         Loaded::Ready(v) => Some(v),
         Loaded::Loading => {
-            waiting(buf, area, t("Loading"), None, None, ctx);
+            if ctx.page_waited() {
+                waiting(buf, area, t("Loading"), None, None, ctx);
+            }
             None
         }
         Loaded::Failed(f) => {
@@ -405,10 +406,7 @@ pub fn loaded<'a, T>(
             None
         }
         Loaded::Missing(package) => {
-            let text = crate::i18n::tf(
-                "This needs {package}, see Settings, Optional packages.",
-                &[("package", package)],
-            );
+            let text = crate::i18n::tf("Requires {package}.", &[("package", package)]);
             show(vec![Block::Text(text, Tone::Muted)], area, buf, ctx);
             None
         }

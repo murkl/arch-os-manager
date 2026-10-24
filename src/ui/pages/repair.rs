@@ -31,17 +31,13 @@ impl RepairPage {
                 op: op::REPAIR_RUN,
                 name: t("Repair the package management"),
                 icon: icon::REPAIR,
-                note: t(
-                    "When updates fail on a stale lock or on signatures. Removes the lock, creates the keyring anew and updates the system.",
-                ),
+                note: t("Removes a stale lock, recreates the keyring and updates."),
             },
             Repair {
                 op: op::REPAIR_FILES,
                 name: t("Check the package files"),
                 icon: icon::VERIFY,
-                note: t(
-                    "When files went missing or changed after a crash or a full disk. Installs every package with altered files again. A configuration changed by hand stays.",
-                ),
+                note: t("Reinstalls packages with missing or altered files."),
             },
         ];
         let mut rows = Vec::new();
@@ -119,13 +115,10 @@ mod tests {
                 .unwrap_or_else(|| panic!("{text}: {shown}"))
         };
         assert_eq!(
-            at("When updates fail"),
+            at("Removes a stale lock"),
             at("Repair the package management") + 1
         );
-        assert_eq!(
-            at("When files went missing"),
-            at("Check the package files") + 1
-        );
+        assert_eq!(at("Reinstalls packages"), at("Check the package files") + 1);
         press(&mut app, &[Key::Down]);
         let shown = screen(&mut app, &mut term);
         let row = shown

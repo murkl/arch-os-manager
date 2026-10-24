@@ -151,7 +151,7 @@ impl Page for FilePage {
                 op::PACNEW_TAKE,
                 t("Use the new version"),
                 tf(
-                    "Use the new version?\n{target} is replaced. Changes made to it by hand stay only in a snapshot, where snapper keeps one.",
+                    "Use the new version?\nReplaces {target}.",
                     &[("target", &target)],
                 ),
                 self.file.clone(),
@@ -159,10 +159,7 @@ impl Page for FilePage {
             apply(
                 op::PACNEW_KEEP,
                 t("Keep the current version"),
-                tf(
-                    "Keep the current version?\nThe new version is deleted. {target} stays as it is.",
-                    &[("target", &target)],
-                ),
+                t("Keep the current version?\nDeletes the new version.").to_string(),
                 self.file.clone(),
             ),
         ];

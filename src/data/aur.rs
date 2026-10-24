@@ -50,6 +50,15 @@ pub fn parse(out: &str) -> Result<Vec<Package>, String> {
     Ok(all)
 }
 
+/// Of `names`, those the AUR did not answer with.
+pub fn unknown(names: &[String], found: &[Package]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|n| !found.iter().any(|p| &p.name == *n))
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,5 +75,13 @@ mod tests {
         );
         let e = r#"{"error":"Too many package results.","resultcount":0,"results":[],"type":"error","version":5}"#;
         assert_eq!(parse(e).unwrap_err(), "Too many package results.");
+    }
+
+    #[test]
+    fn a_name_the_aur_does_not_answer_is_unknown() {
+        let found = parse(r#"{"resultcount":1,"results":[{"Name":"paru","PackageBase":"paru","Version":"2.1.0-1"}],"type":"multiinfo","version":5}"#).unwrap();
+        let names = ["gone".to_string(), "paru".into(), "old".into()];
+        assert_eq!(unknown(&names, &found), ["gone", "old"]);
+        assert!(unknown(&names[1..2], &found).is_empty());
     }
 }

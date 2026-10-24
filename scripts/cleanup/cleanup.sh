@@ -98,7 +98,8 @@ candidates() {
 # taken from an earlier look, in a shell of its own: a substitution tested by || would run the
 # plan without errexit.
 op_run() {
-    local plan caches files builds file dir inside cache orphans socket part yes taken=" $* "
+    local plan caches files builds file dir inside cache orphans part yes unit socket status=0
+    local taken=" $* " inactive=()
     for part; do
         case "$part" in orphans | cache | aur | flatpak | docker | podman) ;; *) false ;; esac
     done
@@ -143,14 +144,25 @@ op_run() {
     fi
 
     # Images first, so the build cache they shared goes free with it. Containers and volumes
-    # hold data and stay.
+    # hold data and stay. As root, so the group docker is not needed. What was inactive starts
+    # for this alone and stops again, also when the prune fails.
     if asks; then yes=(); else yes=(--force); fi
-    if [[ $taken == *" docker "* ]] && [ "$(field docker "$plan")" = ready ]; then
+    if [[ $taken == *" docker "* ]] && [[ $(field docker "$plan") =~ ^(ready|stopped|denied)$ ]]; then
         step docker
+        for unit in docker.socket docker.service containerd.service; do
+            if systemctl cat "$unit" >/dev/null 2>&1 && ! systemctl is-active --quiet "$unit"; then
+                inactive+=("$unit")
+            fi
+        done
+        if ! systemctl is-active --quiet docker.service; then sudo systemctl start docker.service; fi
         socket="$(systemctl show --property=Listen --value docker.socket)"
         socket="${socket%% *}"
-        docker --host "unix://${socket}" image prune --all "${yes[@]}"
-        docker --host "unix://${socket}" builder prune --all "${yes[@]}"
+        {
+            sudo docker --host "unix://${socket}" image prune --all "${yes[@]}" &&
+                sudo docker --host "unix://${socket}" builder prune --all "${yes[@]}"
+        } || status=$?
+        if [ -n "${inactive[*]}" ]; then sudo systemctl stop "${inactive[@]}"; fi
+        if [ "$status" -ne 0 ]; then exit "$status"; fi
     fi
     if [[ $taken == *" podman "* ]] && [ "$(field podman "$plan")" = ready ]; then
         step podman

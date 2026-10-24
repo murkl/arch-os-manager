@@ -16,7 +16,7 @@ pub mod usage;
 pub mod vercmp;
 pub mod versions;
 
-use crate::i18n::{t, tf, tn};
+use crate::i18n::{t, tf};
 
 /// `8.08 MiB` as bytes, as pacman prints sizes.
 pub fn parse_size(s: &str) -> u64 {
@@ -42,7 +42,7 @@ pub fn format_size(bytes: u64) -> String {
         unit += 1;
     }
     if unit == 0 {
-        tn("{n} byte", "{n} bytes", bytes as usize, &[])
+        format!("{bytes} B")
     } else {
         format!("{value:.1} {}", UNITS[unit])
     }
@@ -73,11 +73,11 @@ mod tests {
     fn sizes_round_trip_in_pacman_units() {
         assert_eq!(parse_size("8.08 MiB"), 8_472_494);
         assert_eq!(parse_size("512.00 B"), 512);
-        assert_eq!(format_size(512), "512 bytes");
-        assert_eq!(format_size(1), "1 byte");
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(512), "512 B");
         assert_eq!(format_size(8_472_494), "8.1 MiB");
         assert_eq!(format_size(3 * 1024 * 1024 * 1024), "3.0 GiB");
         assert_eq!(format_size(1024 * 1024 - 1), "1.0 MiB");
-        assert_eq!(format_size(1023), "1023 bytes");
+        assert_eq!(format_size(1023), "1023 B");
     }
 }

@@ -1,14 +1,14 @@
 # Contributing
 
-`main` is the only long-lived branch. Every change branches off it and comes back as one commit, and a release is one more pull request.
+`main` is the only long-lived branch. Every change returns as one squashed commit, a release is one more pull request.
 
 ## Doing the Work
 
 ```
 make check      # the whole gate, as CI runs it
-make fmt        # every file formatted, by cargo fmt and shfmt
-make run        # the interface against a throwaway target/home
-make build      # the release binary
+make fmt        # cargo fmt and shfmt
+make run        # interface against a throwaway target/home
+make build      # release binary
 make install    # ~/.local/bin/system-manager
 ```
 
@@ -16,16 +16,16 @@ make install    # ~/.local/bin/system-manager
 sudo pacman -S --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib
 ```
 
-**Note:** _CI installs the same packages and runs the same commands in an Arch container. There is no second definition of green._
+**Note:** _CI runs the same commands in an Arch container._
 
 ### Where a Change Belongs
 
 - Reading or changing the system: `scripts/<area>/<area>.sh` and its `<area>.yaml`. Nothing in `src/` runs a command
-- The interface: `src/ui/`, what it parses: `src/data/`
-- German: `locales/de.po`. `make check` names every sentence missing or left over
-- Themes: `themes/`, the AUR package: `aur/PKGBUILD`
+- Interface: `src/ui/`, parsers: `src/data/`
+- German: `locales/de.po`, checked by `make check`
+- Themes: `themes/`, AUR package: `aur/PKGBUILD`
 
-**Note:** _How the pieces fit: **[➜ Reference](REFERENCE.md)**._
+**[➜ Reference](REFERENCE.md)**
 
 ## Workflow
 
@@ -40,13 +40,13 @@ flowchart LR
     style R fill:#1793d1,stroke:#1793d1,color:#fff
 ```
 
-1. **Branch off `main`.** Name the branch after what it does: `feat/mirror-countries`, `fix/news-offline`. Nothing reads the name
-2. **Open a pull request against `main` right away**, as a draft while it is not done. A branch is checked through its pull request, never on its own. Every push runs `Title` and `Check`, about four minutes
-3. **Squash merge**, or switch on auto-merge. `main` takes the pull request once both have passed, as one commit under its title, and deletes the branch
+1. **Branch off `main`**, named after the change: `feat/mirror-countries`, `fix/news-offline`
+2. **Open a draft pull request against `main` right away.** Every push runs `Title` and `Check`, about four minutes
+3. **Squash merge** or auto-merge once both pass. `main` keeps one commit under the title, the branch is deleted
 
 ## The Title
 
-The title is the one line `main` keeps. The next version and the release notes are read from it, so it follows **[Conventional Commits](https://www.conventionalcommits.org)**: a type, a colon, what changed.
+The title is the one line `main` keeps. Version and release notes are read from it, per **[Conventional Commits](https://www.conventionalcommits.org)**.
 
 | Title | Version | On the Release Page |
 | --- | --- | --- |
@@ -55,34 +55,34 @@ The title is the one line `main` keeps. The next version and the release notes a
 | `feat!: settings move to ~/.config` | 2.0.0 → 3.0.0 | ⚠ BREAKING CHANGES |
 | `docs:` `refactor:` `test:` `build:` `ci:` `chore:` | none | nothing |
 
-- Write it for someone using the manager. `Title` refuses a title without a type and a pull request that does not target `main`, and checks again whenever the title is edited
-- Merging shows the title and an empty description. Leave both as they are, with two exceptions typed into the description: `BREAKING CHANGE: …` tells the release page what somebody has to do, `Release-As: 3.0.0` sets a version that is chosen rather than counted
+- Written for users. `Title` refuses a title without a type and a base other than `main`, again on every edit
+- The merge description stays empty, except `BREAKING CHANGE: …` for what users must do and `Release-As: 3.0.0` for a chosen version
 
 ## What CI Runs
 
 | Job | When | Does |
 | --- | --- | --- |
-| `Title` | A pull request is opened, pushed to or edited | Checks the title and the base branch |
+| `Title` | A pull request is opened, pushed to or edited | Checks title and base branch |
 | `Check` | Every pull request | `make check` |
-| `Release` | A push to `main` | The release pull request, or once that is merged, the tag and the release page |
-| `Publish` | A release | Stamps `aur/PKGBUILD` for the tag's source tarball, builds it with makepkg as a user would, which reads the version back from the binary, pushes `PKGBUILD`, `.SRCINFO` and `arch-os-manager.install` to the AUR, and puts the binary of that package on the release page |
+| `Release` | A push to `main` | Release pull request, after its merge the tag and release page |
+| `Publish` | A release | Stamps `aur/PKGBUILD` for the tag, builds it with makepkg, pushes it to the AUR, attaches the binary to the release |
 
 ## Releasing
 
-Nothing is typed and nothing is tagged by hand.
+No manual tags.
 
-1. **Every merge that releases something** opens or updates the pull request `chore: release 2.1.0`. It raises the version in `.release-please-manifest.json` and writes that version's section of `CHANGELOG.md`
-2. **Merging it is the release.** It passes the checks like any other pull request. The run on `main` tags `2.1.0`, publishes the page with the same notes, and `Publish` pushes the package and attaches `system-manager-2.1.0-x86_64`
+1. **Every releasing merge** opens or updates `chore: release 2.1.0`. It raises `.release-please-manifest.json` and writes the section of `CHANGELOG.md`
+2. **Merging it is the release:** tag `2.1.0`, release page with the same notes, `Publish` attaches `system-manager-2.1.0-x86_64`
 
-- Merges collect in the release pull request until it is merged. When to release is a decision, not a schedule
-- Every build in between is named after a pre-release of the next patch, such as `2.0.1-dev`
-- The release pull request, the tag and the release page are made with the secret `RELEASE_TOKEN` of the environment `release`, which only `main` may use: a fine-grained personal access token of the account with Contents and Pull requests set to read and write. `.github/release-token.sh` stores it. The workflow's own token may not, as GitHub holds the checks of a bot's pull request until someone approves its runs. When the token expires, `Release` fails and says so
-- The key of `Publish` is the secret `AUR_SSH_KEY` of the environment `aur`, which only `main` may use. `tools/aur.sh key` makes it and prints the public half for the AUR account
-- Pictures are generated by hand and committed with the change: `make screenshots VERSION=2.1.0`, then `make banner`. They need `chromium`, `imagemagick`, `python` and `ttf-firacode-nerd`
+- Merges collect in the release pull request until it is merged
+- Builds in between carry a pre-release version, such as `2.0.1-dev`
+- `RELEASE_TOKEN` of the environment `release`, `main` only: a fine-grained token with Contents and Pull requests read and write, stored by `.github/release-token.sh`. The workflow token cannot, as GitHub holds the checks of a bot's pull request. An expired token fails `Release`
+- `AUR_SSH_KEY` of the environment `aur`, `main` only, made by `tools/aur.sh key`
+- Pictures by hand with the change: `make screenshots VERSION=2.1.0`, then `make banner`. Needs `chromium`, `imagemagick`, `python`, `ttf-firacode-nerd`
 
 ## The Repository
 
-What GitHub holds this repository to lives in **[.github/settings/](../.github/settings)**, not in clicks. An admin logged in with `gh` applies it:
+**[.github/settings/](../.github/settings)** holds the GitHub configuration. An admin logged in with `gh` applies it:
 
 ```
 make github
@@ -90,11 +90,11 @@ make github
 
 | File | Says |
 | --- | --- |
-| `repository.json` | Description and homepage. Squash merges only, under the pull request's title alone; auto-merge allowed; a merged branch is deleted; no wiki, no projects. Secret scanning with push protection |
-| `ruleset.json` | `main` takes only a squashed pull request that has passed `Check` and `Title`. No force push, no deletion |
-| `actions.json` | A workflow's token can only read unless it says otherwise |
-| `topics.json` | The topics |
+| `repository.json` | Description and homepage. Squash merges only under the pull request title, auto-merge, merged branches deleted, no wiki, no projects. Secret scanning with push protection |
+| `ruleset.json` | `main` takes only a squashed pull request that passed `Check` and `Title`. No force push, no deletion |
+| `actions.json` | Workflow tokens read only unless stated otherwise |
+| `topics.json` | Topics |
 
-Run it again after changing one of them. The script also turns on Dependabot alerts and private vulnerability reporting. It is the same in every project released this way, and `ruleset.json` names each project's checks. No CodeQL, which finds Rust and the workflows here: clippy and zizmor check them in `make check`.
+The script also enables Dependabot alerts and private vulnerability reporting. It is the same in every project released this way, `ruleset.json` names the checks. No CodeQL: clippy and zizmor cover Rust and the workflows in `make check`.
 
-**Note:** _The social preview is `docs/banner.png`, uploaded by hand under **Settings › General › Social preview**: GitHub has no API for it._
+**Note:** _The social preview `docs/banner.png` is uploaded by hand under **Settings › General › Social preview**, as GitHub has no API for it._

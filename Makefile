@@ -84,7 +84,7 @@ banner:
 	{ printf 'accent: "%s"\nlogo: |\n' "$$accent"; sed 's/^/  /' docs/wordmark.txt; } >target/product.yaml
 	python3 docs/banner.py --product target/product.yaml --logo scripts/desktop/logo.svg \
 		--card docs/screenshots/home.png --card docs/screenshots/update.png \
-		--tagline "Simply update, maintain and repair<br>Arch Linux from one place." --cell 7
+		--tagline "Update, maintain and repair<br>Arch Linux from one place." --cell 7
 
 # The repository's settings on GitHub, out of .github/settings/. Run by hand as
 # an admin: a workflow may not change the rules it is held to.

@@ -90,8 +90,8 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
     result
 }
 
-/// The wheel as scrolling: without it, a terminal sends the arrow keys instead. A text is then
-/// selected with shift held. Pasted text comes as one, not as keys.
+/// The wheel as scrolling, else a terminal sends arrow keys, and text is then selected with shift
+/// held. Pasted text comes as one, not as keys.
 fn mouse(capture: bool) {
     let mut out = std::io::stdout();
     let done = match capture {
@@ -118,6 +118,9 @@ fn held(last: &mut Option<(Key, Instant)>, key: Key, now: Instant) -> bool {
 fn key(k: KeyEvent) -> Option<Key> {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
     Some(match k.code {
+        KeyCode::Char('h') | KeyCode::Backspace if ctrl => Key::CtrlBackspace,
+        KeyCode::Left if ctrl => Key::CtrlLeft,
+        KeyCode::Right if ctrl => Key::CtrlRight,
         KeyCode::Char(c) if ctrl => Key::Ctrl(c.to_ascii_lowercase()),
         KeyCode::Char(c) => Key::Char(c),
         KeyCode::Enter => Key::Enter,
@@ -154,6 +157,16 @@ mod tests {
         assert_eq!(k(KeyCode::BackTab, KeyModifiers::SHIFT), Some(Key::BackTab));
         assert_eq!(k(KeyCode::PageDown, none), Some(Key::PageDown));
         assert_eq!(k(KeyCode::F(5), none), None);
+        let ctrl = KeyModifiers::CONTROL;
+        assert_eq!(
+            k(KeyCode::Char('h'), ctrl),
+            Some(Key::CtrlBackspace),
+            "^H, as VTE sends it"
+        );
+        assert_eq!(k(KeyCode::Backspace, ctrl), Some(Key::CtrlBackspace));
+        assert_eq!(k(KeyCode::Left, ctrl), Some(Key::CtrlLeft));
+        assert_eq!(k(KeyCode::Right, ctrl), Some(Key::CtrlRight));
+        assert_eq!(k(KeyCode::Left, none), Some(Key::Left));
     }
 
     #[test]

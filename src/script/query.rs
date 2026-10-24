@@ -73,9 +73,9 @@ fn collect(
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // A session of its own, as in the window: no terminal to stop at or write into, and one
-    // group the limit stops whole. Behind the interface for the processors, and so for the disk,
-    // whose priority Linux takes from the nice value where none is set.
+    // A session of its own: no terminal to stop at or write into, one group the limit stops whole,
+    // and behind the interface for the processors and the disk, whose priority Linux takes from the
+    // nice value.
     // SAFETY: setsid, setpriority, dup2 and fcntl are async-signal-safe.
     unsafe {
         cmd.pre_exec(move || {
@@ -165,7 +165,6 @@ mod tests {
         assert!(failure.detail.contains("no answer"), "{failure:?}");
     }
 
-    /// A line is told as it comes, while the script still runs.
     #[test]
     fn tells_each_line_before_the_script_ends() {
         let started = Instant::now();

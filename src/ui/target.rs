@@ -23,8 +23,9 @@ pub enum Target {
     Language,
     Theme,
     Usage,
+    Status,
     AurHelper,
-    Runs,
+    Output,
     Flatpak,
     Notifications,
     Desktop,
@@ -47,18 +48,24 @@ pub const HOME: &[&[Target]] = &[
     &[Target::Settings],
 ];
 
-pub const SETTINGS: &[Target] = &[
-    Target::Language,
-    Target::Theme,
-    Target::Usage,
-    Target::AurHelper,
-    Target::Runs,
-    Target::Flatpak,
-    Target::Notifications,
-    Target::Desktop,
-    Target::Hidden,
-    Target::Features,
-    Target::About,
+/// The settings page, group by group: appearance, the system, then about.
+pub const SETTINGS: &[&[Target]] = &[
+    &[
+        Target::Language,
+        Target::Theme,
+        Target::Usage,
+        Target::Status,
+        Target::Output,
+        Target::Hidden,
+    ],
+    &[
+        Target::AurHelper,
+        Target::Flatpak,
+        Target::Notifications,
+        Target::Desktop,
+        Target::Features,
+    ],
+    &[Target::About],
 ];
 
 pub const ALL: &[Target] = &[
@@ -77,12 +84,13 @@ pub const ALL: &[Target] = &[
     Target::Language,
     Target::Theme,
     Target::Usage,
+    Target::Status,
+    Target::Output,
+    Target::Hidden,
     Target::AurHelper,
-    Target::Runs,
     Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
-    Target::Hidden,
     Target::Features,
     Target::About,
 ];
@@ -106,8 +114,9 @@ impl Target {
             Target::Language => "language",
             Target::Theme => "theme",
             Target::Usage => "usage",
+            Target::Status => "status",
             Target::AurHelper => "aur-helper",
-            Target::Runs => "runs",
+            Target::Output => "output",
             Target::Flatpak => "flatpak",
             Target::Notifications => "notifications",
             Target::Desktop => "desktop",
@@ -138,8 +147,9 @@ impl Target {
             Target::Language => t("Language"),
             Target::Theme => t("Theme"),
             Target::Usage => t("System usage"),
+            Target::Status => t("Main menu status"),
             Target::AurHelper => t("AUR helper"),
-            Target::Runs => t("Runs"),
+            Target::Output => t("Output"),
             Target::Flatpak => t("Flatpak updates"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
@@ -167,8 +177,9 @@ impl Target {
             Target::Language => icon::LANGUAGE,
             Target::Theme => icon::THEME,
             Target::Usage => icon::USAGE,
+            Target::Status => icon::STATUS,
             Target::AurHelper => icon::ARCH,
-            Target::Runs => icon::COMMAND,
+            Target::Output => icon::COMMAND,
             Target::Flatpak => icon::APP,
             Target::Notifications => icon::NOTIFICATION,
             Target::Desktop => icon::APP_MENU,
@@ -179,7 +190,7 @@ impl Target {
     }
 
     pub fn in_settings(self) -> bool {
-        SETTINGS.contains(&self)
+        SETTINGS.iter().any(|group| group.contains(&self))
     }
 
     /// The script whose optional packages decide whether this can open.
@@ -230,14 +241,14 @@ impl Target {
             Target::Language
             | Target::Theme
             | Target::AurHelper
-            | Target::Runs
+            | Target::Output
             | Target::Notifications => {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),
                 ];
             }
-            Target::Usage | Target::Desktop | Target::Flatpak => {
+            Target::Usage | Target::Status | Target::Desktop | Target::Flatpak => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };
