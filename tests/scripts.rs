@@ -254,6 +254,60 @@ fn a_run_holds_shutdown_off_and_a_query_does_not() {
     assert!(!o.calls.contains("systemd-inhibit"), "{}", o.calls);
 }
 
+/// A check waits while an upgrade runs, and ends with 12 where the time runs out. The wait ends
+/// with the run, though a server the run started lives on. Without a runtime folder of its own
+/// nothing is waited for.
+#[test]
+fn a_check_waits_until_the_upgrade_has_ended() {
+    let s = Sandbox::new("idle");
+    let runtime = s.dir.join("runtime");
+    std::fs::create_dir(&runtime).unwrap();
+    let session = ("XDG_RUNTIME_DIR", runtime.to_str().unwrap());
+    let (server, started, release) = (
+        s.dir.join("server"),
+        s.dir.join("started"),
+        s.dir.join("release"),
+    );
+    s.stub("systemd-inhibit", "exit 1");
+    s.stub("pacman", "exit 0");
+    s.stub(
+        "flatpak",
+        &format!(
+            "sleep 60 </dev/null >/dev/null 2>&1 &\necho $! >'{}'\ntouch '{}'\n\
+             for _ in $(seq 200); do [ -e '{}' ] && exit 0; sleep 0.05; done\nexit 1",
+            server.display(),
+            started.display(),
+            release.display()
+        ),
+    );
+    std::thread::scope(|scope| {
+        let upgrade = scope.spawn(|| {
+            s.run(
+                "upgrade",
+                &["run"],
+                &[
+                    ("SM_FLATPAK", "on"),
+                    ("SM_RUN", "Updating the system"),
+                    session,
+                ],
+            )
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !started.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(s.run("upgrade", &["idle", "0"], &[session]).code, 12);
+        assert_eq!(s.run("upgrade", &["idle", "0"], &[]).code, 0);
+        std::fs::write(&release, "").unwrap();
+        let o = upgrade.join().unwrap();
+        assert_eq!(o.code, 0, "{}", o.events);
+    });
+    let o = s.run("upgrade", &["idle", "5"], &[session]);
+    let pid = std::fs::read_to_string(&server).unwrap_or_default();
+    Command::new("kill").arg(pid.trim()).status().unwrap();
+    assert_eq!(o.code, 0, "{}", o.events);
+}
+
 /// Within a helper of lib.sh, the failure names the script's line that called it, and the
 /// code of the command that failed.
 #[test]

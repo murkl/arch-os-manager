@@ -80,7 +80,7 @@ Every sentence is English and translated in `locales/de.po`.
 | `SUDO_PROMPT` | A fixed prompt the runtime recognises |
 | `TERM` | `xterm-256color` in a run |
 
-`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob`, and ignores a hangup, so a closed terminal stops no run. A run holds shutdown and sleep off through logind while it lasts. It offers:
+`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob`, and ignores a hangup, so a closed terminal stops no run. A run holds shutdown and sleep off through logind and its `run_lock` while it lasts. It offers:
 
 | Function | Does |
 |---|---|
@@ -92,6 +92,7 @@ Every sentence is English and translated in `locales/de.po`.
 | `aur` | The helper of `$SM_AUR` |
 | `aur_sync` | The helper without the review and menus a run cannot answer, in the terminal with them |
 | `asks` | Whether the tools ask, the person answering in the terminal. Else the script gives each tool its flag |
+| `run_lock` | The lock in the runtime folder that a run of the script holds, for its queries to wait on |
 
 A function more than one script needs goes into `lib.sh`.
 
@@ -271,6 +272,8 @@ The footer names what each key does, in the same words on every page. **esc** re
 | `system-manager notify` | Announces pending updates, with `--new` only those not announced before, as the timer runs it |
 
 It runs as the user and asks for the sudo password itself. As root it only answers `check`.
+
+`check` and `notify` first wait up to an hour for an update of this user to end.
 
 ## Optional Packages
 
