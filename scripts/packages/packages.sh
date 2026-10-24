@@ -71,13 +71,15 @@ op_pkgbuild() {
     fetch -G --data-urlencode "h=$1" https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD || exit 10
 }
 
-# repo or aur, then the packages.
+# repo or aur, then the packages. An AUR package is named with its source, as a
+# helper takes a repository package that provides the same name first.
 op_install() {
     local source="$1"
     shift
+    if behind; then exit 13; fi
     case "$source" in
     repo) sudo pacman -S --needed -- "$@" ;;
-    aur) aur_sync -S -- "$@" ;;
+    aur) aur_sync -S -- "${@/#/aur/}" ;;
     esac
 }
 
@@ -99,8 +101,9 @@ op_change() {
         remove:*) remove+=("${arg#remove:}") ;;
         esac
     done
+    if [ $((${#repo[@]} + ${#from_aur[@]})) -gt 0 ] && behind; then exit 13; fi
     if [ "${#repo[@]}" -gt 0 ]; then sudo pacman -S --needed -- "${repo[@]}"; fi
-    if [ "${#from_aur[@]}" -gt 0 ]; then aur_sync -S -- "${from_aur[@]}"; fi
+    if [ "${#from_aur[@]}" -gt 0 ]; then aur_sync -S -- "${from_aur[@]/#/aur/}"; fi
     # What the installs replaced is gone. pacman -Q would still find its name in
     # what provides it, pacman -R would not.
     installed="$(pacman -Qq)"

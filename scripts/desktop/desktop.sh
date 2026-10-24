@@ -198,30 +198,27 @@ op_open() {
     systemd-run --user --collect --quiet -- "$@"
 }
 
-# The update indicator from extensions.gnome.org, in the version for this GNOME
-# Shell. GNOME loads an extension it did not start with at the next login.
+# The update indicator from extensions.gnome.org, through the running GNOME
+# Shell, which asks the person, takes the version for itself and loads it at
+# once. The call returns with the answer, or with an error. The shell itself
+# serves it: the name org.gnome.Shell.Extensions starts a helper that drops a
+# call left waiting for the person.
 op_extension_install() {
-    local shell info url
-    shell="$(gnome-shell --version)"
-    shell="${shell##* }"
-    info="$(fetch "https://extensions.gnome.org/extension-info/?uuid=${ARCH_UPDATE}&shell_version=${shell%%.*}")" || exit 11
-    url="$(sed -n 's/.*"download_url": *"\([^"]*\)".*/\1/p' <<<"$info")"
-    if [ -z "$url" ]; then exit 11; fi
-    scratch
-    fetch "https://extensions.gnome.org${url}" >"${work}/extension.zip" || exit 11
-    gnome-extensions install --force "${work}/extension.zip"
-    on_bus gnome-extensions enable "$ARCH_UPDATE"
+    local answer
+    answer="$(busctl --user --timeout=300s call org.gnome.Shell /org/gnome/Shell \
+        org.gnome.Shell.Extensions InstallRemoteExtension s "$ARCH_UPDATE")" || exit 11
+    if [ "$answer" != 's "successful"' ]; then exit 11; fi
 }
 
-# Takes the indicator out of this user's GNOME, with the commands it was given.
+# Takes the indicator out of this user's GNOME, with the commands it was given,
+# through the running shell, which unloads it.
 op_extension_remove() {
     local dir
     dir="$(arch_update_dir)" || return 0
     case "$dir" in /usr/*) exit 12 ;; esac
-    on_bus gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
-    on_bus gnome-extensions disable "$ARCH_UPDATE"
-    # The running shell unloads it. Without one, the folder goes by hand.
-    gnome-extensions uninstall "$ARCH_UPDATE" 2>/dev/null || rm -rf -- "$dir"
+    gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
+    gnome-extensions disable "$ARCH_UPDATE"
+    gnome-extensions uninstall "$ARCH_UPDATE"
 }
 
 operation "$@"

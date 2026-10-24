@@ -13,6 +13,8 @@ pub struct Service {
     pub active: String,
     /// enabled, disabled, static, masked, …, empty for a unit without a file.
     pub enabled: String,
+    /// The graphical session cannot do without it, as the display manager and the bus.
+    pub session: bool,
 }
 
 impl Service {
@@ -45,8 +47,10 @@ struct File {
 /// services.sh output: loaded units and unit files, joined, failed first, then running.
 pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
     let (mut units, mut files): (Vec<Unit>, Vec<File>) = (Vec::new(), Vec::new());
+    let mut session = Vec::new();
     for line in out.lines() {
         match line.split_once('\t') {
+            Some(("session", unit)) => session.push(unit),
             Some(("units", json)) => {
                 units = serde_json::from_str(json).map_err(|e| e.to_string())?
             }
@@ -70,6 +74,7 @@ pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
             description: u.description.clone(),
             active: u.active.clone(),
             enabled: state.get(u.unit.as_str()).unwrap_or(&"").to_string(),
+            session: session.contains(&u.unit.as_str()),
         })
         .collect();
     // A template is no service until it has an instance.
@@ -81,6 +86,7 @@ pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
                 description: String::new(),
                 active: String::new(),
                 enabled: f.state.clone(),
+                session: session.contains(&f.unit_file.as_str()),
             });
         }
     }
@@ -129,5 +135,25 @@ mod tests {
         assert_eq!(names, ["c.service", "b.service", "a.service"]);
         assert_eq!(s[1].enabled, "enabled");
         assert!(s[0].failed());
+    }
+
+    #[test]
+    fn marks_what_the_graphical_session_cannot_do_without() {
+        let out = concat!(
+            "units\t[{\"unit\":\"gdm.service\",\"load\":\"loaded\",\"active\":\"active\",\"description\":\"GNOME Display Manager\"},",
+            "{\"unit\":\"sshd.service\",\"load\":\"loaded\",\"active\":\"active\",\"description\":\"SSH\"}]\n",
+            "files\t[{\"unit_file\":\"dbus-broker.service\",\"state\":\"enabled\"}]\n",
+            "session\tgdm.service\nsession\tdbus-broker.service\n"
+        );
+        let s = parse(out, false).unwrap();
+        let session: Vec<(&str, bool)> = s.iter().map(|x| (x.unit.as_str(), x.session)).collect();
+        assert_eq!(
+            session,
+            [
+                ("gdm.service", true),
+                ("sshd.service", false),
+                ("dbus-broker.service", true)
+            ]
+        );
     }
 }

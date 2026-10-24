@@ -34,6 +34,9 @@ errors:
   12: |
     Archive unreachable
     Cached versions only.
+  13: |
+    System not up to date
+    Update first.
 hints:
   "The requested URL returned error: 404":
     text: |
