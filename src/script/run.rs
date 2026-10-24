@@ -21,12 +21,16 @@ pub struct Run {
     pub progress: Progress,
     /// The sentence of the step lib.sh announced last.
     pub step: Option<String>,
+    /// What lib.sh named as found, in order.
+    pub found: Vec<String>,
     /// A question waiting for the person.
     pub prompt: Option<Prompt>,
     /// sudo refused the last password.
     pub rejected: bool,
-    /// Verbose output: every prompt is typed.
+    /// Verbose output, or the script handed over to the person: every prompt is typed.
     terminal: bool,
+    /// The script asked for the terminal to be shown, as an AUR helper's review needs.
+    pub handed: bool,
     fail: Option<String>,
     exit: Option<(i32, Instant)>,
     /// The unfinished line last answered, so it is answered once.
@@ -79,9 +83,11 @@ impl Run {
             recent: VecDeque::new(),
             progress: Progress::default(),
             step: None,
+            found: Vec::new(),
             prompt: None,
             rejected: false,
             terminal: false,
+            handed: false,
             fail: None,
             exit: None,
             answered: None,
@@ -115,6 +121,11 @@ impl Run {
                 if let Some(key) = line.strip_prefix("step\t") {
                     crate::info!("{}: step {key}", self.op);
                     self.step = self.op.meta().steps.get(key).map(|s| t(s).to_string());
+                } else if line == "terminal" {
+                    self.terminal = true;
+                    self.handed = true;
+                } else if let Some(item) = line.strip_prefix("found\t") {
+                    self.found.push(item.to_string());
                 } else if line.starts_with("fail\t") && self.fail.is_none() {
                     self.fail = Some(line);
                 }
@@ -270,6 +281,41 @@ mod tests {
         }
         let text: Vec<String> = run.recent.iter().cloned().collect();
         (run, text.join("\n"))
+    }
+
+    /// Once the script hands over, no question is answered for the person any more.
+    #[test]
+    fn after_the_hand_over_the_person_answers_every_question() {
+        let (tx, rx) = mpsc::channel();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg("-c").arg(
+            r#"read -r -t 2 -p ":: Proceed with installation? [Y/n] " a || { echo; echo unanswered; }"#,
+        );
+        let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
+        let mut run = Run::with(crate::script::op::UPGRADE_RUN, session, (24, 80));
+        run.on_event(Event::Script("terminal".into()));
+        assert!(run.handed);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while run.result().is_none() && Instant::now() < deadline {
+            if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
+                run.on_event(e);
+            }
+            run.check_prompt();
+        }
+        assert!(
+            run.recent.iter().any(|l| l == "unanswered"),
+            "{:?}",
+            run.recent
+        );
+    }
+
+    #[test]
+    fn keeps_what_the_script_found_in_order() {
+        let mut run = Run::fed(crate::script::op::REPAIR_FILES, "check", "");
+        for line in ["found\tbar", "found\tfoo"] {
+            run.on_event(Event::Script(line.into()));
+        }
+        assert_eq!(run.found, ["bar", "foo"]);
     }
 
     #[test]

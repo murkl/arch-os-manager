@@ -25,6 +25,7 @@ pub enum Target {
     Usage,
     Status,
     AurHelper,
+    AurReview,
     Output,
     Flatpak,
     Notifications,
@@ -60,6 +61,7 @@ pub const SETTINGS: &[&[Target]] = &[
     ],
     &[
         Target::AurHelper,
+        Target::AurReview,
         Target::Flatpak,
         Target::Notifications,
         Target::Desktop,
@@ -88,6 +90,7 @@ pub const ALL: &[Target] = &[
     Target::Output,
     Target::Hidden,
     Target::AurHelper,
+    Target::AurReview,
     Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
@@ -116,6 +119,7 @@ impl Target {
             Target::Usage => "usage",
             Target::Status => "status",
             Target::AurHelper => "aur-helper",
+            Target::AurReview => "aur-review",
             Target::Output => "output",
             Target::Flatpak => "flatpak",
             Target::Notifications => "notifications",
@@ -149,6 +153,7 @@ impl Target {
             Target::Usage => t("System usage"),
             Target::Status => t("Main menu status"),
             Target::AurHelper => t("AUR helper"),
+            Target::AurReview => t("AUR review"),
             Target::Output => t("Output"),
             Target::Flatpak => t("Flatpak updates"),
             Target::Notifications => t("Update notification"),
@@ -179,6 +184,7 @@ impl Target {
             Target::Usage => icon::USAGE,
             Target::Status => icon::STATUS,
             Target::AurHelper => icon::ARCH,
+            Target::AurReview => icon::CODE,
             Target::Output => icon::COMMAND,
             Target::Flatpak => icon::APP,
             Target::Notifications => icon::NOTIFICATION,
@@ -248,7 +254,11 @@ impl Target {
                     pages::settings::choice(self, ctx),
                 ];
             }
-            Target::Usage | Target::Status | Target::Desktop | Target::Flatpak => {
+            Target::Usage
+            | Target::Status
+            | Target::Desktop
+            | Target::Flatpak
+            | Target::AurReview => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };

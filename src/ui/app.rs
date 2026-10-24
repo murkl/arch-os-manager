@@ -294,6 +294,7 @@ impl App {
     /// The rest waits for the optional packages: which are there decides what runs.
     fn after_features(&mut self, features: &Features) {
         script::set_aur(features.aur_helper(self.ctx.settings.aur_helper.as_deref()));
+        script::set_aur_review(self.ctx.settings.aur_review.unwrap_or(true));
         script::set_flatpak(features.flatpak(self.ctx.settings.flatpak.unwrap_or(true)));
         let ctx = &mut self.ctx;
         let missing = |op| script::missing(op, features).map(str::to_string);
@@ -663,6 +664,7 @@ pub mod tests {
             description: String::new(),
             active: active.into(),
             enabled: "enabled".into(),
+            session: false,
         };
         s.services = Loaded::Ready(vec![
             service("example.service", "failed"),

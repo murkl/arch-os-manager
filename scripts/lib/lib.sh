@@ -43,10 +43,10 @@ asks() {
     [ "${SM_TERMINAL:-}" = on ]
 }
 
-# A closed terminal stops no run: sudo passes pacman no hangup. A run, named by
-# $SM_RUN, holds its run_lock, shared so runs never wait for each other, and
-# where logind answers shutdown and sleep off, each through a process that ends
-# with the script.
+# A closed terminal stops no run: sudo passes pacman no hangup. A run that
+# elevates, named by $SM_RUN, holds its run_lock, shared so runs never wait for
+# each other, and where logind answers shutdown and sleep off, each through a
+# process that ends with the script.
 sm_hold() {
     local lock held
     trap '' HUP
@@ -97,6 +97,21 @@ step() {
     printf 'step\t%s\n' "$1" >&3
 }
 
+# Names what a run found, for what may come after it.
+found() {
+    printf 'found\t%s\n' "$1" >&3
+}
+
+# Whether the package lists are newer than the system, as after an update that
+# broke off: pacman -S would then mix versions. pacman ends with 1 when nothing
+# is pending, and a package it ignores stays as it is.
+behind() {
+    local pending
+    pending="$(pacman -Qu)" || allow 1
+    pending="$(grep -v ' \[ignored\]$' <<<"$pending")" || allow 1
+    [ -n "$pending" ]
+}
+
 # The status of the command before, unless it is one of the codes named, by
 # which that command says nothing went wrong: `cmd || allow 1`.
 allow() {
@@ -123,10 +138,13 @@ aur() {
     "$SM_AUR" "$@"
 }
 
-# The helper on AUR packages, without the review and menus a run cannot answer,
-# with them in verbose output.
+# The helper on AUR packages. With its review, on unless $SM_AUR_REVIEW is off,
+# and in verbose output, the person answers it on the terminal, which the
+# runtime shows from the line `terminal` on fd 3. Else it goes without the
+# review and the menus a run cannot answer.
 aur_sync() {
-    if asks; then
+    if asks || [ "${SM_AUR_REVIEW:-on}" != off ]; then
+        printf 'terminal\n' >&3
         aur "$@"
         return
     fi

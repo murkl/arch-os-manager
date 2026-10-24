@@ -21,6 +21,9 @@ pub struct Settings {
     pub status: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aur_helper: Option<String>,
+    /// The AUR helper's review before it builds, on unless switched off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aur_review: Option<bool>,
     /// How a run shows, one of `OUTPUT`, compact unless chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
@@ -216,6 +219,7 @@ mod tests {
             usage: Some(false),
             status: Some(false),
             aur_helper: Some("yay".into()),
+            aur_review: Some(false),
             output: Some("verbose".into()),
             app_menu: Some(false),
             notify: Some("daily".into()),

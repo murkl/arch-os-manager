@@ -124,9 +124,7 @@ fn describe(plan: &Plan, item: Item, nothing: bool) -> String {
             }
             text
         }
-        (_, Some(Engine::Stopped)) => {
-            t("Docker inactive, started only for the clean-up (size unknown in advance).").into()
-        }
+        (_, Some(Engine::Stopped)) => t("Docker inactive.").into(),
         (_, Some(Engine::Denied)) => {
             t("Without the group docker the size is unknown in advance.").into()
         }
@@ -281,31 +279,21 @@ mod tests {
     }
 
     #[test]
-    fn an_inactive_docker_is_marked_and_cleaned_up_with_an_unknown_size() {
+    fn an_inactive_docker_is_listed_and_left_alone() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         let plan = Plan::parse("docker\tstopped\n");
         app.ctx.settings.set_cleans(Part::Docker, true);
-        assert!(removes(&plan, &app.ctx).contains(&Part::Docker));
+        assert!(!removes(&plan, &app.ctx).contains(&Part::Docker));
         app.ctx.shared.cleanup = Loaded::Ready(plan);
         open(&mut app, Box::new(CleanupPage::new()));
         screen(&mut app, &mut term);
         press(&mut app, &[Key::Up]);
         let shown = screen(&mut app, &mut term);
-        let row = |label: &str| {
-            shown
-                .lines()
-                .find(|l| l.contains(label))
-                .unwrap_or_default()
-        };
-        assert!(row("Docker images").ends_with(" ? MiB"), "{shown}");
-        assert!(
-            row("Remove now").ends_with(" ? MiB"),
-            "nothing known, something unknown: {shown}"
-        );
-        assert!(shown.contains("Docker inactive, started only"), "{shown}");
+        assert!(shown.contains("Docker images"), "{shown}");
+        assert!(shown.contains("Docker inactive."), "{shown}");
     }
 
     #[test]

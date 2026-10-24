@@ -2,19 +2,24 @@ ops:
   run:
     title: Repairing the package management
     root: true
-    confirm: |
-      Repair the package management?
-      Recreates the keyring. Manually imported keys are lost.
     steps:
       lock: Removing the stale lock
-      keyring: Creating the keyring anew
+      keyring: Updating the keyring
       upgrade: Updating the system
+  keyring:
+    title: Recreating the keyring
+    root: true
+    confirm: |
+      Recreate the keyring?
+      Keys imported by hand are lost.
   files:
     title: Checking the files of every package
     root: true
     steps:
       check: Checking the files
-      reinstall: Reinstalling the altered packages
+  reinstall:
+    title: Reinstalling the altered packages
+    root: true
 errors:
   10: |
     Package manager running
@@ -24,6 +29,9 @@ errors:
     GPGDir in pacman.conf does not end in gnupg.
   12: |
     Files not checked
+  13: |
+    System not up to date
+    Update first.
 hints:
   "The requested URL returned error: 404":
     text: |

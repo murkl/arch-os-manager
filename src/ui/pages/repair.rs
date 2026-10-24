@@ -1,5 +1,5 @@
-//! Repair: for an update that fails on a stale lock or an outdated keyring, and for files a
-//! package lost.
+//! Repair: for an update that fails on a stale lock or an outdated keyring, for a keyring beyond
+//! that, and for files a package lost.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -20,7 +20,7 @@ struct Repair {
 }
 
 pub struct RepairPage {
-    repairs: [Repair; 2],
+    repairs: [Repair; 3],
     list: List<usize>,
 }
 
@@ -31,13 +31,19 @@ impl RepairPage {
                 op: op::REPAIR_RUN,
                 name: t("Repair the package management"),
                 icon: icon::REPAIR,
-                note: t("Removes a stale lock, recreates the keyring and updates."),
+                note: t("Removes a stale lock, updates the keyring and the system."),
+            },
+            Repair {
+                op: op::REPAIR_KEYRING,
+                name: t("Recreate the keyring"),
+                icon: icon::KEYRING,
+                note: t("Creates the keyring anew from the keyring packages."),
             },
             Repair {
                 op: op::REPAIR_FILES,
                 name: t("Check the package files"),
                 icon: icon::VERIFY,
-                note: t("Reinstalls packages with missing or altered files."),
+                note: t("Finds packages with missing or altered files."),
             },
         ];
         let mut rows = Vec::new();
@@ -91,7 +97,7 @@ mod tests {
         let (mut app, mut term) = app();
         open(&mut app, Box::new(RepairPage::new()));
         screen(&mut app, &mut term);
-        press(&mut app, &[Key::Down, Key::Enter]);
+        press(&mut app, &[Key::Down, Key::Down, Key::Enter]);
         let shown = screen(&mut app, &mut term);
         assert!(
             shown.contains("Repair › Check the package files"),
@@ -118,12 +124,16 @@ mod tests {
             at("Removes a stale lock"),
             at("Repair the package management") + 1
         );
-        assert_eq!(at("Reinstalls packages"), at("Check the package files") + 1);
+        assert_eq!(
+            at("Creates the keyring anew"),
+            at("Recreate the keyring") + 1
+        );
+        assert_eq!(at("Finds packages"), at("Check the package files") + 1);
         press(&mut app, &[Key::Down]);
         let shown = screen(&mut app, &mut term);
         let row = shown
             .lines()
-            .find(|l| l.contains("Check the package files"))
+            .find(|l| l.contains("Recreate the keyring"))
             .unwrap_or_default();
         assert!(row.contains(app.ctx.style.glyphs.cursor), "{shown}");
     }

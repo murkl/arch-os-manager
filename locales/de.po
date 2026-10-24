@@ -45,11 +45,6 @@ msgstr ""
 "Warten, bis er fertig ist.\n"
 
 msgid ""
-"Path outside the caches\n"
-msgstr ""
-"Pfad außerhalb der Caches\n"
-
-msgid ""
 "Signature not verified\n"
 "Renew the keyring with Repair.\n"
 msgstr ""
@@ -59,6 +54,9 @@ msgstr ""
 
 msgid "AUR helper"
 msgstr "AUR-Helfer"
+
+msgid "AUR review"
+msgstr "AUR-Review"
 
 msgid "AUR packages"
 msgstr "AUR-Pakete"
@@ -152,8 +150,11 @@ msgstr "Konfiguration wird verglichen"
 msgid "Config updates"
 msgstr "Konfigurationsupdates"
 
-msgid "Creating the keyring anew"
+msgid "Recreating the keyring"
 msgstr "Schlüsselbund wird neu angelegt"
+
+msgid "Updating the keyring"
+msgstr "Schlüsselbund wird aktualisiert"
 
 msgid "Dependencies"
 msgstr "Abhängigkeiten"
@@ -167,11 +168,26 @@ msgstr "Desktop"
 msgid "Do not start by itself"
 msgstr "Nicht automatisch starten"
 
+msgid "Restart {unit}?"
+msgstr "{unit} neu starten?"
+
+msgid "Stop {unit}?"
+msgstr "{unit} stoppen?"
+
+msgid "Do not start {unit} by itself?"
+msgstr "{unit} nicht automatisch starten?"
+
+msgid "Ends the session. Unsaved work is lost."
+msgstr "Beendet die Sitzung. Ungesicherte Arbeit geht verloren."
+
+msgid "The next start comes without a graphical session."
+msgstr "Der nächste Start kommt ohne grafische Sitzung."
+
 msgid "Docker images"
 msgstr "Docker-Images"
 
-msgid "Docker inactive, started only for the clean-up (size unknown in advance)."
-msgstr "Docker inaktiv, startet nur zum Aufräumen (Größe vorab unbekannt)."
+msgid "Docker inactive."
+msgstr "Docker inaktiv."
 
 msgid "Done"
 msgstr "Fertig"
@@ -188,8 +204,8 @@ msgstr "Flatpak-Updates"
 msgid "Install now"
 msgstr "Jetzt installieren"
 
-msgid "From extensions.gnome.org, active after the next login."
-msgstr "Von extensions.gnome.org, aktiv nach der nächsten Anmeldung."
+msgid "From extensions.gnome.org. GNOME Shell asks first."
+msgstr "Von extensions.gnome.org. GNOME Shell fragt vorher nach."
 
 msgid "Without the group docker the size is unknown in advance."
 msgstr "Ohne Gruppe docker ist die Größe vorab unbekannt."
@@ -562,6 +578,13 @@ msgstr ""
 "{name} entfernen?\n"
 "Entfernt mit pacman -Rns."
 
+msgid ""
+"Remove {name}?\n"
+"Resets its settings."
+msgstr ""
+"{name} entfernen?\n"
+"Setzt die Einstellungen zurück."
+
 msgid "Remove {n}"
 msgstr "{n} entfernen"
 
@@ -590,11 +613,18 @@ msgid "Repair"
 msgstr "Reparieren"
 
 msgid ""
-"Repair the package management?\n"
-"Recreates the keyring. Manually imported keys are lost.\n"
+"Recreate the keyring?\n"
+"Keys imported by hand are lost.\n"
 msgstr ""
-"Paketverwaltung reparieren?\n"
-"Legt den Schlüsselbund neu an. Manuell importierte Schlüssel gehen verloren.\n"
+"Schlüsselbund neu anlegen?\n"
+"Von Hand importierte Schlüssel gehen verloren.\n"
+
+msgid ""
+"System not up to date\n"
+"Update first.\n"
+msgstr ""
+"System nicht aktuell\n"
+"Zuerst aktualisieren.\n"
 
 msgid "Repairing the package management"
 msgstr "Paketverwaltung wird repariert"
@@ -717,9 +747,9 @@ msgstr ""
 "Auf der Seite Pakete entfernen.\n"
 
 msgid ""
-"Extension download failed\n"
+"Extension not installed\n"
 msgstr ""
-"Download der Erweiterung fehlgeschlagen\n"
+"Erweiterung nicht installiert\n"
 
 msgid ""
 "Files not comparable\n"
@@ -828,11 +858,9 @@ msgid "Theme skipped: {error}"
 msgstr "Theme übersprungen: {error}"
 
 msgid ""
-"Not a configuration update\n"
-"Only .pacnew and .pacsave files.\n"
+"Configuration update not found\n"
 msgstr ""
-"Kein Konfigurationsupdate\n"
-"Nur .pacnew- und .pacsave-Dateien.\n"
+"Konfigurationsupdate nicht gefunden\n"
 
 msgid "{n} package without source: {names}."
 msgstr "{n} Paket ohne Quelle: {names}."
@@ -1215,14 +1243,38 @@ msgstr "Veränderte Pakete werden neu installiert"
 msgid "Repair the package management"
 msgstr "Paketverwaltung reparieren"
 
-msgid "Removes a stale lock, recreates the keyring and updates."
-msgstr "Entfernt eine verwaiste Sperre, legt den Schlüsselbund neu an und aktualisiert."
+msgid "Removes a stale lock, updates the keyring and the system."
+msgstr "Entfernt eine verwaiste Sperre, aktualisiert den Schlüsselbund und das System."
+
+msgid "Recreate the keyring"
+msgstr "Schlüsselbund neu anlegen"
+
+msgid "Creates the keyring anew from the keyring packages."
+msgstr "Legt den Schlüsselbund aus den Schlüsselbund-Paketen neu an."
 
 msgid "Check the package files"
 msgstr "Paketdateien prüfen"
 
-msgid "Reinstalls packages with missing or altered files."
-msgstr "Installiert Pakete mit fehlenden oder veränderten Dateien neu."
+msgid "Finds packages with missing or altered files."
+msgstr "Findet Pakete mit fehlenden oder veränderten Dateien."
+
+msgid "{n} package with altered files: {names}."
+msgstr "{n} Paket mit veränderten Dateien: {names}."
+
+msgid "{n} packages with altered files: {names}."
+msgstr "{n} Pakete mit veränderten Dateien: {names}."
+
+msgid "Reinstall"
+msgstr "Neu installieren"
+
+msgid "Reinstall {n} package?"
+msgstr "{n} Paket neu installieren?"
+
+msgid "Reinstall {n} packages?"
+msgstr "{n} Pakete neu installieren?"
+
+msgid "Changes to their files are lost."
+msgstr "Änderungen an ihren Dateien gehen verloren."
 
 msgid "License"
 msgstr "Lizenz"

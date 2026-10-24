@@ -183,6 +183,13 @@ pub fn aur() -> Option<String> {
     (!helper.is_empty()).then_some(helper)
 }
 
+static AUR_REVIEW: Mutex<&str> = Mutex::new("on");
+
+/// Whether the AUR helper reviews before it builds, as `$SM_AUR_REVIEW`: on or off.
+pub fn set_aur_review(on: bool) {
+    *AUR_REVIEW.lock().unwrap() = if on { "on" } else { "off" };
+}
+
 static FLATPAK: Mutex<&str> = Mutex::new("off");
 
 /// Whether scripts update Flatpak, as `$SM_FLATPAK`: on or off.
@@ -245,6 +252,7 @@ fn command(op: Op, args: &[String]) -> Result<Command, String> {
         .args(args);
     cmd.env("LC_ALL", "C.UTF-8")
         .env("SM_AUR", AUR.lock().unwrap().as_str())
+        .env("SM_AUR_REVIEW", *AUR_REVIEW.lock().unwrap())
         .env("SM_FLATPAK", *FLATPAK.lock().unwrap())
         .env("SUDO_PROMPT", sudo::PROMPT)
         .env_remove("BASH_ENV")
