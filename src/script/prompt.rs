@@ -141,7 +141,7 @@ impl Prompt {
     /// The question in the interface language, where its wording is known.
     pub fn friendly(&self) -> String {
         match self {
-            Prompt::Password => t("The password for sudo").to_string(),
+            Prompt::Password => t("Authentication required").to_string(),
             Prompt::YesNo { question, .. } | Prompt::Choice { question, .. } => translate(question),
             Prompt::Text { question } | Prompt::Secret { question } => ask(question),
             Prompt::HostKey { host, fingerprint } => tf(
@@ -160,7 +160,7 @@ impl Prompt {
             }
             Prompt::Secret { .. } => t("Passphrase"),
             Prompt::Text { question } if question.starts_with("Username for '") => t("User name"),
-            Prompt::Text { .. } => t("Empty keeps the default"),
+            Prompt::Text { .. } => t("Empty for default"),
             Prompt::YesNo { .. } | Prompt::Choice { .. } | Prompt::HostKey { .. } => "",
         }
     }
@@ -220,7 +220,7 @@ fn translate(q: &str) -> String {
             .map(|(_, r)| r.trim_end_matches('?'))
     {
         return tf(
-            "{a} and {b} cannot be installed together. Remove {remove}?",
+            "{a} and {b} conflict. Remove {remove}?",
             &[("a", &a), ("b", &b), ("remove", &remove)],
         );
     }
@@ -357,7 +357,7 @@ mod tests {
         );
         assert_eq!(
             ask("foo and bar are in conflict (baz). Remove bar?"),
-            "foo and bar cannot be installed together. Remove bar?"
+            "foo and bar conflict. Remove bar?"
         );
         assert_eq!(
             ask("Import PGP key 1234ABCD, \"Jane <j@x>\"?"),
@@ -448,7 +448,7 @@ mod tests {
             ),
             ("Confirm passphrase: ".into(), "Passphrase"),
             ("Username for 'https://github.com': ".into(), "User name"),
-            ("==> ".into(), "Empty keeps the default"),
+            ("==> ".into(), "Empty for default"),
         ] {
             let p = Prompt::detect(&line, &[]).unwrap();
             assert_eq!(p.placeholder(), shows, "{line}");

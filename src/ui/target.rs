@@ -25,8 +25,9 @@ pub enum Target {
     Language,
     Theme,
     Usage,
+    Status,
     AurHelper,
-    Runs,
+    Output,
     Flatpak,
     Notifications,
     Desktop,
@@ -53,18 +54,21 @@ pub const HOME: &[&[Target]] = &[
     &[Target::Dotfiles, Target::Homelab, Target::Settings],
 ];
 
-/// The settings, group by group.
+/// The settings page, group by group: appearance, the system, the dotfiles, then about.
 pub const SETTINGS: &[&[Target]] = &[
     &[
         Target::Language,
         Target::Theme,
         Target::Usage,
+        Target::Status,
+        Target::Output,
+        Target::Hidden,
+    ],
+    &[
         Target::AurHelper,
-        Target::Runs,
         Target::Flatpak,
         Target::Notifications,
         Target::Desktop,
-        Target::Hidden,
         Target::Features,
     ],
     &[
@@ -94,12 +98,13 @@ pub const ALL: &[Target] = &[
     Target::Language,
     Target::Theme,
     Target::Usage,
+    Target::Status,
+    Target::Output,
+    Target::Hidden,
     Target::AurHelper,
-    Target::Runs,
     Target::Flatpak,
     Target::Notifications,
     Target::Desktop,
-    Target::Hidden,
     Target::Features,
     Target::UseDotfiles,
     Target::Repository,
@@ -129,8 +134,9 @@ impl Target {
             Target::Language => "language",
             Target::Theme => "theme",
             Target::Usage => "usage",
+            Target::Status => "status",
             Target::AurHelper => "aur-helper",
-            Target::Runs => "runs",
+            Target::Output => "output",
             Target::Flatpak => "flatpak",
             Target::Notifications => "notifications",
             Target::Desktop => "desktop",
@@ -167,8 +173,9 @@ impl Target {
             Target::Language => t("Language"),
             Target::Theme => t("Theme"),
             Target::Usage => t("System usage"),
+            Target::Status => t("Main menu status"),
             Target::AurHelper => t("AUR helper"),
-            Target::Runs => t("Runs"),
+            Target::Output => t("Output"),
             Target::Flatpak => t("Flatpak updates"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
@@ -200,8 +207,9 @@ impl Target {
             Target::Language => icon::LANGUAGE,
             Target::Theme => icon::THEME,
             Target::Usage => icon::USAGE,
+            Target::Status => icon::STATUS,
             Target::AurHelper => icon::ARCH,
-            Target::Runs => icon::COMMAND,
+            Target::Output => icon::COMMAND,
             Target::Flatpak => icon::APP,
             Target::Notifications => icon::NOTIFICATION,
             Target::Desktop => icon::APP_MENU,
@@ -269,7 +277,7 @@ impl Target {
             Target::Language
             | Target::Theme
             | Target::AurHelper
-            | Target::Runs
+            | Target::Output
             | Target::Notifications
             | Target::Profile => {
                 return vec![
@@ -284,6 +292,7 @@ impl Target {
                 ];
             }
             Target::Usage
+            | Target::Status
             | Target::Desktop
             | Target::Flatpak
             | Target::UseDotfiles

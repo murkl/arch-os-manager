@@ -1,9 +1,9 @@
 # shellcheck shell=bash source=../lib/lib.sh
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
-# Each argument is package=command, the command with its arguments: a command
-# that answers works, a function of these scripts tells by itself whether it is
-# there. An argument @name asks for the fact of that name.
+# Each argument is package=command: a command that answers works, a function of
+# these scripts tells by itself. An argument @name asks for the fact of that
+# name.
 op_probe() {
     local pair package argv version
     for pair in "$@"; do
@@ -42,9 +42,9 @@ fact_gnome() {
     command -v gnome-shell >/dev/null
 }
 
-# An optional package, set up as recommended. An AUR helper cannot come from itself:
-# it is built here from source, since a -bin build breaks at the next libalpm
-# soname. Its build dependencies go again.
+# An optional package, set up as recommended. An AUR helper is built here from
+# source, as a -bin build breaks at the next libalpm soname, and its build
+# dependencies go again.
 op_install() {
     local package="$1" zone country yes
     case "$package" in
@@ -80,7 +80,7 @@ op_install() {
 }
 
 # What a package started goes with it. An AUR helper may be its -bin or -git
-# package. The owner of its command tells.
+# package, so the owner of its command decides.
 op_remove() {
     local package="$1"
     case "$package" in

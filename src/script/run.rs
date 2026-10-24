@@ -25,7 +25,7 @@ pub struct Run {
     pub prompt: Option<Prompt>,
     /// sudo refused the last password.
     pub rejected: bool,
-    /// Shown in the terminal only, where the person answers every question.
+    /// Verbose output: every prompt is typed.
     terminal: bool,
     fail: Option<String>,
     exit: Option<(i32, Instant)>,
@@ -288,7 +288,7 @@ mod tests {
         assert_eq!(run.result(), Some(Ok(())));
     }
 
-    /// In the terminal the person answers, also what was confirmed before the run.
+    /// With verbose output every prompt is typed, also what was confirmed before the run.
     #[test]
     fn in_the_terminal_leaves_every_question_to_the_person() {
         let (tx, rx) = mpsc::channel();

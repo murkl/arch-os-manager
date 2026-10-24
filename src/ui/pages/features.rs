@@ -159,7 +159,7 @@ impl Page for FeaturePage {
         let acts = if let (Status::Missing, Some(why)) = (&state, unmet) {
             body.push(Block::Blank);
             body.push(Block::Text(
-                tf("Not offered here: it {why}.", &[("why", &t(why))]),
+                tf("Unavailable: {why}.", &[("why", &t(why))]),
                 Tone::Muted,
             ));
             Vec::new()
@@ -174,7 +174,7 @@ impl Page for FeaturePage {
             vec![
                 Act::new(t("Remove"), move |ctx: &mut Ctx| {
                     let text = tf(
-                        "Remove {name}?\nWhat it adds to the manager is gone with it.",
+                        "Remove {name}?\nRemoves with pacman -Rns.",
                         &[("name", &package)],
                     );
                     Flow::Push(start(Job::new(remove, args.clone()).confirm(text), ctx))
@@ -185,21 +185,21 @@ impl Page for FeaturePage {
         if state == Status::Missing && AUR_HELPERS.contains(&self.package.as_str()) {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Built from source with makepkg. git and base-devel are installed along.").into(),
+                t("Built with makepkg, installs git and base-devel.").into(),
                 Tone::Muted,
             ));
         }
         if state == Status::Missing && extension && unmet.is_none() {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Installed from extensions.gnome.org for this user. GNOME loads it at the next login.").into(),
+                t("From extensions.gnome.org, active after the next login.").into(),
                 Tone::Muted,
             ));
         }
         if state == Status::Missing && self.package == "reflector" {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Set up to rank by speed within the country of the time zone, weekly.").into(),
+                t("Weekly by speed, country from the time zone.").into(),
                 Tone::Muted,
             ));
         }

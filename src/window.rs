@@ -334,8 +334,9 @@ impl Win {
         }
     }
 
-    /// Draws the app into the grid, sized to the window. Returns whether a cell changed since it was
-    /// last shown. Cheap, so it runs after every batch of events and the window paints only then.
+    /// Draws the app into the grid, sized to the window, and returns whether a cell changed since
+    /// it was last shown. Cheap, so it runs after every batch of events and the window paints only
+    /// then.
     fn compose(&mut self) -> Result<bool, String> {
         let Some(window) = &self.window else {
             return Ok(false);
@@ -429,45 +430,6 @@ impl Win {
             _ => return None,
         })
     }
-
-    fn key(&self, key: &Named, text: Option<&str>) -> Vec<Key> {
-        let ctrl = self.modifiers.control_key();
-        let shift = self.modifiers.shift_key();
-        let named = match key {
-            Named::Named(n) => Some(match n {
-                NamedKey::Enter => Key::Enter,
-                NamedKey::Escape => Key::Esc,
-                NamedKey::Backspace => Key::Backspace,
-                NamedKey::Delete => Key::Delete,
-                NamedKey::Tab if shift => Key::BackTab,
-                NamedKey::Tab => Key::Tab,
-                NamedKey::ArrowUp => Key::Up,
-                NamedKey::ArrowDown => Key::Down,
-                NamedKey::ArrowLeft => Key::Left,
-                NamedKey::ArrowRight => Key::Right,
-                NamedKey::PageUp => Key::PageUp,
-                NamedKey::PageDown => Key::PageDown,
-                NamedKey::Home => Key::Home,
-                NamedKey::End => Key::End,
-                NamedKey::Space => Key::Char(' '),
-                _ => return Vec::new(),
-            }),
-            Named::Character(s) if ctrl => {
-                s.chars().next().map(|c| Key::Ctrl(c.to_ascii_lowercase()))
-            }
-            Named::Character(_) => None,
-            _ => return Vec::new(),
-        };
-        match named {
-            Some(k) => vec![k],
-            None => text
-                .unwrap_or_default()
-                .chars()
-                .filter(|c| !c.is_control())
-                .map(Key::Char)
-                .collect(),
-        }
-    }
 }
 
 impl ApplicationHandler<()> for Win {
@@ -551,7 +513,7 @@ impl ApplicationHandler<()> for Win {
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                for key in self.key(&event.logical_key, event.text.as_deref()) {
+                for key in keys(&event.logical_key, event.text.as_deref(), self.modifiers) {
                     let msg = if event.repeat {
                         Msg::Held(key)
                     } else {
@@ -644,6 +606,47 @@ fn blink_on(now: Instant) -> bool {
     beats(now, BLINK).is_multiple_of(2)
 }
 
+/// The interface keys of a key the window got, with the letters it typed.
+fn keys(key: &Named, text: Option<&str>, modifiers: ModifiersState) -> Vec<Key> {
+    let ctrl = modifiers.control_key();
+    let shift = modifiers.shift_key();
+    let named = match key {
+        Named::Named(n) => Some(match n {
+            NamedKey::Enter => Key::Enter,
+            NamedKey::Escape => Key::Esc,
+            NamedKey::Backspace if ctrl => Key::CtrlBackspace,
+            NamedKey::Backspace => Key::Backspace,
+            NamedKey::Delete => Key::Delete,
+            NamedKey::Tab if shift => Key::BackTab,
+            NamedKey::Tab => Key::Tab,
+            NamedKey::ArrowUp => Key::Up,
+            NamedKey::ArrowDown => Key::Down,
+            NamedKey::ArrowLeft if ctrl => Key::CtrlLeft,
+            NamedKey::ArrowLeft => Key::Left,
+            NamedKey::ArrowRight if ctrl => Key::CtrlRight,
+            NamedKey::ArrowRight => Key::Right,
+            NamedKey::PageUp => Key::PageUp,
+            NamedKey::PageDown => Key::PageDown,
+            NamedKey::Home => Key::Home,
+            NamedKey::End => Key::End,
+            NamedKey::Space => Key::Char(' '),
+            _ => return Vec::new(),
+        }),
+        Named::Character(s) if ctrl => s.chars().next().map(|c| Key::Ctrl(c.to_ascii_lowercase())),
+        Named::Character(_) => None,
+        _ => return Vec::new(),
+    };
+    match named {
+        Some(k) => vec![k],
+        None => text
+            .unwrap_or_default()
+            .chars()
+            .filter(|c| !c.is_control())
+            .map(Key::Char)
+            .collect(),
+    }
+}
+
 /// The smallest window: the 40 columns and 12 rows every page fits, inside the margin.
 fn least(fonts: &Fonts, scale: f64) -> PhysicalSize<u32> {
     let margin = 2 * (MARGIN * scale) as u32;
@@ -664,9 +667,8 @@ fn layout(width: u32, height: u32, fonts: &Fonts, scale: f64) -> (u32, u32, Rect
 }
 
 /// The rows to paint over a buffer that showed the frame `age` frames back, and to name to the
-/// compositor: what differs from the buffer and from the last frame. The compositor takes over
-/// only these from the buffer, so a row the buffer already has must still be named where the
-/// screen shows another. None where all of it is painted.
+/// compositor, which takes over only those: what differs from the buffer or from the last frame.
+/// None where all of it is painted.
 fn repaint(shown: &[Option<Shown>; 2], age: u8, now: &Shown) -> Option<Vec<u16>> {
     let buffer = match age {
         1 => shown[0].as_ref(),
@@ -955,7 +957,6 @@ pub mod tests {
         assert!(!reachable(Some("wayland-1".into()), None));
     }
 
-    /// The grid keeps the cursor where ratatui puts it, and forgets it when hidden.
     #[test]
     fn the_grid_keeps_the_cursor_until_it_is_hidden() {
         let mut grid = Grid {
@@ -973,11 +974,53 @@ pub mod tests {
     use crate::ui::Style;
 
     #[test]
+    fn the_window_keys_are_the_interface_keys() {
+        let ctrl = ModifiersState::CONTROL;
+        let named = |n| Named::Named(n);
+        assert_eq!(
+            keys(&named(NamedKey::Backspace), None, ctrl),
+            [Key::CtrlBackspace]
+        );
+        assert_eq!(
+            keys(&named(NamedKey::ArrowLeft), None, ctrl),
+            [Key::CtrlLeft]
+        );
+        assert_eq!(
+            keys(&named(NamedKey::ArrowRight), None, ctrl),
+            [Key::CtrlRight]
+        );
+        let none = ModifiersState::empty();
+        assert_eq!(
+            keys(&named(NamedKey::Backspace), None, none),
+            [Key::Backspace]
+        );
+        assert_eq!(keys(&named(NamedKey::ArrowLeft), None, none), [Key::Left]);
+        let c = Named::Character("c".into());
+        assert_eq!(keys(&c, Some("\u{3}"), ctrl), [Key::Ctrl('c')]);
+        assert_eq!(keys(&c, Some("c"), none), [Key::Char('c')]);
+    }
+
+    /// As wide as high, as the mark is: tools/logo.sh rasters for these cells.
+    #[test]
+    fn every_logo_step_is_square_in_the_cells() {
+        let mut fonts = Fonts::new(Faces::new());
+        fonts.rescale(1.0);
+        let (cw, ch) = fonts.cell;
+        let style = Style::new(&crate::theme::all().0[0].colors, false);
+        for height in [27, 39, 54] {
+            let logo = style.logo(u16::MAX, height);
+            let w = (logo[0].chars().count() as u32 * cw) as f64;
+            let h = (logo.len() as u32 * ch) as f64;
+            assert!((w / h - 1.0).abs() < 0.05, "{} rows: {w}x{h}", logo.len());
+        }
+    }
+
+    #[test]
     fn the_fonts_have_every_glyph_the_interface_draws() {
         let font = Font::from_bytes(REGULAR, FontSettings::default()).unwrap();
         let symbols = Font::from_bytes(SYMBOLS, FontSettings::default()).unwrap();
         let style = Style::new(&crate::theme::all().0[0].colors, false);
-        let (g, logo) = (style.glyphs, style.logo());
+        let (g, logo) = (style.glyphs, style.logo(u16::MAX, u16::MAX));
         let text = [
             g.cursor,
             g.dot,
@@ -1065,7 +1108,6 @@ pub mod tests {
             .unwrap();
     }
 
-    /// Painted over the frame before, the rows that changed give what painting all of it does.
     #[test]
     fn painting_the_changed_rows_gives_the_whole_picture() {
         use crate::ui::Key;
@@ -1128,8 +1170,9 @@ pub mod tests {
         );
     }
 
-    /// The compositor takes over only the damage, from two buffers in turn as softbuffer swaps
-    /// them on Wayland. It shows every frame whole: a page left and opened again, a blinking cursor.
+    /// The compositor takes over only the damage, from two buffers in turn as softbuffer swaps them
+    /// on Wayland, and still shows every frame whole: a page left and opened again, a blinking
+    /// cursor.
     #[test]
     fn the_compositor_shows_every_frame_whole() {
         use crate::ui::Key;

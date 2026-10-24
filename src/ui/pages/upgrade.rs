@@ -32,11 +32,18 @@ impl UpgradePage {
         let news = unread(ctx);
         if news > 0 {
             body.push(Block::Text(
+                tn("1 unread news item", "{n} unread news", news, &[]),
+                Tone::Warn,
+            ));
+            body.push(Block::Blank);
+        }
+        if let Some(dropped) = ctx.shared.dropped.ready().filter(|d| !d.is_empty()) {
+            body.push(Block::Text(
                 tn(
-                    "An unread news item. Read it first: it may announce a step an update needs by hand.",
-                    "{n} unread news. Read them first: they may announce steps an update needs by hand.",
-                    news,
-                    &[],
+                    "{n} package without source: {names}.",
+                    "{n} packages without source: {names}.",
+                    dropped.len(),
+                    &[("names", &dropped.join(", "))],
                 ),
                 Tone::Warn,
             ));
@@ -47,7 +54,7 @@ impl UpgradePage {
             // The page waits as a whole, see draw.
             Loaded::Loading => {}
             Loaded::Missing(p) => body.push(Block::Text(
-                tf("The list of updates needs {package}.", &[("package", p)]),
+                tf("Requires {package}.", &[("package", p)]),
                 Tone::Muted,
             )),
             Loaded::Failed(f) => {
@@ -58,8 +65,8 @@ impl UpgradePage {
                 for source in &pending.failed {
                     body.push(Block::Text(
                         match source {
-                            Source::Aur => t("The AUR could not be reached. Its updates are missing here."),
-                            _ => t("The Flatpak remotes could not be reached. Their updates are missing here."),
+                            Source::Aur => t("AUR unreachable."),
+                            _ => t("Flatpak remotes unreachable."),
                         }
                         .to_string(),
                         Tone::Warn,
@@ -144,7 +151,9 @@ impl Page for UpgradePage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         if self.animating(ctx) {
-            waiting(buf, area, t("Looking for updates"), None, None, ctx);
+            if ctx.page_waited() {
+                waiting(buf, area, t("Looking for updates"), None, None, ctx);
+            }
             return;
         }
         self.build(ctx);
@@ -194,6 +203,22 @@ mod tests {
         assert_eq!(count.symbol(), "(");
         assert_eq!(count.fg, app.ctx.style.tone(Tone::Muted).fg.unwrap());
         assert!(!count.modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn foreign_packages_without_source_are_named() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        open(&mut app, Box::new(UpgradePage::new()));
+        assert!(!screen(&mut app, &mut term).contains("without source"));
+        app.ctx.shared.dropped = Loaded::Ready(vec!["gone".into(), "old".into()]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("2 packages without source: gone, old."),
+            "{shown}"
+        );
     }
 
     /// The old version gives way first, at its front, and padding gives way without a mark.

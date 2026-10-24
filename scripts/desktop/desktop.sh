@@ -59,9 +59,9 @@ package-manager	"${1}" --window
 COMMANDS
 }
 
-# The program, then on or off for the app menu entry, how often the timer
-# announces updates or off, and on or off for the update indicator, which is
-# set up only where it is installed. All follow the program wherever it lies.
+# The program, then on or off for the menu entry, how often the timer announces
+# or off, and on or off for the update indicator, set up only where installed.
+# All follow the program wherever it lies.
 op_apply() {
     local program="$1" every changed=""
     case "$program" in
@@ -137,8 +137,8 @@ UNIT
 }
 
 # The notification server as it runs now: the bus and the server's name on it.
-# An id names a notification only for the server that gave it, and a new login
-# or a restarted shell counts anew.
+# An id names a notification only for the server that gave it, which a new login
+# or a restarted shell starts anew.
 server() {
     local bus owner
     bus="$(busctl --user --timeout=5s call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetId)" || return 1
@@ -158,16 +158,14 @@ standing() {
     printf '%s\n' "${1##* }"
 }
 
-# Title, text, the label of its button or nothing for none, the seconds to wait
-# for an answer, and the handle of the notification still standing, which goes
-# first. Prints the handle of this one as soon as it shows, then the action where
-# it was chosen, or `standing` where the time ran out unanswered. GNOME takes the
-# icon in the header from the menu entry the hint names.
+# Title, text, button label or nothing, seconds to wait, and the handle of the
+# standing notification, which goes first. Prints this one's handle once shown,
+# then the chosen action or `standing` on timeout, the header icon coming from
+# the menu entry the hint names.
 op_notify() {
     local server id="" action waiting status=0
     # Closed rather than replaced: GNOME tells only the program that showed a
-    # notification that it closed, so one replaced in its place waits for an
-    # answer that never comes. The specification answers the close of one
+    # notification that it closed. The specification answers the close of one
     # already gone with an error.
     op_close "${5:-}" || true
     server="$(server)" || server=""

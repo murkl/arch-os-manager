@@ -27,17 +27,15 @@ ops:
     root: true
 errors:
   10: |
-    The AUR could not be reached
-    Check the internet connection.
+    AUR unreachable
   11: |
-    The package was not found
-    It may have been removed from its repository. Refresh the package list.
+    Package not found
+    Refresh the package list.
   12: |
-    The archive could not be reached
-    Only the versions in the package cache are shown. Check the internet connection.
+    Archive unreachable
+    Cached versions only.
 hints:
   "The requested URL returned error: 404":
     text: |
-      A package is no longer on the server
-      The list of packages is older than the server's. Update the system, then try again.
+      Package no longer on the server
     offer: upgrade

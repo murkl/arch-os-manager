@@ -1,6 +1,5 @@
-//! Nerd Font icons from Material Design, by what they stand for. The window carries the font.
-//! A terminal finds them in ttf-nerd-fonts-symbols, which the package depends on. The Linux
-//! console shows none.
+//! Nerd Font icons from Material Design, by what they stand for. The window carries the font, a
+//! terminal needs ttf-nerd-fonts-symbols, the Linux console shows none.
 
 pub const ARCH: &str = "\u{f08c7}";
 pub const UPDATE: &str = "\u{f06b0}";
@@ -39,6 +38,7 @@ pub const TAKE: &str = "\u{f0b33}";
 pub const KEEP: &str = "\u{f0e29}";
 pub const VERIFY: &str = "\u{f0e29}";
 pub const COMMAND: &str = "\u{f018d}";
+pub const LOCK: &str = "\u{f033e}";
 pub const CPU: &str = "\u{f0ee0}";
 pub const MEMORY: &str = "\u{f035b}";
 pub const DISK: &str = "\u{f02ca}";
@@ -58,3 +58,4 @@ pub const PROFILE: &str = "\u{f0322}";
 pub const HOMELAB: &str = "\u{f048b}";
 pub const STACK: &str = "\u{f0868}";
 pub const EXPORT: &str = "\u{f0207}";
+pub const STATUS: &str = "\u{f0262}";

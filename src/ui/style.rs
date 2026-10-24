@@ -178,9 +178,16 @@ impl Style {
         frames[turns as usize % frames.len()]
     }
 
-    /// The Arch Linux mark, its blocks as `#` where the font has none.
-    pub fn logo(&self) -> Vec<String> {
-        LOGO.iter()
+    /// The Arch Linux mark in the largest step that takes at most a third of `height` and fits
+    /// `width`, its blocks as `#` where the font has none.
+    pub fn logo(&self, width: u16, height: u16) -> Vec<String> {
+        let step = super::logo::STEPS
+            .iter()
+            .rev()
+            .find(|s| s.len() * 3 <= height as usize && s[0].chars().count() <= width as usize)
+            .copied()
+            .unwrap_or(&LOGO[..]);
+        step.iter()
             .map(|l| match self.glyphs.blocks {
                 true => l.to_string(),
                 false => l.replace(['▄', '█', '▀'], "#"),
@@ -189,7 +196,8 @@ impl Style {
     }
 }
 
-/// The Arch Linux mark in half blocks, which the window draws to the pixel.
+/// The Arch Linux mark in half blocks, which the window draws to the pixel. Drawn by hand: at this
+/// size a raster loses its feet.
 const LOGO: [&str; 9] = [
     "          ▄█▄          ",
     "         ▄███▄         ",
@@ -239,13 +247,29 @@ mod tests {
     }
 
     #[test]
-    fn the_logo_is_square_and_ascii_on_the_console() {
+    fn every_logo_step_is_square_and_ascii_on_the_console() {
         let colors = &crate::theme::all().0[0].colors;
-        let logo = Style::new(colors, false).logo();
-        assert!(
-            logo.iter()
-                .all(|l| l.chars().count() == LOGO[0].chars().count())
-        );
-        assert!(Style::new(colors, true).logo().iter().all(|l| l.is_ascii()));
+        for height in [27, 39, 54] {
+            let logo = Style::new(colors, false).logo(u16::MAX, height);
+            let width = logo[0].chars().count();
+            assert!(logo.iter().all(|l| l.chars().count() == width), "{height}");
+            let ascii = Style::new(colors, true).logo(u16::MAX, height);
+            assert!(ascii.iter().all(|l| l.is_ascii()), "{height}");
+        }
+    }
+
+    #[test]
+    fn the_logo_grows_in_steps_up_to_a_third_of_the_height() {
+        let s = Style::new(&crate::theme::all().0[0].colors, false);
+        for (width, height, rows) in [
+            (80, 24, 9),
+            (114, 29, 9),
+            (208, 43, 13),
+            (277, 58, 18),
+            (40, 58, 13),
+            (30, 58, 9),
+        ] {
+            assert_eq!(s.logo(width, height).len(), rows, "{width}x{height}");
+        }
     }
 }

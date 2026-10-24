@@ -1,7 +1,6 @@
-//! The scripts in `scripts/`, the only code that touches the system, and how they run.
-//!
-//! A script is a folder `<name>/`: `<name>.sh` with one `op_<name>` function per operation,
-//! and `<name>.yaml` declaring them. `lib/` holds what they share.
+//! The scripts in `scripts/`, the only code that touches the system. A script is a folder `<name>/`
+//! with `<name>.sh`, one `op_<name>` per operation, and `<name>.yaml` declaring them, `lib/` holds
+//! what they share.
 
 mod lines;
 mod progress;
@@ -53,7 +52,7 @@ pub mod op {
 pub struct Meta {
     #[serde(default)]
     pub ops: BTreeMap<String, OpMeta>,
-    /// Exit codes from 10 on: headline, then explanation.
+    /// Exit codes from 10 on: headline, then the next step if any.
     #[serde(default)]
     pub errors: BTreeMap<i32, String>,
     /// Output a failure is recognised by. lib.yaml's apply to every script.
@@ -73,7 +72,7 @@ pub struct Meta {
 #[serde(deny_unknown_fields)]
 pub struct OpMeta {
     pub title: String,
-    /// Asked before the run: the question, then what happens.
+    /// Asked before the run: the question, then the irreversible effect.
     #[serde(default)]
     pub confirm: Option<String>,
     /// Calls sudo, so the password is asked before the run.
@@ -89,7 +88,7 @@ pub struct OpMeta {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Hint {
-    /// Headline, then explanation.
+    /// Headline, then the next step if any.
     pub text: String,
     /// The page that fixes it, by the id the command line knows it by.
     #[serde(default)]
@@ -202,8 +201,7 @@ pub fn set_profile(profile: Option<&str>) {
 
 static TERMINAL: AtomicBool = AtomicBool::new(false);
 
-/// Whether a run shows in the terminal only, where the person answers every question: the
-/// runtime answers none, and the script gets `$SM_TERMINAL`.
+/// Verbose output: the runtime answers no prompt, and the script gets `$SM_TERMINAL`.
 pub fn set_terminal(on: bool) {
     TERMINAL.store(on, Ordering::Relaxed);
 }
@@ -321,7 +319,7 @@ fn source_line(file: &str, n: usize) -> Option<String> {
 pub struct Failure {
     pub op: Op,
     pub code: Option<i32>,
-    /// Headline and explanation of a declared error or a recognised hint, untranslated.
+    /// Headline and next step of a declared error or a recognised hint, untranslated.
     pub known: Option<&'static str>,
     /// The page a recognised hint names as the fix.
     pub offer: Option<&'static str>,

@@ -3,7 +3,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use crate::data::{ago, format_size, journal};
+use crate::data::{ago, journal};
 use crate::i18n::{t, tf, tn};
 use crate::ui::gauge;
 use crate::ui::list::{List, Picked, Row};
@@ -32,13 +32,17 @@ impl HomePage {
                 .map(|t| t.search_row())
                 .collect();
         }
+        let shown = ctx.settings.status.unwrap_or(true);
         let mut rows = Vec::new();
         for (i, group) in HOME.iter().enumerate() {
             if i > 0 {
                 rows.push(Row::heading(""));
             }
             for &target in group.iter().filter(|t| visible(**t, ctx)) {
-                let (detail, tone, dim) = status(target, ctx);
+                let (mut detail, tone, dim) = status(target, ctx);
+                if !shown {
+                    detail.clear();
+                }
                 rows.push(
                     Row::new(target, target.label())
                         .icon(target.icon(), Tone::Normal)
@@ -153,11 +157,7 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
             other => count(other, |_| nothing.clone(), nothing.clone(), ctx),
         },
         Target::Cleanup => match &s.cleanup {
-            Loaded::Ready(plan) => (
-                format_size(super::cleanup::frees(plan, ctx)),
-                Tone::Muted,
-                false,
-            ),
+            Loaded::Ready(plan) => (super::cleanup::total(plan, ctx), Tone::Muted, false),
             Loaded::Loading => ctx.loading(),
             Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
             Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
@@ -433,7 +433,6 @@ mod tests {
         );
     }
 
-    /// The row meant takes the cursor behind the splash only, never before the person's eyes.
     #[test]
     fn the_cursor_is_put_behind_the_splash_and_never_moves_by_itself() {
         use crate::ui::app::tests::{app, example};

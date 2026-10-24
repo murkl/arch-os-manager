@@ -109,7 +109,6 @@ fn offer(tx: &SyncSender<Entry>, dropped: &AtomicUsize, entry: Entry) {
 }
 
 impl Writer {
-    /// The thread that owns the log.
     fn spawn(log: Log, zone: jiff::tz::TimeZone) -> Writer {
         let (tx, rx) = mpsc::sync_channel::<Entry>(QUEUE);
         let dropped = Arc::new(AtomicUsize::new(0));
@@ -231,7 +230,6 @@ mod tests {
         );
     }
 
-    /// The thread writes what was sent, in order, once the program finishes.
     #[test]
     fn what_was_sent_is_written_in_order_by_the_end() {
         let tmp = tempfile::tempdir().unwrap();

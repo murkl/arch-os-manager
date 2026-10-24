@@ -12,11 +12,11 @@ ops:
       flatpak: Flatpak apps
 errors:
   10: |
-    The update check failed
-    The package servers could not be reached. Check the internet connection.
+    Update check failed
+    Package servers unreachable.
   11: |
-    The AUR packages could not be updated
-    Everything else is up to date. The details show what the AUR helper reported.
+    AUR update failed
+    Everything else is up to date.
   12: |
-    The update check waited too long
-    An update is still running. Check again once it has ended.
+    Update check timed out
+    An update is still running.

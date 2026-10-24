@@ -158,7 +158,7 @@ pub fn frame(area: Rect, buf: &mut Buffer, ctx: &Ctx, path: &[String]) -> Rect {
     };
 
     // Header: where we are on the left, on the right whether something loads, and the machine.
-    let busy = if ctx.busy() { s.spinner() } else { "" };
+    let busy = if ctx.busy_shown() { s.spinner() } else { "" };
     let mut host = ctx
         .shared
         .system

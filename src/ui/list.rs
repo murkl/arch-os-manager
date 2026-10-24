@@ -203,9 +203,8 @@ pub fn draw_row(
     }
 }
 
-/// Each `old → new` of a list padded to the widest, so the arrows stand in one column. A new
-/// value without an old one stands under the other new ones. Each comes as the part up to the
-/// new value, and the new value.
+/// Each `old → new` padded to the widest, so the arrows stand in one column, a new value without an
+/// old one under the other new ones. Each comes as the part up to the new value, and the new value.
 pub fn changes(pairs: &[(&str, &str)], arrow: &str) -> Vec<(String, String)> {
     let old = pairs.iter().map(|(o, _)| width(o)).max().unwrap_or(0);
     let new = pairs.iter().map(|(_, n)| width(n)).max().unwrap_or(0);
@@ -224,7 +223,6 @@ pub fn changes(pairs: &[(&str, &str)], arrow: &str) -> Vec<(String, String)> {
 }
 
 pub enum Picked<I> {
-    /// The list used the key.
     Used,
     Open(I),
     Ignored,
@@ -379,9 +377,7 @@ impl<I: Clone + Ord> List<I> {
                 let Some(filter) = self.filter.as_mut() else {
                     return Picked::Ignored;
                 };
-                if key == Key::Backspace && filter.text.is_empty() {
-                    self.filter = None;
-                } else if !filter.key(key) {
+                if !filter.key(key) {
                     return Picked::Ignored;
                 }
                 let shown = self.shown();
@@ -393,7 +389,6 @@ impl<I: Clone + Ord> List<I> {
         Picked::Used
     }
 
-    /// Marks or unmarks the row under the cursor.
     pub fn toggle_mark(&mut self) {
         if let Some(id) = self.selected().and_then(|r| r.id.clone())
             && !self.marked.remove(&id)
@@ -402,7 +397,8 @@ impl<I: Clone + Ord> List<I> {
         }
     }
 
-    pub fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &Ctx) {
+    /// Returns the rows it drew on.
+    pub fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &Ctx) -> u16 {
         let s = &ctx.style;
         let mut y = area.y;
         if let Some(filter) = &self.filter {
@@ -428,7 +424,7 @@ impl<I: Clone + Ord> List<I> {
                     s.tone(Tone::Muted),
                 );
             }
-            return;
+            return y - area.y + u16::from(query_active);
         }
         // A column for the leads only where one shows. The console has no icons.
         let column = self.markable || self.rows.iter().any(|r| r.lead.shows(s));
@@ -539,6 +535,7 @@ impl<I: Clone + Ord> List<I> {
                 );
             }
         }
+        y - area.y + lines.len().saturating_sub(self.offset).min(height) as u16
     }
 }
 
@@ -766,13 +763,14 @@ mod tests {
     }
 
     #[test]
-    fn backspace_deletes_and_only_then_closes_the_filter() {
+    fn backspace_only_deletes_and_esc_closes_the_filter() {
         let mut l = list();
         l.key(Key::Char('/'));
         l.key(Key::Char('x'));
         l.key(Key::Backspace);
-        assert!(l.typing());
         l.key(Key::Backspace);
+        assert!(l.typing());
+        l.key(Key::Esc);
         assert!(!l.typing());
     }
 

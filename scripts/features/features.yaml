@@ -9,13 +9,11 @@ ops:
     root: true
 errors:
   10: |
-    The AUR could not be reached
-    Check the internet connection.
+    AUR unreachable
 hints:
   "The requested URL returned error: 404":
     text: |
-      A package is no longer on the server
-      The list of packages is older than the server's. Update the system, then try again.
+      Package no longer on the server
     offer: upgrade
 # What a package may need of the system, and why it is not offered without.
 facts:
@@ -29,41 +27,41 @@ probe:
   packages:
     paru:
       command: [paru, --version]
-      adds: Builds and updates packages from the AUR
+      adds: Builds and updates packages from the AUR.
     yay:
       command: [yay, --version]
-      adds: Builds and updates packages from the AUR
+      adds: Builds and updates packages from the AUR.
     reflector:
       command: [reflector, --help]
-      adds: Ranks the mirrors by speed
+      adds: Ranks the mirrors by speed.
     flatpak:
       command: [flatpak, --version]
-      adds: Updates and cleans up Flatpak apps
+      adds: Updates and cleans up Flatpak apps.
       needs: desktop
     fwupd:
       command: [fwupdmgr, --version]
-      adds: Updates the firmware of the device
+      adds: Updates the firmware of the device.
   desktop:
     gnome-arch-update:
       command: [arch_update_dir]
-      adds: A GNOME Shell extension that shows pending updates in the top bar
+      adds: Shows pending updates in the top bar.
       needs: gnome
       extension: true
     libnotify:
       command: [notify-send, --version]
-      adds: Desktop notifications about new updates
+      adds: Shows desktop notifications about new updates.
       needs: desktop
     meld:
       command: [meld, --version]
-      adds: Merges configuration updates side by side
+      adds: Merges configuration updates side by side.
       needs: desktop
   dotfiles:
     git:
       command: [git, --version]
-      adds: Keeps the dotfiles in a repository
+      adds: Keeps the dotfiles in a repository.
     stow:
       command: [stow, --version]
-      adds: Links the dotfiles into the home folder
+      adds: Links the dotfiles into the home folder.
     age:
       command: [age, --version]
-      adds: Encrypts the secrets of the dotfiles
+      adds: Encrypts the secrets of the dotfiles.

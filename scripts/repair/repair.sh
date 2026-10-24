@@ -39,12 +39,10 @@ op_run() {
     sudo pacman -Su
 }
 
-# Every file of every package against what the package brought, as pacman -Qkk
-# checks them. A configuration changed by hand is a backup file, which pacman
-# lists apart and never counts. A package counts by what a reinstall restores:
-# content, type or a missing file, never the owner, mode or time, which a
-# filesystem such as the vfat of /boot keeps its own way. One with such a file
-# comes back from its repository, one from the AUR has none and is only named.
+# Reinstalls each package whose files lost content, type or existence as pacman
+# -Qkk checks them, never for owner, mode or time, which a filesystem such as
+# the vfat of /boot keeps its own way. Backup files of hand-edited configuration
+# never count, an AUR package is only named.
 op_files() {
     local report altered native foreign
     step check

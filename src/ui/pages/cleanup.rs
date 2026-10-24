@@ -70,70 +70,65 @@ fn label(part: Part) -> &'static str {
     }
 }
 
-/// What a part frees, a quiet `?` where only the removal tells, as the usage does for a value it
-/// cannot read, or why it cannot be cleaned up now.
+/// A size only the removal tells.
+const UNKNOWN: &str = "? MiB";
+
 fn size(plan: &Plan, part: Part) -> String {
-    match plan.engine(part) {
-        Some(Engine::Stopped) => t("not running").into(),
-        Some(Engine::Denied) => t("no access").into(),
-        _ => plan.bytes(part).map_or_else(|| "?".into(), format_size),
-    }
+    plan.bytes(part).map_or_else(|| UNKNOWN.into(), format_size)
 }
 
 /// What the row under the cursor removes.
 fn describe(plan: &Plan, item: Item, nothing: bool) -> String {
     let part = match item {
         Item::Remove if nothing => return t("Nothing to clean up.").into(),
-        Item::Remove => return t("Removes what is marked, for good.").into(),
+        Item::Remove => return t("Removes the marked items permanently.").into(),
         Item::Part(part) => part,
     };
     match (part, plan.engine(part)) {
-        (Part::Orphans, _) if plan.orphans.is_empty() => t("Every package is still needed.").into(),
+        (Part::Orphans, _) if plan.orphans.is_empty() => t("All packages are still needed.").into(),
         (Part::Orphans, _) => {
             let names: Vec<&str> = plan.orphans.iter().map(|(n, _)| n.as_str()).collect();
             tn(
-                "{n} package nothing needs any more: {names}.",
-                "{n} packages nothing needs any more: {names}.",
+                "{n} unneeded package: {names}.",
+                "{n} unneeded packages: {names}.",
                 names.len(),
                 &[("names", &names.join(", "))],
             )
         }
         (Part::Cache, _) => tn(
-            "{n} file from the package cache. Three versions of every installed package stay.",
-            "{n} files from the package cache. Three versions of every installed package stay.",
+            "{n} file, keeps 3 versions per package.",
+            "{n} files, keeps 3 versions per package.",
             plan.cache.len(),
             &[],
         ),
         (Part::Aur, _) => tn(
-            "The build folder of {n} package no longer installed.",
-            "The build folders of {n} packages no longer installed.",
+            "Build folder of {n} uninstalled package.",
+            "Build folders of {n} uninstalled packages.",
             plan.aur.len(),
             &[],
         ),
-        (Part::Flatpak, _) => {
-            t("Runtimes no app needs any more. Flatpak finds them only while it cleans up.").into()
-        }
+        (Part::Flatpak, _) => t("Runtimes no app uses (size unknown in advance).").into(),
         (_, Some(Engine::Ready { unused, .. })) => {
             let mut text = match unused.len() {
-                0 => t("Every image is in use.").to_string(),
+                0 => t("All images are in use.").to_string(),
                 n => tn(
-                    "{n} image no container uses: {names}.",
-                    "{n} images no container uses: {names}.",
+                    "{n} unused image: {names}.",
+                    "{n} unused images: {names}.",
                     n,
                     &[("names", &unused.join(", "))],
                 ),
             };
             if part == Part::Docker {
                 text += " ";
-                text += t("The build cache goes too.");
+                text += t("Includes the build cache.");
             }
             text
         }
         (_, Some(Engine::Stopped)) => {
-            t("Docker is not running, and asking it would start it.").into()
+            t("Docker inactive, started only for the clean-up (size unknown in advance).").into()
         }
         (_, Some(Engine::Denied)) => {
-            t("Only members of the group docker may clean up its images.").into()
+            t("Without the group docker the size is unknown in advance.").into()
         }
         (_, _) => {
             let engine = if part == Part::Docker {
@@ -169,13 +164,12 @@ impl Page for CleanupPage {
                     .dim(!marked)
             })
             .collect();
-        let frees = plan.frees(|p| removes.contains(&p));
-        let tone = if frees > 0 { Tone::Accent } else { Tone::Muted };
+        let tone = if nothing { Tone::Muted } else { Tone::Accent };
         rows.push(Row::heading(""));
         rows.push(
             Row::new(Item::Remove, t("Remove now"))
                 .icon(icon::CLEANUP, Tone::Normal)
-                .detail(format_size(frees), tone)
+                .detail(total(&plan, ctx), tone)
                 .dim(nothing),
         );
         let height = rows.len() as u16;
@@ -237,7 +231,7 @@ impl Page for CleanupPage {
                 }
                 let names: Vec<&str> = removes.iter().map(|p| label(*p)).collect();
                 let text = tf(
-                    "Clean up now?\nThese go for good: {parts}.",
+                    "Clean up now?\nPermanently removes: {parts}.",
                     &[("parts", &names.join(", "))],
                 );
                 let args = removes.iter().map(|p| p.id().to_string()).collect();
@@ -259,6 +253,15 @@ pub fn frees(plan: &Plan, ctx: &Ctx) -> u64 {
     plan.frees(|p| removes.contains(&p))
 }
 
+/// What the marked parts free, as a size: unknown where nothing known but something unknown goes.
+pub fn total(plan: &Plan, ctx: &Ctx) -> String {
+    let removes = removes(plan, ctx);
+    match plan.frees(|p| removes.contains(&p)) {
+        0 if removes.iter().any(|p| plan.bytes(*p).is_none()) => UNKNOWN.into(),
+        frees => format_size(frees),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,6 +278,34 @@ mod tests {
             "\n",
             "podman\tfailed\n",
         ))
+    }
+
+    #[test]
+    fn an_inactive_docker_is_marked_and_cleaned_up_with_an_unknown_size() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        let plan = Plan::parse("docker\tstopped\n");
+        app.ctx.settings.set_cleans(Part::Docker, true);
+        assert!(removes(&plan, &app.ctx).contains(&Part::Docker));
+        app.ctx.shared.cleanup = Loaded::Ready(plan);
+        open(&mut app, Box::new(CleanupPage::new()));
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Up]);
+        let shown = screen(&mut app, &mut term);
+        let row = |label: &str| {
+            shown
+                .lines()
+                .find(|l| l.contains(label))
+                .unwrap_or_default()
+        };
+        assert!(row("Docker images").ends_with(" ? MiB"), "{shown}");
+        assert!(
+            row("Remove now").ends_with(" ? MiB"),
+            "nothing known, something unknown: {shown}"
+        );
+        assert!(shown.contains("Docker inactive, started only"), "{shown}");
     }
 
     #[test]
@@ -301,9 +332,9 @@ mod tests {
             "off by default: {shown}"
         );
         assert!(line("Docker images").ends_with("2.0 GiB"), "{shown}");
-        assert!(line("Podman images").ends_with(" ?"), "{shown}");
+        assert!(line("Podman images").ends_with(" ? MiB"), "{shown}");
         assert!(line("Flatpak runtimes").contains(mark), "{shown}");
-        assert!(line("Flatpak runtimes").ends_with(" ?"), "{shown}");
+        assert!(line("Flatpak runtimes").ends_with(" ? MiB"), "{shown}");
         assert!(!shown.contains("unknown"), "{shown}");
         // 12 MiB of packages and 860 MiB of cache, the cursor on the action.
         assert!(line("Remove now").ends_with("872.0 MiB"), "{shown}");
@@ -311,11 +342,11 @@ mod tests {
             line("Remove now").contains(app.ctx.style.glyphs.cursor),
             "{shown}"
         );
-        assert!(shown.contains("Removes what is marked"), "{shown}");
+        assert!(shown.contains("Removes the marked items"), "{shown}");
         press(&mut app, &[Key::Up, Key::Up]);
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("1 image no container uses: example/dev:latest."),
+            shown.contains("1 unused image: example/dev:latest."),
             "{shown}"
         );
         assert!(shown.contains("⏎ mark"), "{shown}");
@@ -342,7 +373,7 @@ mod tests {
         press(&mut app, &[Key::End, Key::Enter]);
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("These go for good: Unneeded packages, Package cache, Docker images."),
+            shown.contains("Permanently removes: Unneeded packages, Package cache, Docker images."),
             "the podman that did not answer stays out: {shown}"
         );
     }

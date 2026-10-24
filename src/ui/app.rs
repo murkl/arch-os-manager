@@ -67,6 +67,8 @@ impl App {
             wake: wake.clone(),
             page: 0,
             action: None,
+            grace: super::GRACE,
+            shown: (0, std::time::Instant::now()),
         };
         sample(tx, wake);
         ctx.style = Style::new(&ctx.theme().colors, console);
@@ -217,6 +219,9 @@ impl App {
         let over_home = self.pages.len() > 1 && self.pages.len() - self.closes() == 1;
         let (id, page) = self.pages.last_mut().expect("the start page stays");
         self.ctx.page = *id;
+        if self.ctx.shown.0 != *id {
+            self.ctx.shown = (*id, std::time::Instant::now());
+        }
         self.ctx.cursor.set(None);
         if page.bare() {
             frame.buffer_mut().set_style(area, self.ctx.style.base());
@@ -396,7 +401,24 @@ impl App {
                     });
                 }
             }
-            Fresh::Installed(r) => s.installed = Loaded::from(r),
+            Fresh::Installed(r) => {
+                s.installed = Loaded::from(r);
+                if let Some(installed) = s.installed.ready() {
+                    let foreign: Vec<String> = installed
+                        .iter()
+                        .filter(|p| p.foreign)
+                        .map(|p| p.name.clone())
+                        .collect();
+                    if foreign.is_empty() {
+                        s.dropped = Loaded::Ready(Vec::new());
+                    } else {
+                        self.ctx.remote(op::PACKAGES_AUR_INFO, move || {
+                            Fresh::Dropped(load_dropped(&foreign))
+                        });
+                    }
+                }
+            }
+            Fresh::Dropped(r) => s.dropped = Loaded::from(r),
             Fresh::Services(r) => s.services = Loaded::from(r),
             Fresh::Journal(r) => s.journal = Loaded::from(r),
             Fresh::Pacnew(r) => s.pacnew = Loaded::from(r),
@@ -469,6 +491,14 @@ fn sample(tx: SyncSender<Msg>, wake: Arc<dyn Fn() + Send + Sync>) {
             wake();
         }
     });
+}
+
+/// Of the foreign packages, those the AUR does not know.
+fn load_dropped(foreign: &[String]) -> Result<Vec<String>, Failure> {
+    let args: Vec<&str> = foreign.iter().map(String::as_str).collect();
+    let out = query(op::PACKAGES_AUR_INFO, &args)?;
+    let found = data::aur::parse(&out).map_err(|e| Failure::new(op::PACKAGES_AUR_INFO, e))?;
+    Ok(data::aur::unknown(foreign, &found))
 }
 
 /// The feed, or the copy from the last time it was reached.
@@ -556,6 +586,8 @@ pub mod tests {
             wake: Arc::new(|| {}),
             page: 0,
             action: None,
+            grace: std::time::Duration::ZERO,
+            shown: (0, std::time::Instant::now()),
         };
         let mut app = App {
             pages: Vec::new(),
@@ -592,7 +624,6 @@ pub mod tests {
         }
     }
 
-    /// Typing shows the terminal's own cursor, after the text.
     #[test]
     fn typing_puts_the_terminals_cursor_after_the_text() {
         let (mut app, mut term) = app();
@@ -1024,7 +1055,11 @@ pub mod tests {
         assert!(screen(&mut app, &mut term).contains("xx"));
         assert!(!Key::Enter.repeats(true) && !Key::Esc.repeats(true) && !Key::Tab.repeats(true));
         assert!(Key::Backspace.repeats(true) && Key::Down.repeats(true));
+        assert!(Key::Left.repeats(true) && Key::CtrlBackspace.repeats(true));
+        assert!(!Key::Left.repeats(false), "back happens once");
         assert!(Key::WheelUp.bytes().is_empty(), "the wheel types nothing");
+        assert_eq!(Key::CtrlBackspace.bytes(), b"\x08", "as terminals send it");
+        assert_eq!(Key::CtrlLeft.bytes(), b"\x1b[1;5D");
     }
 
     #[test]
@@ -1143,7 +1178,7 @@ pub mod tests {
             open(&mut app, page);
         }
         let shown = screen(&mut app, &mut term);
-        assert!(shown.contains("The AUR could not be reached"), "{shown}");
+        assert!(shown.contains("AUR unreachable"), "{shown}");
         assert!(
             shown.contains("Install now") && !shown.contains("up to date"),
             "{shown}"
@@ -1207,6 +1242,74 @@ pub mod tests {
         press(&mut app, &[Key::Char('f')]);
         app.handle(Msg::Paste("upd\nate".into()));
         assert!(screen(&mut app, &mut term).contains("update"));
+    }
+
+    /// What ends sooner than the grace never flashes: the header and a page that waits show it
+    /// only once it lasts.
+    #[test]
+    fn a_wait_shows_only_once_it_lasts() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        app.ctx.grace = std::time::Duration::from_millis(300);
+        let long_ago = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        let spins = |shown: &str| {
+            let header = shown.lines().nth(1).unwrap_or_default().to_string();
+            crate::ui::Style::new(&crate::theme::all().0[0].colors, false)
+                .glyphs
+                .spinner
+                .iter()
+                .any(|f| header.contains(f))
+        };
+        app.ctx.save_settings();
+        assert!(!spins(&screen(&mut app, &mut term)), "a write just begun");
+        app.ctx.loads[0].started = long_ago;
+        assert!(spins(&screen(&mut app, &mut term)), "a write that lasts");
+        app.ctx.loads.clear();
+        open(
+            &mut app,
+            Box::new(crate::ui::pages::upgrade::UpgradePage::new()),
+        );
+        assert!(!screen(&mut app, &mut term).contains("Looking for updates"));
+        app.ctx.shown.1 = long_ago;
+        assert!(screen(&mut app, &mut term).contains("Looking for updates"));
+    }
+
+    /// In a text box backspace only deletes: it neither closes the box nor leaves the page.
+    #[test]
+    fn backspace_in_a_text_box_never_leaves_it() {
+        use crate::script::{Run, op};
+        use crate::ui::pages::packages::PackagesPage;
+        use crate::ui::pages::run::{Job, RunPage};
+        use crate::ui::pages::settings::SettingsPage;
+        let erase = [Key::Backspace; 3];
+        let (mut home, _) = app();
+        press(&mut home, &[Key::Char('f'), Key::Char('x')]);
+        press(&mut home, &erase);
+        assert!(
+            home.pages.last().unwrap().1.typing(),
+            "the search on the start page"
+        );
+        let run = Run::fed(op::UPGRADE_RUN, "aur", "==> ");
+        let pages: [(Box<dyn Page>, &[Key]); 3] = [
+            (
+                Box::new(SettingsPage::new(None)),
+                &[Key::Char('f'), Key::Char('x')],
+            ),
+            (Box::new(PackagesPage::new()), &[Key::Char('x')]),
+            (
+                Box::new(RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run)),
+                &[Key::Char('x')],
+            ),
+        ];
+        for (page, typed) in pages {
+            let (mut app, _) = app();
+            open(&mut app, page);
+            press(&mut app, typed);
+            press(&mut app, &erase);
+            let top = &app.pages.last().unwrap().1;
+            assert!(app.pages.len() == 2 && top.typing(), "{}", top.title());
+        }
     }
 
     #[test]

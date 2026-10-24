@@ -1,5 +1,3 @@
-//! The pages.
-
 pub mod ask;
 pub mod cleanup;
 pub mod dotfiles;

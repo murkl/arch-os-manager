@@ -3,5 +3,5 @@ ops:
     title: Loading the Arch Linux news
 errors:
   10: |
-    The news could not be loaded
-    archlinux.org could not be reached. The news shown are the last ones loaded.
+    News not loaded
+    Showing the cache.
