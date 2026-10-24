@@ -6,7 +6,7 @@
 |---|---|
 | `system-manager` | Interface in the terminal, else in a window |
 | `system-manager --window` | Interface in a window |
-| `system-manager <page>` | Opens `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `settings` or `features` |
+| `system-manager <page>` | Opens `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `dotfiles`, `homelab`, `settings` or `features` |
 | `system-manager init` | Sets up the menu entry, the update notification and the update indicator |
 | `system-manager check` | Prints pending updates like checkupdates, AUR as `aur/name`, an unknown version as `?`. Exit 2 without updates, 1 if a source failed and none had updates |
 | `system-manager notify` | Announces pending updates, with `--new` only unannounced ones |
@@ -60,6 +60,9 @@ A run shows its step and pacman's progress. **tab** switches to the terminal, wh
 | `Enter a number (default=N):` | Numbered choices |
 | `Enter a selection`, helper menus ending in `==>` | Text box, empty keeps the default |
 | sudo prompt | Password |
+| git's `Username for` | Text box |
+| git's `Password for`, ssh and age passphrases | Hidden text box, held nowhere |
+| ssh's question about an unknown host key | Yes or no, no first, with the fingerprint |
 
 Other prompts wait in the terminal. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked. With `aur-review`, the AUR step switches to the terminal and leaves every question to the person.
 
@@ -115,6 +118,120 @@ Stopping, restarting or disabling the display manager or the system bus asks fir
 
 Containers and volumes stay. Docker is read and cleaned up only while it runs. Its sizes need the group `docker`, the clean-up runs as root. Podman is per user. `? MiB` marks a size known only on removal.
 
+## Dotfiles
+
+**Settings › Dotfiles** switches them on, off by default. The start page then shows **Dotfiles** with what waits: new commits, a changed `init.sh`, missing links, or whether this machine is backed up.
+
+The dotfiles are a git repository in `~/.dotfiles`: what every machine shares at the top, a folder per profile, and nothing else the manager needs. A profile is named after the host unless **Settings › Profile** chooses another, and a folder there is a profile when it holds one of its parts below. The manager makes a missing one once something goes into it, with `init.sh`, and the two files at the top where they are missing.
+
+| In `~/.dotfiles/` | Content | Written by |
+|---|---|---|
+| `dotfiles.yaml` | The groups of the Dotfiles page, for every profile | you |
+| `dotfiles.sh` | The function of each group, and helpers for `init.sh` | you |
+| `home/` | Files of the home folder on every machine, `.foo` as `dot-foo` | **Add a file for every machine** |
+
+| In `~/.dotfiles/<profile>/` | Content | Written by |
+|---|---|---|
+| `init.sh` | Your commands for this machine | you |
+| `home/` | Files of the home folder on this machine, over those of every machine | **Add a file for this machine** |
+| `secrets/` | Files of the home folder encrypted with age, each `<name>.age` | **Add a secret** |
+| `key.age` | The age key of the secrets, behind your passphrase | the first secret |
+| `packages/` | `pacman.txt`, `aur.txt`, `flatpak.txt`: the packages installed on purpose | **Back up** |
+| `gnome/` | `extensions.txt` and the settings of each extension | **Back up** |
+| `groups.txt` | The functions of the groups switched on | the Dotfiles page |
+
+**Settings › Repository** takes the address GitHub or Gitea show for cloning. Without `~/.dotfiles` it clones, else it binds them to it, once the repository answers and shares their history. Empty, the dotfiles stay on this machine. Plain http and `git://` are refused, as they carry the dotfiles unencrypted. git and ssh ask for what they need in the run, and Arch OS keeps a token in the keyring and a key in its agent.
+
+### Set Up and Back Up
+
+**Set up** brings this machine to the state of its profile. What the profile brought since the last set up is applied, what this machine changed since stays for a back up:
+
+| Step | Does |
+|---|---|
+| Latest state | The remote's commits, as a fast-forward or a rebase of the commits here, open changes stashed and back |
+| Links | `stow --dotfiles --no-folding` from the profile's `home/`, then from the one of every machine, folders real. What stands where a link goes moves to `~/.dotfiles-backup/<time>/`, links to files gone from a `home/` go |
+| Secrets | Each one missing here or changed in the profile, written for its owner only. The passphrase is asked once per machine |
+| `init.sh` | Where it changed or never ran here |
+| Packages | What the lists name and this machine lacks, from the repositories, the AUR and Flathub. One no repository has any more is named and left out |
+| Groups | The function of each group switched on, where it changed or never ran here |
+| GNOME | Missing extensions from extensions.gnome.org, each after the shell's question, settings and the list of extensions on where they changed |
+
+**Back up** writes the package lists, the GNOME extensions and each secret changed here into the profile, commits every change of the dotfiles as `Back up <profile>: <parts>`, takes in the remote's commits and uploads. A branch without an upstream gets it at its first push.
+
+What this machine applied lies in the clone and is never committed: `.git/system-manager/` holds the blob of each file as it was applied, the hash of each function of `dotfiles.sh` as it ran, the links of the last set up and the key once unlocked.
+
+### Groups
+
+`dotfiles.yaml` names the groups of every profile, in their order at the foot of the Dotfiles page:
+
+```yaml
+groups:
+  - name: Gaming
+    description: Steam, Lutris and Wine
+    install: gaming
+```
+
+| Key | Meaning |
+|---|---|
+| `name` | The row on the Dotfiles page |
+| `description` | One sentence under it, optional |
+| `install` | The function of `dotfiles.sh` that sets the group up, its line in `groups.txt` |
+
+`dotfiles.sh` holds functions as a PKGBUILD does, one per group and any helper. Set up reads it before every call, runs `init.sh` of the profile, then calls the function of each group switched on:
+
+```bash
+# dotfiles.sh
+gaming() {
+    sudo pacman -S --needed steam
+}
+
+# <profile>/init.sh
+sudo pacman -S --needed zsh
+```
+
+**⏎** on a group switches it on and calls its function, or switches it off and leaves what it installed. Set up calls a function again where it changed, a comment or a space aside, and `init.sh` where the file changed. The functions run in `~/.dotfiles`, `init.sh` in the profile's folder with the functions at hand, all with `set -euo pipefail`, `SM_DOTFILES` and `SM_PROFILE` set, `LC_ALL=C.UTF-8`, and they may call `sudo`. Outside a function of `dotfiles.sh` stand only definitions. Ending with status 75 (`EX_TEMPFAIL`), a function or `init.sh` has not applied yet, for example while a program it configures was never started. Set up goes on and calls it again next time.
+
+**Note:** _A function named like a program, such as `docker`, hides the program in `dotfiles.sh` and `init.sh`. A changed helper runs no function again that calls it._
+
+### Files and Secrets
+
+**Dotfiles › Files** adds a file or folder of the home folder and takes one out. Its browser goes a folder up with **←**. Added for every machine, it moves into `home/` at the top, for this machine into the profile's `home/`, and a link of stow takes its place. Where both hold a place, the profile's file is linked. Taken out, the file takes the place of its link again. A secret is encrypted into `secrets/` and its file stays where it is. **Change the passphrase** wraps the key anew, and a machine unlocked before keeps its key.
+
+Without the manager, the files link the same way, the profile's first:
+
+```sh
+stow --dir ~/.dotfiles/<profile> --target ~ --dotfiles --no-folding home
+stow --dir ~/.dotfiles --target ~ --dotfiles --no-folding --defer='.*' home
+```
+
+## Homelab
+
+**Settings › Homelab** switches it on, off by default and only with the dotfiles. Without a homelab yet it asks for the name of a server, such as `nas.fritz.box`, and makes one in the dotfiles. Empty, it stays off.
+
+```
+~/.dotfiles/homelab/
+├── homelab.yaml                 the servers and where their Cup answers
+├── key.age                      the age key of its secrets, behind your passphrase
+└── <server>/<stack>/compose.yaml
+```
+
+```yaml
+servers:
+  - name: nas.fritz.box
+    cup: http://nas.fritz.box:8000
+```
+
+| Key | Meaning |
+|---|---|
+| `name` | The server as the network knows it, and its folder beside `homelab.yaml` |
+| `cup` | The address of its Cup, http or https |
+
+The manager makes the stack `cup` for the first server: [Cup](https://github.com/sergi0g/cup) behind a socket proxy that lets it read containers and images only. Rolled out on the server with `docker compose up -d` in its folder, it tells which images have updates. Until then **Homelab** names the server as not reached.
+
+The start page counts the updates of every server. A server's page shows each stack as its needed images running, then an update, a newer tag, an image not running, or a check older than 48 hours. Images only a compose profile starts may be missing. **⏎** on a stack shows its images.
+
+A secret of a server lies as `<file>.age` beside what it belongs to, under the key of the homelab, unlocked once per machine like a profile's. **Add a secret** encrypts a file of the home folder to a path in the server's folder and replaces one there. **Export** packs the server's folder with every secret decrypted as `<server>.tar` into the downloads folder, without anyone's names, readable by its owner only, and unpacks it once more to compare it with its source.
+
 ## Optional Packages
 
 | Group | Package | Adds |
@@ -126,6 +243,9 @@ Containers and volumes stay. Docker is read and cleaned up only while it runs. I
 | `desktop` | `gnome-arch-update` | Shows pending updates in the top bar |
 | `desktop` | `libnotify` | Shows desktop notifications about new updates |
 | `desktop` | `meld` | Merges configuration updates side by side |
+| `dotfiles` | `git` | Keeps the dotfiles in a repository |
+| `dotfiles` | `stow` | Links the dotfiles into the home folder |
+| `dotfiles` | `age` | Encrypts the secrets of the dotfiles |
 
 A package counts when its `command` in `scripts/features/features.yaml` works. One that `needs` a fact is offered only where it holds:
 
@@ -162,6 +282,9 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | `flatpak` | `true`, `false` | `true` |
 | `cleanup` | a part with `true` or `false` | `orphans`, `cache`, `aur`, `flatpak` |
 | `hidden-log` | hidden system log messages | none |
+| `dotfiles` | `true`, `false` | `false` |
+| `dotfiles-profile` | a folder of `~/.dotfiles` | the host name |
+| `homelab` | `true`, `false` | `false` |
 
 - An unparsable file is ignored and named under **Settings › About**
 - Every start and `init` set up the menu entry and the notification per `app-menu` and `notify`. An installer calls `init` from its chroot as the user
@@ -213,6 +336,9 @@ Icons are Nerd Font symbols, in a terminal from `ttf-nerd-fonts-symbols`. The Li
 | `~/.local/share/icons/hicolor/scalable/apps/system-manager.svg` | Icon |
 | `~/.config/systemd/user/system-manager-notify.{service,timer}` | Update notification |
 | `~/.local/share/gnome-shell/extensions/arch-update@RaphaelRochet/` | Update indicator |
+| `~/.dotfiles/` | Dotfiles repository, with the dotfiles on |
+| `~/.dotfiles-backup/<time>/` | What a set up replaced with a link or a secret |
+| `<downloads>/<server>.tar` | Exported homelab server |
 
 `SM_HOME` moves all of it, for a throwaway run.
 

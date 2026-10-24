@@ -80,7 +80,14 @@ fn instruments(area: Rect, menu: usize, buf: &mut Buffer, ctx: &Ctx) -> Rect {
 }
 
 fn visible(target: Target, ctx: &Ctx) -> bool {
-    target != Target::Reboot || ctx.shared.system.ready().is_some_and(|s| s.reboot)
+    match target {
+        Target::Reboot => ctx.shared.system.ready().is_some_and(|s| s.reboot),
+        Target::Dotfiles | Target::Repository | Target::Profile | Target::UseHomelab => {
+            ctx.settings.dotfiles()
+        }
+        Target::Homelab => ctx.settings.homelab(),
+        _ => true,
+    }
 }
 
 fn count<T>(
@@ -164,6 +171,24 @@ fn status(target: Target, ctx: &Ctx) -> (String, Tone, bool) {
         Target::Mirrors => match s.mirrors.ready().and_then(|m| m.changed) {
             Some(changed) => (ago(changed), Tone::Muted, false),
             None => (String::new(), Tone::Muted, false),
+        },
+        Target::Dotfiles => match &s.dotfiles {
+            Loaded::Ready(d) => {
+                let (text, tone) = super::dotfiles::summary(d, ctx);
+                (text, tone, false)
+            }
+            Loaded::Loading => ctx.loading(),
+            Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
+            Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
+        },
+        Target::Homelab => match &s.homelab {
+            Loaded::Ready(lab) => {
+                let (text, tone) = super::homelab::summary(lab);
+                (text, tone, false)
+            }
+            Loaded::Loading => ctx.loading(),
+            Loaded::Failed(_) => (t("unknown").into(), Tone::Muted, false),
+            Loaded::Missing(p) => (tf("needs {package}", &[("package", p)]), Tone::Muted, true),
         },
         Target::Firmware => count(
             &s.firmware,

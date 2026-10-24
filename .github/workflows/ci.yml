@@ -34,7 +34,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - run: pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
+      - run: pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git stow age
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

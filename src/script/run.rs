@@ -189,16 +189,24 @@ impl Run {
     /// The person's answer to the open question.
     pub fn answer(&mut self, text: &str) {
         let line = self.lines.current();
-        if self.prompt == Some(Prompt::Password) {
-            // An empty one counts as a failed attempt towards the lock of pam_faillock. A
-            // terminal that echoes would print it into the output and the log.
-            if text.is_empty() || self.session.echoes() {
-                return;
+        match self.prompt {
+            Some(Prompt::Password) => {
+                // An empty one counts as a failed attempt towards the lock of pam_faillock. A
+                // terminal that echoes would print it into the output and the log.
+                if text.is_empty() || self.session.echoes() {
+                    return;
+                }
+                sudo::set(text.to_string());
+                self.rejected = false;
             }
-            sudo::set(text.to_string());
-            self.rejected = false;
-        } else {
-            crate::info!("{}: answered {text:?} to {line:?}", self.op);
+            // Held nowhere, so neither logged nor typed where the terminal shows it.
+            Some(Prompt::Secret { .. }) => {
+                if text.is_empty() || self.session.echoes() {
+                    return;
+                }
+                crate::info!("{}: answered a secret to {line:?}", self.op);
+            }
+            _ => crate::info!("{}: answered {text:?} to {line:?}", self.op),
         }
         self.send(text, line);
     }
@@ -455,6 +463,45 @@ mod tests {
             }
         }
         assert!(run.recent.iter().any(|l| l == "unanswered"));
+    }
+
+    /// age, as the dotfiles run it: each passphrase is the person's, typed hidden, never empty.
+    #[test]
+    fn age_asks_for_its_passphrases_and_the_person_answers_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        std::fs::write(dir.join("plain"), "secret\n").unwrap();
+        // Each answer the run sent, by run.
+        let answer = |args: &[&str]| -> (Option<Result<(), Failure>>, usize) {
+            let (tx, rx) = mpsc::channel();
+            let mut cmd = std::process::Command::new("age");
+            cmd.args(args).current_dir(dir);
+            let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
+            let mut run = Run::with(crate::script::op::DOTFILES_PASSPHRASE, session, (24, 80));
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut sent = 0;
+            while run.result().is_none() && Instant::now() < deadline {
+                if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
+                    run.on_event(e);
+                }
+                run.check_prompt();
+                if matches!(run.prompt, Some(Prompt::Secret { .. })) {
+                    run.answer("");
+                    assert!(run.prompt.is_some(), "nothing empty is sent");
+                    run.answer("correct horse");
+                    sent += usize::from(run.prompt.is_none());
+                }
+            }
+            (run.result(), sent)
+        };
+        let made = answer(&["--passphrase", "--output", "plain.age", "plain"]);
+        assert_eq!(made, (Some(Ok(())), 2), "the passphrase, then again");
+        let read = answer(&["--decrypt", "--output", "plain.out", "plain.age"]);
+        assert_eq!(read, (Some(Ok(())), 1));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("plain.out")).unwrap(),
+            "secret\n"
+        );
     }
 
     #[test]

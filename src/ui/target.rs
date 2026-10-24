@@ -19,6 +19,8 @@ pub enum Target {
     Mirrors,
     Firmware,
     Repair,
+    Dotfiles,
+    Homelab,
     Settings,
     Language,
     Theme,
@@ -32,6 +34,10 @@ pub enum Target {
     Desktop,
     Hidden,
     Features,
+    UseDotfiles,
+    Repository,
+    Profile,
+    UseHomelab,
     About,
 }
 
@@ -46,10 +52,10 @@ pub const HOME: &[&[Target]] = &[
         Target::Firmware,
         Target::Repair,
     ],
-    &[Target::Settings],
+    &[Target::Dotfiles, Target::Homelab, Target::Settings],
 ];
 
-/// The settings page, group by group: appearance, the system, then about.
+/// The settings page, group by group: appearance, the system, the dotfiles, then about.
 pub const SETTINGS: &[&[Target]] = &[
     &[
         Target::Language,
@@ -67,6 +73,12 @@ pub const SETTINGS: &[&[Target]] = &[
         Target::Desktop,
         Target::Features,
     ],
+    &[
+        Target::UseDotfiles,
+        Target::Repository,
+        Target::Profile,
+        Target::UseHomelab,
+    ],
     &[Target::About],
 ];
 
@@ -82,6 +94,8 @@ pub const ALL: &[Target] = &[
     Target::Mirrors,
     Target::Firmware,
     Target::Repair,
+    Target::Dotfiles,
+    Target::Homelab,
     Target::Settings,
     Target::Language,
     Target::Theme,
@@ -95,6 +109,10 @@ pub const ALL: &[Target] = &[
     Target::Notifications,
     Target::Desktop,
     Target::Features,
+    Target::UseDotfiles,
+    Target::Repository,
+    Target::Profile,
+    Target::UseHomelab,
     Target::About,
 ];
 
@@ -113,6 +131,8 @@ impl Target {
             Target::Mirrors => "mirrors",
             Target::Firmware => "firmware",
             Target::Repair => "repair",
+            Target::Dotfiles => "dotfiles",
+            Target::Homelab => "homelab",
             Target::Settings => "settings",
             Target::Language => "language",
             Target::Theme => "theme",
@@ -126,6 +146,10 @@ impl Target {
             Target::Desktop => "desktop",
             Target::Hidden => "hidden",
             Target::Features => "features",
+            Target::UseDotfiles => "use-dotfiles",
+            Target::Repository => "repository",
+            Target::Profile => "profile",
+            Target::UseHomelab => "use-homelab",
             Target::About => "about",
         }
     }
@@ -147,6 +171,8 @@ impl Target {
             Target::Mirrors => t("Mirrors"),
             Target::Firmware => t("Firmware"),
             Target::Repair => t("Repair"),
+            Target::Dotfiles | Target::UseDotfiles => t("Dotfiles"),
+            Target::Homelab | Target::UseHomelab => t("Homelab"),
             Target::Settings => t("Settings"),
             Target::Language => t("Language"),
             Target::Theme => t("Theme"),
@@ -160,6 +186,8 @@ impl Target {
             Target::Desktop => t("App menu entry"),
             Target::Hidden => t("Hidden messages"),
             Target::Features => t("Optional packages"),
+            Target::Repository => t("Repository"),
+            Target::Profile => t("Profile"),
             Target::About => t("About"),
         }
     }
@@ -178,6 +206,8 @@ impl Target {
             Target::Mirrors => icon::MIRRORS,
             Target::Firmware => icon::FIRMWARE,
             Target::Repair => icon::REPAIR,
+            Target::Dotfiles | Target::UseDotfiles => icon::DOTFILES,
+            Target::Homelab | Target::UseHomelab => icon::HOMELAB,
             Target::Settings => icon::SETTINGS,
             Target::Language => icon::LANGUAGE,
             Target::Theme => icon::THEME,
@@ -191,6 +221,8 @@ impl Target {
             Target::Desktop => icon::APP_MENU,
             Target::Hidden => icon::HIDDEN,
             Target::Features => icon::OPTIONAL,
+            Target::Repository => icon::REPOSITORY,
+            Target::Profile => icon::PROFILE,
             Target::About => icon::ABOUT,
         }
     }
@@ -206,6 +238,8 @@ impl Target {
             Target::Cleanup => Some(op::CLEANUP_PLAN),
             Target::Firmware => Some(op::FIRMWARE_LIST),
             Target::Notifications => Some(op::DESKTOP_NOTIFY),
+            Target::Dotfiles => Some(op::DOTFILES_SETUP),
+            Target::Repository => Some(op::DOTFILES_CONNECT),
             _ => None,
         }
     }
@@ -240,6 +274,8 @@ impl Target {
             Target::Mirrors => Box::new(pages::mirrors::MirrorsPage::new()),
             Target::Firmware => Box::new(pages::firmware::FirmwarePage::new()),
             Target::Repair => Box::new(pages::repair::RepairPage::new()),
+            Target::Dotfiles => Box::new(pages::dotfiles::DotfilesPage::new()),
+            Target::Homelab => Box::new(pages::homelab::HomelabPage::new()),
             Target::Settings => Box::new(pages::settings::SettingsPage::new(None)),
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
@@ -248,17 +284,26 @@ impl Target {
             | Target::Theme
             | Target::AurHelper
             | Target::Output
-            | Target::Notifications => {
+            | Target::Notifications
+            | Target::Profile => {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),
+                ];
+            }
+            Target::Repository => {
+                return vec![
+                    Box::new(pages::settings::SettingsPage::new(Some(self))),
+                    pages::settings::repository(ctx),
                 ];
             }
             Target::Usage
             | Target::Status
             | Target::Desktop
             | Target::Flatpak
-            | Target::AurReview => {
+            | Target::AurReview
+            | Target::UseDotfiles
+            | Target::UseHomelab => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };

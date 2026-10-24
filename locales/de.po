@@ -186,6 +186,9 @@ msgstr "Der nächste Start kommt ohne grafische Sitzung."
 msgid "Docker images"
 msgstr "Docker-Images"
 
+msgid "not running"
+msgstr "läuft nicht"
+
 msgid "Docker inactive."
 msgstr "Docker inaktiv."
 
@@ -1345,3 +1348,642 @@ msgstr "Fortschritt, Rückfragen als Dialog"
 
 msgid "terminal, every command and prompt"
 msgstr "Terminal, alle Befehle und Rückfragen"
+
+msgid ""
+"~/.dotfiles is no repository of its own\n"
+"It is a bare repository or a folder inside another. Move it away, then try again.\n"
+msgstr ""
+"~/.dotfiles ist kein eigenes Repository\n"
+"Es ist ein Bare-Repository oder ein Ordner in einem anderen. Verschiebe es und versuche es erneut.\n"
+
+msgid ""
+"The repository wants other credentials\n"
+"A run asks for them. A token or key may lack the right to read or write.\n"
+msgstr ""
+"Das Repository verlangt andere Zugangsdaten\n"
+"Ein Lauf fragt danach. Einem Token oder Schlüssel fehlt vielleicht das Recht zu lesen oder zu schreiben.\n"
+
+msgid ""
+"The repository could not be reached\n"
+"Check the address and the internet connection.\n"
+msgstr ""
+"Das Repository war nicht erreichbar\n"
+"Prüfe die Adresse und die Internetverbindung.\n"
+
+msgid ""
+"No branch is checked out\n"
+"Check one out in ~/.dotfiles with git switch.\n"
+msgstr ""
+"Kein Branch ist ausgecheckt\n"
+"Checke in ~/.dotfiles einen mit git switch aus.\n"
+
+msgid ""
+"The branch is gone from the repository\n"
+"It was deleted or renamed. Check out the default branch in ~/.dotfiles.\n"
+msgstr ""
+"Der Branch fehlt im Repository\n"
+"Er wurde gelöscht oder umbenannt. Checke in ~/.dotfiles den Standard-Branch aus.\n"
+
+msgid ""
+"The changes here and in the repository collide\n"
+"Nothing changed. Resolve it in ~/.dotfiles with git rebase.\n"
+msgstr ""
+"Die Änderungen hier und im Repository widersprechen sich\n"
+"Nichts wurde geändert. Löse es in ~/.dotfiles mit git rebase.\n"
+
+msgid ""
+"A file is in the way\n"
+"stow names it in the details. Move it, then try again.\n"
+msgstr ""
+"Eine Datei steht im Weg\n"
+"stow nennt sie in den Details. Verschiebe sie und versuche es erneut.\n"
+
+msgid ""
+"init.sh failed\n"
+"Its output in the details names the line.\n"
+msgstr ""
+"init.sh ist fehlgeschlagen\n"
+"Ihre Ausgabe in den Details nennt die Zeile.\n"
+
+msgid ""
+"The function of a group failed\n"
+"Its output in the details names the line.\n"
+msgstr ""
+"Die Funktion einer Gruppe ist fehlgeschlagen\n"
+"Ihre Ausgabe in den Details nennt die Zeile.\n"
+
+msgid ""
+"Git does not know your name\n"
+"Set it once with git config --global user.name and user.email.\n"
+msgstr ""
+"Git kennt deinen Namen nicht\n"
+"Setze ihn einmal mit git config --global user.name und user.email.\n"
+
+msgid "The passphrase was wrong three times\n"
+msgstr "Die Passphrase war dreimal falsch\n"
+
+msgid ""
+"The passphrases did not match\n"
+"Nothing changed.\n"
+msgstr ""
+"Die Passphrasen stimmten nicht überein\n"
+"Nichts wurde geändert.\n"
+
+msgid ""
+"The secrets need age\n"
+"Install it under Settings › Optional packages.\n"
+msgstr ""
+"Die Secrets brauchen age\n"
+"Installiere es unter Einstellungen › Optionale Pakete.\n"
+
+msgid ""
+"The key of the secrets is missing\n"
+"The profile holds secrets but no key.age to read them with.\n"
+msgstr ""
+"Der Schlüssel der Secrets fehlt\n"
+"Das Profil hat Secrets, aber keine key.age, um sie zu lesen.\n"
+
+msgid "Only what lies in the home folder\n"
+msgstr "Nur was im Home-Ordner liegt\n"
+
+msgid "It lies in the dotfiles, the cache or the state\n"
+msgstr "Es liegt in den Dotfiles, im Cache oder im State\n"
+
+msgid "It holds the dotfiles, the cache or the state\n"
+msgstr "Es enthält die Dotfiles, den Cache oder den State\n"
+
+msgid "It is a link\n"
+msgstr "Es ist ein Link\n"
+
+msgid "Neither a file nor a folder\n"
+msgstr "Weder Datei noch Ordner\n"
+
+msgid "It is a git repository\n"
+msgstr "Es ist ein Git-Repository\n"
+
+msgid "It holds links, sockets or devices\n"
+msgstr "Es enthält Links, Sockets oder Geräte\n"
+
+msgid "It holds no file\n"
+msgstr "Es enthält keine Datei\n"
+
+msgid ""
+"It holds more than 100 files\n"
+"That is the data of a program, not its configuration.\n"
+msgstr ""
+"Es enthält mehr als 100 Dateien\n"
+"Das sind Daten eines Programms, nicht seine Konfiguration.\n"
+
+msgid "The dotfiles keep it already\n"
+msgstr "Die Dotfiles haben es schon\n"
+
+msgid "The dotfiles do not keep it\n"
+msgstr "Die Dotfiles haben es nicht\n"
+
+msgid ""
+"A name starts with dot-\n"
+"stow reads dot- as a dot. Rename it first.\n"
+msgstr ""
+"Ein Name beginnt mit dot-\n"
+"stow liest dot- als Punkt. Benenne es zuerst um.\n"
+
+msgid ""
+"The repository and the dotfiles do not fit together\n"
+"They share no history, or files here would be overwritten. Move ~/.dotfiles away, then connect again.\n"
+msgstr ""
+"Das Repository und die Dotfiles passen nicht zusammen\n"
+"Sie teilen keine Geschichte, oder Dateien hier würden überschrieben. Verschiebe ~/.dotfiles und verknüpfe erneut.\n"
+
+msgid ""
+"Plain http and git:// are refused\n"
+"They carry the dotfiles unencrypted. Take the https or ssh address.\n"
+msgstr ""
+"Einfaches http und git:// werden abgewiesen\n"
+"Sie übertragen die Dotfiles unverschlüsselt. Nimm die Adresse für https oder ssh.\n"
+
+msgid ""
+"dotfiles.sh has no such function\n"
+"dotfiles.yaml names a function of dotfiles.sh after install.\n"
+msgstr ""
+"dotfiles.sh hat keine solche Funktion\n"
+"dotfiles.yaml nennt unter install eine Funktion aus dotfiles.sh.\n"
+
+msgid "The profile has no secrets yet\n"
+msgstr "Das Profil hat noch keine Secrets\n"
+
+msgid "Reading the dotfiles"
+msgstr "Dotfiles werden gelesen"
+
+msgid "Fetching the dotfiles"
+msgstr "Dotfiles werden abgerufen"
+
+msgid "Listing what the dotfiles keep"
+msgstr "Verwaltete Dateien werden gelesen"
+
+msgid "Connecting the repository"
+msgstr "Repository wird verknüpft"
+
+msgid "Setting up from the dotfiles"
+msgstr "Rechner wird eingerichtet"
+
+msgid "Backing up into the dotfiles"
+msgstr "Rechner wird gesichert"
+
+msgid "Setting up the group"
+msgstr "Gruppe wird eingerichtet"
+
+msgid "Switching the group off"
+msgstr "Gruppe wird ausgeschaltet"
+
+msgid "Adding to the dotfiles"
+msgstr "Wird zu den Dotfiles hinzugefügt"
+
+msgid "Taking out of the dotfiles"
+msgstr "Wird aus den Dotfiles genommen"
+
+msgid "Adding the secret"
+msgstr "Secret wird hinzugefügt"
+
+msgid "Taking the secret out"
+msgstr "Secret wird entfernt"
+
+msgid "Changing the passphrase"
+msgstr "Passphrase wird geändert"
+
+msgid "Fetching the latest state"
+msgstr "Neuester Stand wird geholt"
+
+msgid "Linking the files"
+msgstr "Dateien werden verlinkt"
+
+msgid "Writing the secrets"
+msgstr "Secrets werden geschrieben"
+
+msgid "Running init.sh"
+msgstr "init.sh läuft"
+
+msgid "Installing the packages"
+msgstr "Pakete werden installiert"
+
+msgid "Setting up the groups"
+msgstr "Gruppen werden eingerichtet"
+
+msgid "Restoring the GNOME extensions"
+msgstr "GNOME-Erweiterungen werden hergestellt"
+
+msgid "Listing the packages"
+msgstr "Pakete werden aufgelistet"
+
+msgid "Saving the GNOME extensions"
+msgstr "GNOME-Erweiterungen werden gesichert"
+
+msgid "Encrypting the secrets"
+msgstr "Secrets werden verschlüsselt"
+
+msgid "Committing"
+msgstr "Wird committet"
+
+msgid "Uploading"
+msgstr "Wird hochgeladen"
+
+msgid "Keeps the dotfiles in a repository."
+msgstr "Hält die Dotfiles in einem Repository."
+
+msgid "Links the dotfiles into the home folder."
+msgstr "Verlinkt die Dotfiles in den Home-Ordner."
+
+msgid "Encrypts the secrets of the dotfiles."
+msgstr "Verschlüsselt die Secrets der Dotfiles."
+
+msgid "Dotfiles"
+msgstr "Dotfiles"
+
+msgid "Repository"
+msgstr "Repository"
+
+msgid "Profile"
+msgstr "Profil"
+
+msgid "Set up"
+msgstr "Einrichten"
+
+msgid "Back up"
+msgstr "Sichern"
+
+msgid "Files"
+msgstr "Dateien"
+
+msgid "Add a file for every machine"
+msgstr "Datei für jeden Rechner hinzufügen"
+
+msgid "Add a file for this machine"
+msgstr "Datei für diesen Rechner hinzufügen"
+
+msgid "Remove a file"
+msgstr "Datei entfernen"
+
+msgid "Add a secret"
+msgstr "Secret hinzufügen"
+
+msgid "Remove a secret"
+msgstr "Secret entfernen"
+
+msgid "Change the passphrase"
+msgstr "Passphrase ändern"
+
+msgid "Parent folder"
+msgstr "Übergeordneter Ordner"
+
+msgid "Choose this folder"
+msgstr "Diesen Ordner wählen"
+
+msgid "parent folder"
+msgstr "Ordner höher"
+
+msgid "Answer cannot be empty."
+msgstr "Antwort darf nicht leer sein."
+
+msgid "new profile"
+msgstr "neues Profil"
+
+msgid "init.sh changed"
+msgstr "init.sh geändert"
+
+msgid "dotfiles.sh changed"
+msgstr "dotfiles.sh geändert"
+
+msgid "group changed"
+msgstr "Gruppe geändert"
+
+msgid "GNOME changed"
+msgstr "GNOME geändert"
+
+msgid "{n} new commit"
+msgstr "{n} neuer Commit"
+
+msgid "{n} new commits"
+msgstr "{n} neue Commits"
+
+msgid "{n} link missing"
+msgstr "{n} Link fehlt"
+
+msgid "{n} links missing"
+msgstr "{n} Links fehlen"
+
+msgid "{n} new secret"
+msgstr "{n} neues Secret"
+
+msgid "{n} new secrets"
+msgstr "{n} neue Secrets"
+
+msgid "empty"
+msgstr "leer"
+
+msgid "not usable"
+msgstr "nicht nutzbar"
+
+msgid "not backed up"
+msgstr "nicht gesichert"
+
+msgid "backed up"
+msgstr "gesichert"
+
+msgid "not uploaded"
+msgstr "nicht hochgeladen"
+
+msgid "this machine only"
+msgstr "nur dieser Rechner"
+
+msgid "{profile}, automatic"
+msgstr "{profile}, automatisch"
+
+msgid "The repository was not reached: {why}"
+msgstr "Das Repository war nicht erreichbar: {why}"
+
+msgid "What stood in the way of a link lies in ~/.dotfiles-backup."
+msgstr "Was einem Link im Weg stand, liegt in ~/.dotfiles-backup."
+
+msgid "No dotfiles yet. Back up makes them, Settings › Repository fetches them from a repository."
+msgstr "Noch keine Dotfiles. Sichern legt sie an, Einstellungen › Repository holt sie aus einem Repository."
+
+msgid "The dotfiles keep no file of this machine."
+msgstr "Die Dotfiles haben keine Datei dieses Rechners."
+
+msgid "The profile holds no secret."
+msgstr "Das Profil hat kein Secret."
+
+msgid "The address to clone from and to upload to, as GitHub or Gitea show it for cloning. Empty, the dotfiles stay on this machine."
+msgstr "Die Adresse zum Klonen und Hochladen, wie GitHub oder Gitea sie zum Klonen zeigen. Leer bleiben die Dotfiles auf diesem Rechner."
+
+msgid "The user name for {url}"
+msgstr "Der Benutzername für {url}"
+
+msgid "The password or token for {url}"
+msgstr "Das Passwort oder Token für {url}"
+
+msgid "The passphrase of the key {key}"
+msgstr "Die Passphrase des Schlüssels {key}"
+
+msgid "A new passphrase for the secrets"
+msgstr "Eine neue Passphrase für die Secrets"
+
+msgid "The new passphrase again"
+msgstr "Die neue Passphrase noch einmal"
+
+msgid "The passphrase of the secrets"
+msgstr "Die Passphrase der Secrets"
+
+msgid "Trust the host {host}? The fingerprint of its key is {fingerprint}."
+msgstr "Dem Host {host} vertrauen? Der Fingerabdruck seines Schlüssels ist {fingerprint}."
+
+msgid "dotfiles.yaml: group {n} has no name"
+msgstr "dotfiles.yaml: Gruppe {n} hat keinen Namen"
+
+msgid "dotfiles.yaml: {install} is no name of a function"
+msgstr "dotfiles.yaml: {install} ist kein Name einer Funktion"
+
+msgid "dotfiles.yaml: {install} sets up two groups"
+msgstr "dotfiles.yaml: {install} richtet zwei Gruppen ein"
+
+msgid ""
+"Set up this machine from {profile}?\n"
+"Fetches the latest state, links the files, writes the secrets, runs init.sh and the groups switched on where they changed, and installs what the package lists name. What stands in the way of a link goes to ~/.dotfiles-backup."
+msgstr ""
+"Diesen Rechner aus {profile} einrichten?\n"
+"Holt den neuesten Stand, verlinkt die Dateien, schreibt die Secrets, führt init.sh und die eingeschalteten Gruppen aus, wo sie sich geändert haben, und installiert, was die Paketlisten nennen. Was einem Link im Weg steht, kommt nach ~/.dotfiles-backup."
+
+msgid ""
+"Back up this machine into {profile}?\n"
+"Writes the package lists, the GNOME extensions and the changed secrets into the profile, commits every change of the dotfiles and uploads it to {remote}."
+msgstr ""
+"Diesen Rechner in {profile} sichern?\n"
+"Schreibt die Paketlisten, die GNOME-Erweiterungen und die geänderten Secrets ins Profil, committet jede Änderung der Dotfiles und lädt sie nach {remote} hoch."
+
+msgid ""
+"Back up this machine into {profile}?\n"
+"Writes the package lists, the GNOME extensions and the changed secrets into the profile and commits every change of the dotfiles. Without a repository they stay on this machine."
+msgstr ""
+"Diesen Rechner in {profile} sichern?\n"
+"Schreibt die Paketlisten, die GNOME-Erweiterungen und die geänderten Secrets ins Profil und committet jede Änderung der Dotfiles. Ohne Repository bleiben sie auf diesem Rechner."
+
+msgid ""
+"Set up {name}?\n"
+"Calls {install} of dotfiles.sh and switches the group on in the profile {profile}, so set up calls it on its other machines too."
+msgstr ""
+"{name} einrichten?\n"
+"Ruft {install} aus dotfiles.sh auf und schaltet die Gruppe im Profil {profile} an, damit Einrichten sie auch auf seinen anderen Rechnern aufruft."
+
+msgid ""
+"Switch {name} off?\n"
+"Set up no longer calls {install} of dotfiles.sh. What it installed stays."
+msgstr ""
+"{name} ausschalten?\n"
+"Einrichten ruft {install} aus dotfiles.sh nicht mehr auf. Was es installiert hat, bleibt."
+
+msgid ""
+"Add {path} to the dotfiles?\n"
+"It moves into {dir} and a link takes its place."
+msgstr ""
+"{path} zu den Dotfiles hinzufügen?\n"
+"Es zieht nach {dir} um, und ein Link nimmt seinen Platz ein."
+
+msgid ""
+"Take {path} out of the dotfiles?\n"
+"The file takes the place of its link again, and the profile no longer keeps it."
+msgstr ""
+"{path} aus den Dotfiles nehmen?\n"
+"Die Datei nimmt wieder den Platz ihres Links ein, und das Profil hat sie nicht mehr."
+
+msgid ""
+"Add {path} as a secret?\n"
+"It is encrypted into {profile} and stays where it is. The first secret of a profile asks for a new passphrase."
+msgstr ""
+"{path} als Secret hinzufügen?\n"
+"Es wird verschlüsselt in {profile} gelegt und bleibt, wo es ist. Das erste Secret eines Profils fragt nach einer neuen Passphrase."
+
+msgid ""
+"Take the secret {path} out of the dotfiles?\n"
+"Its file stays where it is."
+msgstr ""
+"Das Secret {path} aus den Dotfiles nehmen?\n"
+"Seine Datei bleibt, wo sie ist."
+
+msgid ""
+"Change the passphrase of the secrets?\n"
+"Asks for the new one twice. After the next back up, machines that have not unlocked yet take the new one."
+msgstr ""
+"Die Passphrase der Secrets ändern?\n"
+"Fragt zweimal nach der neuen. Nach dem nächsten Sichern nehmen Rechner, die noch nicht entsperrt haben, die neue."
+
+msgid ""
+"Clone {url} into ~/.dotfiles?\n"
+"Set up applies the profile {profile} to this machine afterwards."
+msgstr ""
+"{url} nach ~/.dotfiles klonen?\n"
+"Einrichten wendet danach das Profil {profile} auf diesen Rechner an."
+
+msgid ""
+"Connect ~/.dotfiles to {url}?\n"
+"Back up uploads to it from then on."
+msgstr ""
+"~/.dotfiles mit {url} verknüpfen?\n"
+"Sichern lädt ab dann dorthin hoch."
+
+msgid ""
+"Disconnect the repository?\n"
+"The dotfiles stay on this machine. The repository keeps what it holds."
+msgstr ""
+"Das Repository trennen?\n"
+"Die Dotfiles bleiben auf diesem Rechner. Das Repository behält, was es hat."
+
+msgid ""
+"Add {path} as a secret of {server}?\n"
+"It is encrypted into homelab/{server}/{path}.age, a secret there before is replaced. The first secret of the homelab asks for a new passphrase."
+msgstr ""
+"{path} als Secret von {server} hinzufügen?\n"
+"Es wird verschlüsselt nach homelab/{server}/{path}.age gelegt, ein Secret dort wird ersetzt. Das erste Secret des Homelabs fragt nach einer neuen Passphrase."
+
+msgid "Asking Cup"
+msgstr "Cup wird gefragt"
+
+msgid "Cup checked {n} days ago."
+msgstr "Cup hat vor {n} Tagen geprüft."
+
+msgid "Cup checked {n} h ago."
+msgstr "Cup hat vor {n} h geprüft."
+
+msgid "Cup checked {n} min ago."
+msgstr "Cup hat vor {n} min geprüft."
+
+msgid "Cup did not answer: {why}. It answers once the stack cup runs on the server: docker compose up -d in homelab/{server}/cup."
+msgstr "Cup antwortet nicht: {why}. Es antwortet, sobald der Stack cup auf dem Server läuft: docker compose up -d in homelab/{server}/cup."
+
+msgid "Cup names no check."
+msgstr "Cup nennt keine Prüfung."
+
+msgid "Export"
+msgstr "Exportieren"
+
+msgid ""
+"Export {server}?\n"
+"Packs its folder with every secret decrypted as {server}.tar into the downloads folder, readable by you only."
+msgstr ""
+"{server} exportieren?\n"
+"Packt seinen Ordner mit jedem Secret entschlüsselt als {server}.tar in den Download-Ordner, nur für dich lesbar."
+
+msgid "Exporting the server"
+msgstr "Server wird exportiert"
+
+msgid "Homelab"
+msgstr "Homelab"
+
+msgid "Its path in the folder of the server."
+msgstr "Sein Pfad im Ordner des Servers."
+
+msgid "Make a homelab? The name of its server in the network. Empty, the homelab stays off."
+msgstr "Ein Homelab anlegen? Der Name seines Servers im Netz. Leer bleibt das Homelab aus."
+
+msgid ""
+"Make the homelab with {server}?\n"
+"Writes ~/.dotfiles/homelab/homelab.yaml and the stack cup. Rolled out on the server with docker compose up -d in its folder, cup tells the manager which images have updates."
+msgstr ""
+"Das Homelab mit {server} anlegen?\n"
+"Schreibt ~/.dotfiles/homelab/homelab.yaml und den Stack cup. Auf dem Server mit docker compose up -d in seinem Ordner ausgerollt, sagt cup dem Manager, welche Images Updates haben."
+
+msgid "Making the homelab"
+msgstr "Homelab wird angelegt"
+
+msgid "No homelab yet. Switching it on under Settings makes one."
+msgstr "Noch kein Homelab. Einschalten unter Einstellungen legt eines an."
+
+msgid ""
+"No host name\n"
+"A server is named as the network knows it, such as nas.fritz.box.\n"
+msgstr ""
+"Kein Hostname\n"
+"Ein Server heißt, wie das Netz ihn kennt, etwa nas.fritz.box.\n"
+
+msgid ""
+"No path in the folder of the server\n"
+"A path such as traefik/.env, neither starting with / nor holding ..\n"
+msgstr ""
+"Kein Pfad im Ordner des Servers\n"
+"Ein Pfad wie traefik/.env, der weder mit / beginnt noch .. enthält.\n"
+
+msgid ""
+"dotfiles.sh does not read\n"
+"Outside its functions stand only definitions. Its output in the details names the line.\n"
+msgstr ""
+"dotfiles.sh lässt sich nicht lesen\n"
+"Außerhalb seiner Funktionen stehen nur Definitionen. Seine Ausgabe in den Details nennt die Zeile.\n"
+
+msgid ""
+"No such home folder\n"
+"A file goes to shared, the home folder of every machine, or to profile, the one of this machine.\n"
+msgstr ""
+"Kein solcher Home-Ordner\n"
+"Eine Datei geht nach shared, den Home-Ordner jedes Rechners, oder nach profile, den dieses Rechners.\n"
+
+msgid "Not in homelab.yaml any more."
+msgstr "Nicht mehr in homelab.yaml."
+
+msgid ""
+"Take the secret {path} out of {server}?\n"
+"Where it was rolled out, it stays."
+msgstr ""
+"Das Secret {path} aus {server} nehmen?\n"
+"Wo es ausgerollt ist, bleibt es."
+
+msgid ""
+"The archive differs\n"
+"Unpacked, it did not match its source and was dropped.\n"
+msgstr ""
+"Das Archiv weicht ab\n"
+"Ausgepackt stimmte es nicht mit seiner Quelle überein und wurde verworfen.\n"
+
+msgid ""
+"The folder of the server holds links, sockets or devices\n"
+"Only files and folders go into the archive.\n"
+msgstr ""
+"Der Ordner des Servers enthält Links, Sockets oder Geräte\n"
+"Ins Archiv kommen nur Dateien und Ordner.\n"
+
+msgid ""
+"The homelab has no such server\n"
+"Its folder lies beside homelab.yaml.\n"
+msgstr ""
+"Das Homelab hat keinen solchen Server\n"
+"Sein Ordner liegt neben homelab.yaml.\n"
+
+msgid "The server holds no secret."
+msgstr "Der Server hat kein Secret."
+
+msgid "homelab.yaml: {name} needs a folder beside it and an http or https address of its Cup"
+msgstr "homelab.yaml: {name} braucht einen Ordner daneben und eine http- oder https-Adresse seines Cup"
+
+msgid "not reached"
+msgstr "nicht erreicht"
+
+msgid "not set up"
+msgstr "nicht angelegt"
+
+msgid "optional, not running"
+msgstr "optional, läuft nicht"
+
+msgid "unchecked"
+msgstr "ungeprüft"
+
+msgid "update"
+msgstr "Update"
+
+msgid "{image} available"
+msgstr "{image} verfügbar"
+
+msgid "Password or token"
+msgstr "Passwort oder Token"
+
+msgid "Passphrase"
+msgstr "Passphrase"
+
+msgid "User name"
+msgstr "Benutzername"

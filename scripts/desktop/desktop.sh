@@ -13,12 +13,14 @@ wants="${units}/timers.target.wants/system-manager-notify.timer"
 # Writes standard input to a file only where it differs, so a start that changes
 # nothing touches nothing. Prints the file when it wrote.
 put() {
+    local new
     mkdir -p "${1%/*}"
-    cat >"${1}.new"
-    if cmp -s "${1}.new" "$1"; then
-        rm -f "${1}.new"
+    beside "$1"
+    cat >"$new"
+    if cmp -s "$new" "$1"; then
+        rm -f "$new"
     else
-        mv -f "${1}.new" "$1"
+        mv -f "$new" "$1"
         echo "$1"
     fi
 }
@@ -198,16 +200,9 @@ op_open() {
     systemd-run --user --collect --quiet -- "$@"
 }
 
-# The update indicator from extensions.gnome.org, through the running GNOME
-# Shell, which asks the person, takes the version for itself and loads it at
-# once. The call returns with the answer, or with an error. The shell itself
-# serves it: the name org.gnome.Shell.Extensions starts a helper that drops a
-# call left waiting for the person.
+# The update indicator from extensions.gnome.org.
 op_extension_install() {
-    local answer
-    answer="$(busctl --user --timeout=300s call org.gnome.Shell /org/gnome/Shell \
-        org.gnome.Shell.Extensions InstallRemoteExtension s "$ARCH_UPDATE")" || exit 11
-    if [ "$answer" != 's "successful"' ]; then exit 11; fi
+    ego_install "$ARCH_UPDATE" || exit 11
 }
 
 # Takes the indicator out of this user's GNOME, with the commands it was given,

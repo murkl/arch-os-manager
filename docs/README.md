@@ -30,6 +30,8 @@
 - Config updates compared, merged or taken over
 - Mirror ranking, firmware updates
 - Keyring renewal, package file repair
+- [Dotfiles](REFERENCE.md#dotfiles) per machine in a git repository, secrets encrypted
+- [Homelab](REFERENCE.md#homelab) servers with Docker stacks, exported with secrets
 - Terminal, Linux console or own window
 - Compact or verbose output
 - English and German

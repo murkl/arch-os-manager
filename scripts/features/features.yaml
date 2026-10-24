@@ -58,3 +58,13 @@ probe:
       command: [meld, --version]
       adds: Merges configuration updates side by side.
       needs: desktop
+  dotfiles:
+    git:
+      command: [git, --version]
+      adds: Keeps the dotfiles in a repository.
+    stow:
+      command: [stow, --version]
+      adds: Links the dotfiles into the home folder.
+    age:
+      command: [age, --version]
+      adds: Encrypts the secrets of the dotfiles.

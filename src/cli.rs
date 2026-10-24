@@ -12,9 +12,9 @@ use crate::settings::Settings;
 use crate::state::State;
 use crate::ui::Target;
 
-pub const PAGES: [&str; 12] = [
+pub const PAGES: [&str; 14] = [
     "upgrade", "news", "packages", "services", "log", "cleanup", "pacnew", "mirrors", "firmware",
-    "repair", "settings", "features",
+    "repair", "dotfiles", "homelab", "settings", "features",
 ];
 
 /// The command line in two groups, each row an argument and what it does. The help and the
