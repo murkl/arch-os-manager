@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use super::run::{Job, start};
 use crate::data::journal::{self, Entry};
 use crate::data::services::Service;
-use crate::i18n::t;
+use crate::i18n::{t, tf};
 use crate::script::{op, query};
 use crate::ui::detail::{Act, Block, Detail, loaded};
 use crate::ui::fetch::Fetch;
@@ -20,6 +20,27 @@ fn id(s: &Service) -> String {
 
 fn label(s: &Service) -> &str {
     s.unit.trim_end_matches(".service")
+}
+
+/// The question before a change that costs the graphical session, then what it costs.
+fn warning(verb: &str, unit: &str) -> Option<String> {
+    let unit: [(&str, &dyn std::fmt::Display); 1] = [("unit", &unit)];
+    let (question, effect) = match verb {
+        "restart" => (
+            tf("Restart {unit}?", &unit),
+            t("Ends the session. Unsaved work is lost."),
+        ),
+        "stop" => (
+            tf("Stop {unit}?", &unit),
+            t("Ends the session. Unsaved work is lost."),
+        ),
+        "disable" => (
+            tf("Do not start {unit} by itself?", &unit),
+            t("The next start comes without a graphical session."),
+        ),
+        _ => return None,
+    };
+    Some(format!("{question}\n{effect}"))
 }
 
 fn state(s: &Service) -> (String, Tone) {
@@ -193,14 +214,17 @@ impl ServicePage {
             s.unit.clone(),
         );
         let mut acts = Vec::new();
-        let mut verb = |label: &str, verb: &'static str, glyph: &'static str| {
+        let mut verb = |name: &str, verb: &'static str, glyph: &'static str| {
             let unit = unit.clone();
+            let mut job = Job::new(script, vec![verb.into(), unit]);
+            if s.session
+                && let Some(text) = warning(verb, label(&s))
+            {
+                job = job.confirm(text);
+            }
             acts.push(
-                Act::new(label, move |ctx: &mut Ctx| {
-                    Flow::Push(start(
-                        Job::new(script, vec![verb.into(), unit.clone()]),
-                        ctx,
-                    ))
+                Act::new(name, move |ctx: &mut Ctx| {
+                    Flow::Push(start(job.clone(), ctx))
                 })
                 .icon(glyph),
             );
@@ -263,6 +287,7 @@ mod tests {
             description: description.into(),
             active: active.into(),
             enabled: "enabled".into(),
+            session: false,
         };
         app.ctx.shared.services = Loaded::Ready(vec![
             service(false, "sshd.service", "active", "OpenSSH Daemon"),
@@ -294,5 +319,34 @@ mod tests {
         assert!(lines[at("nas-sync")].contains(app.ctx.style.glyphs.cursor));
         press(&mut app, &[Key::Enter]);
         assert!(screen(&mut app, &mut term).contains("Services › nas-sync"));
+    }
+
+    /// What the graphical session cannot do without asks first, opening on no.
+    #[test]
+    fn a_unit_the_session_needs_asks_before_it_stops() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let gdm = Service {
+            user: false,
+            unit: "gdm.service".into(),
+            description: "GNOME Display Manager".into(),
+            active: "active".into(),
+            enabled: "enabled".into(),
+            session: true,
+        };
+        open(&mut app, Box::new(ServicePage::new(gdm)));
+        screen(&mut app, &mut term);
+        press(&mut app, &[Key::Enter]);
+        let asked = screen(&mut app, &mut term);
+        assert!(asked.contains("Restart gdm?"), "{asked}");
+        assert!(asked.contains("Ends the session."), "{asked}");
+        let no = asked.lines().find(|l| l.contains("No")).unwrap_or_default();
+        assert!(no.contains(app.ctx.style.glyphs.cursor), "{asked}");
+        assert_eq!(
+            warning("disable", "gdm").as_deref(),
+            Some("Do not start gdm by itself?\nThe next start comes without a graphical session.")
+        );
+        assert_eq!(warning("start", "gdm"), None);
     }
 }

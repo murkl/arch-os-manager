@@ -32,12 +32,7 @@ impl Session {
         size: (u16, u16),
         sink: impl Fn(Event) + Send + Sync + 'static,
     ) -> Result<Session, String> {
-        let mut cmd = command(op, args)?;
-        cmd.env("SM_RUN", op.title());
-        if super::terminal() {
-            cmd.env("SM_TERMINAL", "on");
-        }
-        Session::spawn(cmd, size, sink)
+        Session::spawn(run_command(op, args)?, size, sink)
     }
 
     /// Runs `cmd` on a new pseudo terminal, with fd 3 for lib.sh's events.
@@ -141,6 +136,38 @@ impl Session {
     }
 }
 
+/// The command of a run. Only what elevates holds shutdown off: systemctl refuses a reboot while
+/// its caller's own lock blocks it.
+fn run_command(op: Op, args: &[String]) -> Result<std::process::Command, String> {
+    let mut cmd = command(op, args)?;
+    if op.meta().root {
+        cmd.env("SM_RUN", op.title());
+    }
+    if super::terminal() {
+        cmd.env("SM_TERMINAL", "on");
+    }
+    Ok(cmd)
+}
+
 fn err(e: rustix::io::Errno) -> String {
     format!("pseudo terminal: {e}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::script::op;
+
+    fn holds(op: Op) -> bool {
+        run_command(op, &[])
+            .unwrap()
+            .get_envs()
+            .any(|(k, v)| k == "SM_RUN" && v.is_some())
+    }
+
+    #[test]
+    fn only_a_run_that_elevates_holds_shutdown_off() {
+        assert!(holds(op::UPGRADE_RUN));
+        assert!(!holds(op::SYSTEM_REBOOT));
+    }
 }

@@ -13,6 +13,7 @@ pub const PACNEW: &str = "\u{f08aa}";
 pub const MIRRORS: &str = "\u{f048d}";
 pub const FIRMWARE: &str = "\u{f061a}";
 pub const REPAIR: &str = "\u{f05b7}";
+pub const KEYRING: &str = "\u{f0306}";
 pub const SETTINGS: &str = "\u{f1542}";
 pub const LANGUAGE: &str = "\u{f05ca}";
 pub const THEME: &str = "\u{f0e0c}";

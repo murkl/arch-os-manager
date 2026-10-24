@@ -704,6 +704,25 @@ impl RunPage {
             }
             Ok(()) => {
                 let mut body = vec![done(headline(outcome))];
+                // The check found what the person may reinstall.
+                let altered = self
+                    .run
+                    .as_ref()
+                    .filter(|_| self.job.op == op::REPAIR_FILES)
+                    .map(|r| r.found.clone())
+                    .unwrap_or_default();
+                if !altered.is_empty() {
+                    body.push(Block::Blank);
+                    body.push(Block::Text(
+                        tn(
+                            "{n} package with altered files: {names}.",
+                            "{n} packages with altered files: {names}.",
+                            altered.len(),
+                            &[("names", &altered.join(", "))],
+                        ),
+                        Tone::Normal,
+                    ));
+                }
                 if ctx.busy() {
                     if ctx.busy_shown() {
                         body.push(Block::Blank);
@@ -714,7 +733,11 @@ impl RunPage {
                     }
                     (body, Vec::new())
                 } else {
-                    let mut acts = next_steps(self.job.op, ctx);
+                    let mut acts = Vec::new();
+                    if !altered.is_empty() {
+                        acts.push(reinstall(altered));
+                    }
+                    acts.extend(next_steps(self.job.op, ctx));
                     acts.push(Act::new(t("Back"), |_| Flow::Pop).icon(icon::BACK));
                     (body, acts)
                 }
@@ -934,7 +957,12 @@ impl Page for RunPage {
 
     fn run(&mut self, event: script::Event, _ctx: &mut Ctx) -> Flow {
         if let Some(run) = self.run.as_mut() {
+            let handed = run.handed;
             run.on_event(event);
+            // The person answers on the terminal from here, tab still leads back.
+            if run.handed && !handed {
+                self.details = true;
+            }
         }
         self.prepare();
         Flow::Stay
@@ -994,6 +1022,27 @@ fn replace_with(target: Target, ctx: &mut Ctx) -> Flow {
         1 => Flow::Replace(pages.remove(0)),
         _ => Flow::PushAll(pages),
     }
+}
+
+/// The packages a check found altered, back as installed, once the person agrees.
+fn reinstall(packages: Vec<String>) -> Act {
+    let text = format!(
+        "{}\n{}",
+        tn(
+            "Reinstall {n} package?",
+            "Reinstall {n} packages?",
+            packages.len(),
+            &[]
+        ),
+        t("Changes to their files are lost.")
+    );
+    Act::new(t("Reinstall"), move |ctx: &mut Ctx| {
+        Flow::Replace(start(
+            Job::new(op::REPAIR_REINSTALL, packages.clone()).confirm(text.clone()),
+            ctx,
+        ))
+    })
+    .icon(icon::REPAIR)
 }
 
 /// What the system asks for after a run, read from it anew: a restart, configuration updates,
@@ -1209,6 +1258,47 @@ mod tests {
         open(&mut starting, Box::new(splash));
         press(&mut starting, &[Key::Ctrl('c')]);
         assert!(starting.done(), "ctrl+c on the start screen");
+    }
+
+    /// Handed over, as for the AUR helper's review, the run shows its terminal.
+    #[test]
+    fn a_hand_over_shows_the_terminal() {
+        let (mut app, _) = app();
+        let run = Run::fed(op::UPGRADE_RUN, "aur", "");
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        assert!(!page.details);
+        page.run(script::Event::Script("terminal".into()), &mut app.ctx);
+        assert!(page.details);
+    }
+
+    /// The check names what it found, a single package too, and its reinstall asks first.
+    #[test]
+    fn a_check_offers_to_reinstall_what_it_found() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = RunPage::finished(Job::new(op::REPAIR_FILES, Vec::new()), Ok(()));
+        let mut run = Run::ended(
+            op::REPAIR_FILES,
+            "warning: bar: /usr/bin/bar (Size mismatch)\r\n",
+            0,
+        );
+        run.on_event(script::Event::Script("found\tbar".into()));
+        page.run = Some(run);
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("1 package with altered files: bar."),
+            "{shown}"
+        );
+        assert!(shown.contains("Reinstall"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        let asked = screen(&mut app, &mut term);
+        assert!(asked.contains("Reinstall 1 package?"), "{asked}");
+        assert!(
+            asked.contains("Changes to their files are lost."),
+            "{asked}"
+        );
     }
 
     #[test]

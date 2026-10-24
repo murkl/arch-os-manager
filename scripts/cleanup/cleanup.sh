@@ -4,7 +4,7 @@
 # What the clean-up removes, one line each: orphan, cache, aur, then what each container
 # engine there is says.
 op_plan() {
-    local orphans names dir caches list file size cache base
+    local orphans names dir caches list file size cache
     # Packages installed as a dependency that nothing needs any more, with their size.
     orphans="$(pacman -Qdtq)" || allow 1
     if [ -n "$orphans" ]; then
@@ -27,24 +27,20 @@ op_plan() {
         done
     done < <(sort -u <<<"$list")
 
-    # Build directories of AUR helpers for packages no longer installed.
-    local -A installed=()
-    while read -r base; do installed[$base]=1; done < <(pacman -Qq)
-    while read -r base; do installed[$base]=1; done < <(awk '/^%BASE%$/ { getline; print }' "$(pacman-conf DBPath)"local/*/desc)
-    cache="${XDG_CACHE_HOME:-$HOME/.cache}"
-    for dir in "$cache"/paru/clone/*/ "$cache"/yay/*/; do
-        if [ -z "${installed[$(basename "$dir")]:-}" ]; then
-            size="$(du -sb "$dir" | cut -f 1)"
-            printf 'aur\t%s\t%s\n' "${dir%/}" "$size"
-        fi
-    done
+    list="$(builds)"
+    while read -r dir; do
+        if [ -z "$dir" ]; then continue; fi
+        size="$(du -sb "$dir" | cut -f 1)"
+        printf 'aur\t%s\t%s\n' "$dir" "$size"
+    done <<<"$list"
 
     docker_plan
     podman_plan
 }
 
-# The system's Docker, asked only while it runs: its socket would start it, and with it every
-# container set to restart. The socket is where systemd listens, writable for the group docker.
+# The system's Docker, asked and cleaned up only while it runs: its socket would start it, and
+# with it every container set to restart. The socket is where systemd listens, writable for the
+# group docker.
 docker_plan() {
     local socket usage images
     if ! docker --version >/dev/null 2>&1 || ! systemctl cat docker.service >/dev/null 2>&1; then
@@ -94,46 +90,49 @@ candidates() {
     paccache --dryrun --verbose --nocolor "$@" | sed -n '/^==> Candidate packages:/,/^$/{/^==>/d;/^$/d;p}'
 }
 
-# The parts to clean up, by id. What they remove is found again right before removing, never
-# taken from an earlier look, in a shell of its own: a substitution tested by || would run the
-# plan without errexit.
+# Build directories of AUR helpers for packages no longer installed, one per line.
+builds() {
+    local base dir cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+    local -A installed=()
+    while read -r base; do installed[$base]=1; done < <(pacman -Qq)
+    while read -r base; do installed[$base]=1; done < <(awk '/^%BASE%$/ { getline; print }' "$(pacman-conf DBPath)"local/*/desc)
+    for dir in "$cache"/paru/clone/*/ "$cache"/yay/*/; do
+        if [ -z "${installed[$(basename "$dir")]:-}" ]; then printf '%s\n' "${dir%/}"; fi
+    done
+}
+
+# The parts to clean up, by id. Each finds what it removes right before removing, with the tool
+# that removes it.
 op_run() {
-    local plan caches files builds file dir inside cache orphans part yes unit socket status=0
-    local taken=" $* " inactive=()
+    local part found names yes socket
+    local taken=" $* "
     for part; do
         case "$part" in orphans | cache | aur | flatpak | docker | podman) ;; *) false ;; esac
     done
-    plan="$(bash "${BASH_SOURCE[0]}" plan)" || exit $?
-    mapfile -t orphans < <(field orphan "$plan")
-    if [[ $taken == *" orphans "* ]] && [ -n "${orphans[*]}" ]; then
-        step orphans
-        if asks; then yes=(); else yes=(--noconfirm); fi
-        sudo pacman -Rns "${yes[@]}" -- "${orphans[@]}"
+    if [[ $taken == *" orphans "* ]]; then
+        found="$(pacman -Qdtq)" || allow 1
+        if [ -n "$found" ]; then
+            step orphans
+            mapfile -t names <<<"$found"
+            if asks; then yes=(); else yes=(--noconfirm); fi
+            sudo pacman -Rns "${yes[@]}" -- "${names[@]}"
+        fi
     fi
 
-    mapfile -t caches < <(pacman-conf CacheDir)
-    mapfile -t files < <(field cache "$plan")
-    if [[ $taken == *" cache "* ]] && [ -n "${files[*]}" ]; then
+    # The plan's choice, each signature with its package.
+    if [[ $taken == *" cache "* ]]; then
         step cache
-        for file in "${files[@]}"; do
-            inside=""
-            for dir in "${caches[@]}"; do
-                if [[ $file == "${dir%/}"/*.pkg.tar.* ]]; then inside=1; fi
-            done
-            if [ -z "$inside" ]; then exit 11; fi
-        done
-        # The signature goes with its package, as paccache removes it.
-        sudo rm -f -- "${files[@]}" "${files[@]/%/.sig}"
+        sudo paccache --remove --keep 3
+        sudo paccache --remove --uninstalled --keep 0
     fi
 
-    cache="${XDG_CACHE_HOME:-$HOME/.cache}"
-    mapfile -t builds < <(field aur "$plan")
-    if [[ $taken == *" aur "* ]] && [ -n "${builds[*]}" ]; then
-        step aur
-        for dir in "${builds[@]}"; do
-            if [[ $dir != "$cache"/paru/clone/?* && $dir != "$cache"/yay/?* ]]; then exit 11; fi
-        done
-        rm -rf -- "${builds[@]}"
+    if [[ $taken == *" aur "* ]]; then
+        found="$(builds)"
+        if [ -n "$found" ]; then
+            step aur
+            mapfile -t names <<<"$found"
+            rm -rf -- "${names[@]}"
+        fi
     fi
 
     # Flatpak finds unused runtimes only while removing them.
@@ -144,35 +143,19 @@ op_run() {
     fi
 
     # Images first, so the build cache they shared goes free with it. Containers and volumes
-    # hold data and stay. As root, so the group docker is not needed. What was inactive starts
-    # for this alone and stops again, also when the prune fails.
+    # hold data and stay. As root, so the group docker is not needed.
     if asks; then yes=(); else yes=(--force); fi
-    if [[ $taken == *" docker "* ]] && [[ $(field docker "$plan") =~ ^(ready|stopped|denied)$ ]]; then
+    if [[ $taken == *" docker "* ]] && systemctl is-active --quiet docker.service; then
         step docker
-        for unit in docker.socket docker.service containerd.service; do
-            if systemctl cat "$unit" >/dev/null 2>&1 && ! systemctl is-active --quiet "$unit"; then
-                inactive+=("$unit")
-            fi
-        done
-        if ! systemctl is-active --quiet docker.service; then sudo systemctl start docker.service; fi
         socket="$(systemctl show --property=Listen --value docker.socket)"
         socket="${socket%% *}"
-        {
-            sudo docker --host "unix://${socket}" image prune --all "${yes[@]}" &&
-                sudo docker --host "unix://${socket}" builder prune --all "${yes[@]}"
-        } || status=$?
-        if [ -n "${inactive[*]}" ]; then sudo systemctl stop "${inactive[@]}"; fi
-        if [ "$status" -ne 0 ]; then exit "$status"; fi
+        sudo docker --host "unix://${socket}" image prune --all "${yes[@]}"
+        sudo docker --host "unix://${socket}" builder prune --all "${yes[@]}"
     fi
-    if [[ $taken == *" podman "* ]] && [ "$(field podman "$plan")" = ready ]; then
+    if [[ $taken == *" podman "* ]] && podman --version >/dev/null 2>&1; then
         step podman
         podman image prune --all "${yes[@]}"
     fi
-}
-
-# The second column of the plan's lines of one kind.
-field() {
-    awk -F '\t' -v kind="$1" '$1 == kind { print $2 }' <<<"$2"
 }
 
 operation "$@"

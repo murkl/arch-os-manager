@@ -55,7 +55,8 @@ pub enum Engine {
         unused: Vec<String>,
         bytes: Option<u64>,
     },
-    /// Docker's service is not running, and asking its socket would start it. A run starts it.
+    /// Docker's service is not running, and asking or cleaning it up would start it, with every
+    /// container set to restart.
     Stopped,
     /// This user may not write to Docker's socket.
     Denied,
@@ -188,11 +189,14 @@ impl Plan {
         }
     }
 
-    /// Whether a part can be cleaned up now: an engine unless it failed to answer.
+    /// Whether a part can be cleaned up now: an engine that runs, asked or not.
     pub fn ready(&self, part: Part) -> bool {
         match part {
             Part::Docker | Part::Podman => {
-                matches!(self.engine(part), Some(e) if *e != Engine::Failed)
+                matches!(
+                    self.engine(part),
+                    Some(Engine::Ready { .. } | Engine::Denied)
+                )
             }
             _ => true,
         }
@@ -320,9 +324,9 @@ mod tests {
     }
 
     #[test]
-    fn an_engine_not_asked_is_cleaned_up_without_a_known_size() {
+    fn a_running_engine_not_asked_is_cleaned_up_without_a_known_size() {
         for (state, engine, ready) in [
-            ("stopped", Engine::Stopped, true),
+            ("stopped", Engine::Stopped, false),
             ("denied", Engine::Denied, true),
             ("failed", Engine::Failed, false),
         ] {

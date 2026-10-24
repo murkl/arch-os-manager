@@ -793,7 +793,7 @@ op_setup() {
         present="$(gnome-extensions list)"
         for uuid in "${wanted[@]}"; do
             if ! grep -qxF -- "$uuid" <<<"$present"; then
-                ego_install "$uuid" || echo "Not on extensions.gnome.org for this GNOME Shell: ${uuid}"
+                ego_install "$uuid" || echo "Extension not installed: ${uuid}"
             fi
         done
         for file in "${profile}"/gnome/*.conf; do

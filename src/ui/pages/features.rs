@@ -173,10 +173,12 @@ impl Page for FeaturePage {
         } else {
             vec![
                 Act::new(t("Remove"), move |ctx: &mut Ctx| {
-                    let text = tf(
-                        "Remove {name}?\nRemoves with pacman -Rns.",
-                        &[("name", &package)],
-                    );
+                    let name: [(&str, &dyn std::fmt::Display); 1] = [("name", &package)];
+                    let text = if extension {
+                        tf("Remove {name}?\nResets its settings.", &name)
+                    } else {
+                        tf("Remove {name}?\nRemoves with pacman -Rns.", &name)
+                    };
                     Flow::Push(start(Job::new(remove, args.clone()).confirm(text), ctx))
                 })
                 .icon(icon::CLEANUP),
@@ -192,7 +194,7 @@ impl Page for FeaturePage {
         if state == Status::Missing && extension && unmet.is_none() {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("From extensions.gnome.org, active after the next login.").into(),
+                t("From extensions.gnome.org. GNOME Shell asks first.").into(),
                 Tone::Muted,
             ));
         }
@@ -242,5 +244,33 @@ mod tests {
         assert!(lines[heading + 1].contains("paru") && lines[heading + 1].ends_with("2.1.0-1"));
         let desktop = lines.iter().position(|l| l.ends_with("Desktop")).unwrap();
         assert!(lines[desktop + 1].contains("gnome-arch-update"), "{shown}");
+    }
+
+    /// Removing asks first and says what is lost: a package goes with pacman, an extension takes
+    /// its settings along.
+    #[test]
+    fn removing_says_what_is_lost() {
+        use crate::ui::app::tests::{open, press};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        for (package, effect) in [
+            ("gnome-arch-update", "Resets its settings."),
+            ("meld", "Removes with pacman -Rns."),
+        ] {
+            let (mut app, mut term) = app();
+            app.ctx.shared.features = Loaded::Ready(Features::parse(
+                "gnome-arch-update\tok\t\nmeld\tok\t3.22-1\n@gnome\tok\n@desktop\tok\n",
+            ));
+            let page = FeaturePage {
+                package: package.into(),
+                detail: Detail::default(),
+            };
+            open(&mut app, Box::new(page));
+            screen(&mut app, &mut term);
+            press(&mut app, &[Key::Enter]);
+            let asked = screen(&mut app, &mut term);
+            assert!(asked.contains(&format!("Remove {package}?")), "{asked}");
+            assert!(asked.contains(effect), "{package}: {asked}");
+        }
     }
 }

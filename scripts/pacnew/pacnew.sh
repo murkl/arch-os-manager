@@ -21,7 +21,7 @@ op_take() {
     update "$1"
     if snapshots; then
         step snapshot
-        sudo snapper --no-dbus -c root create --cleanup-algorithm number --description "system-manager: ${1%.pac*}"
+        sudo snapper -c root create --cleanup-algorithm number --description "system-manager: ${1%.pac*}"
     fi
     sudo mv -f -- "$1" "${1%.pac*}"
 }
@@ -36,12 +36,12 @@ op_keep() {
 # root, in the person's language. What is saved on the left goes into the
 # configuration, which keeps its owner and mode.
 op_merge() {
-    local file="$1" target
+    local file="$1" target meta mode owner group
     update "$file"
     target="${file%.pac*}"
     if snapshots; then
         step snapshot
-        sudo snapper --no-dbus -c root create --cleanup-algorithm number --description "system-manager: $target"
+        sudo snapper -c root create --cleanup-algorithm number --description "system-manager: $target"
     fi
     scratch
     sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" -- "$target" "${work}/current"
@@ -54,10 +54,11 @@ op_merge() {
     */sudoers | */sudoers.d/*) sudo visudo --check --file "${work}/current" >/dev/null || exit 13 ;;
     esac
     # Written beside it with its owner and mode, then renamed over it, so nothing
-    # reads half a configuration.
+    # reads half a configuration. Its folder may be closed to the user.
+    meta="$(sudo stat -c '%a %u %g' -- "$target")"
+    read -r mode owner group <<<"$meta"
     sm_made_root+=("${target}.sm-new")
-    sudo install -m "$(stat -c %a -- "$target")" -o "$(stat -c %u -- "$target")" \
-        -g "$(stat -c %g -- "$target")" -- "${work}/current" "${target}.sm-new"
+    sudo install -m "$mode" -o "$owner" -g "$group" -- "${work}/current" "${target}.sm-new"
     sudo mv -f -- "${target}.sm-new" "$target"
     sudo rm -f -- "$file"
 }
@@ -68,12 +69,11 @@ snapshots() {
     command -v snapper >/dev/null && [ -e /etc/snapper/configs/root ]
 }
 
-# Nothing but what pacdiff lists is ever moved or removed.
+# Nothing but what pacdiff lists right now is ever moved or removed.
 update() {
-    case "$1" in
-    *.pacnew | *.pacsave | *.pacsave.[0-9]* | *.pacorig) ;;
-    *) exit 11 ;;
-    esac
+    local listed
+    listed="$(pacdiff --output)"
+    grep -qxF -- "$1" <<<"$listed" || exit 11
 }
 
 operation "$@"

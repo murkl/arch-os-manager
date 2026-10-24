@@ -2,7 +2,7 @@
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 op_run() {
-    local lock gpg holder
+    local lock holder
     # libalpm holds its lock open while it works, whichever front end runs it, so
     # only a lock nobody holds is a leftover. find ends with 1 when a process went
     # away during the walk, and what it printed still holds.
@@ -14,8 +14,18 @@ op_run() {
         sudo rm -f -- "$lock"
     fi
 
-    # Built beside the old keyring, which stays until the new one is complete.
+    # The keyring first, so the packages of the upgrade are checked against its keys.
     step keyring
+    sudo pacman -Sy --needed archlinux-keyring
+    step upgrade
+    sudo pacman -Su
+}
+
+# The keyring anew from the keyring packages, built beside the old one, which
+# stays until the new one is complete. The daemons gpg started for it end
+# before it moves, else one answers for it from the old place.
+op_keyring() {
+    local gpg
     gpg="$(pacman-conf GPGDir)"
     gpg="${gpg%/}"
     case "$gpg" in
@@ -26,25 +36,22 @@ op_run() {
     sm_made_root+=("${gpg}.new")
     sudo pacman-key --gpgdir "${gpg}.new" --init
     sudo pacman-key --gpgdir "${gpg}.new" --populate
+    sudo gpgconf --homedir "${gpg}.new" --kill all
     # The swap is left to the next run, which clears what this one leaves: removed
     # in between, the new keyring could be the only one.
     sm_made_root=()
     if [ -e "$gpg" ]; then sudo mv -- "$gpg" "${gpg}.old"; fi
     sudo mv -- "${gpg}.new" "$gpg"
     sudo rm -rf -- "${gpg}.old"
-
-    # The keyring first, so the packages of the upgrade are checked against the new keys.
-    step upgrade
-    sudo pacman -Sy --needed archlinux-keyring
-    sudo pacman -Su
 }
 
-# Reinstalls each package whose files lost content, type or existence as pacman
-# -Qkk checks them, never for owner, mode or time, which a filesystem such as
-# the vfat of /boot keeps its own way. Backup files of hand-edited configuration
-# never count, an AUR package is only named.
+# Finds each package whose files lost content, type or existence as pacman -Qkk
+# checks them, never for owner, mode or time, which a filesystem such as the
+# vfat of /boot keeps its own way. Backup files of hand-edited configuration
+# never count. A native package is found for a reinstall, an AUR package only
+# named.
 op_files() {
-    local report altered native foreign
+    local report altered native foreign name
     step check
     report="$(sudo pacman -Qkk 2>&1)" || true
     if ! grep -q ': [0-9]* total files\?, ' <<<"$report"; then
@@ -58,10 +65,14 @@ op_files() {
     mapfile -t native < <(comm -12 <(printf '%s\n' "$altered") <(pacman -Qqn | sort))
     mapfile -t foreign < <(comm -23 <(printf '%s\n' "$altered") <(pacman -Qqn | sort))
     if [ -n "${foreign[*]}" ]; then printf 'foreign, not reinstalled: %s\n' "${foreign[*]}"; fi
-    if [ -n "${native[*]}" ]; then
-        step reinstall
-        sudo pacman -S -- "${native[@]}"
-    fi
+    for name in "${native[@]}"; do found "$name"; done
+}
+
+# The packages given, in the version installed, which the package lists hold
+# only while they are not newer than the system.
+op_reinstall() {
+    if behind; then exit 13; fi
+    sudo pacman -S -- "$@"
 }
 
 operation "$@"

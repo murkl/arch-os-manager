@@ -21,8 +21,7 @@ errors:
   10: |
     Files not comparable
   11: |
-    Not a configuration update
-    Only .pacnew and .pacsave files.
+    Configuration update not found
   12: |
     Nothing merged
     The new version stays pending.

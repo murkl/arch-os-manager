@@ -10,6 +10,9 @@ ops:
 errors:
   10: |
     AUR unreachable
+  11: |
+    System not up to date
+    Update first.
 hints:
   "The requested URL returned error: 404":
     text: |

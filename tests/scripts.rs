@@ -364,29 +364,41 @@ fn versions_come_from_the_cache_and_the_archive() {
     assert_eq!(s.run("packages", &["versions", "foo"], &[]).code, 12);
 }
 
+/// A held lock stays, a leftover goes, and the keyring package is updated before the system, the
+/// keyring itself never recreated.
 #[test]
-fn repair_leaves_a_held_lock_and_a_strange_keyring_alone() {
+fn repair_leaves_a_held_lock_alone_and_updates_the_keyring_first() {
     let s = Sandbox::new("repair");
     let db = s.dir.join("db");
     std::fs::create_dir_all(&db).unwrap();
     std::fs::write(db.join("db.lck"), "").unwrap();
     s.stub(
         "pacman-conf",
-        &format!(
-            r#"case "$1" in DBPath) echo {}/ ;; GPGDir) echo / ;; esac"#,
-            db.display()
-        ),
+        &format!(r#"case "$1" in DBPath) echo {}/ ;; esac"#, db.display()),
     );
+    s.stub("pacman", "exit 0");
     // A front end other than pacman, holding the lock open as libalpm does.
     s.stub("find", "echo /proc/42/fd/7");
     let o = s.run("repair", &["run"], &[]);
     assert_eq!(o.code, 10);
     assert!(db.join("db.lck").exists());
+    assert!(!o.calls.contains("pacman "), "{}", o.calls);
     s.stub("find", "exit 1");
+    let _ = std::fs::remove_file(s.dir.join("calls"));
     let o = s.run("repair", &["run"], &[]);
-    assert_eq!(o.code, 11);
+    assert_eq!(o.code, 0, "{}", o.events);
     assert!(!db.join("db.lck").exists(), "a lock nobody holds stays");
+    let pacman: Vec<&str> = o
+        .calls
+        .lines()
+        .filter(|l| l.starts_with("pacman "))
+        .collect();
+    assert_eq!(
+        pacman,
+        ["pacman -Sy --needed archlinux-keyring", "pacman -Su"]
+    );
     assert!(!o.calls.contains("pacman-key"), "{}", o.calls);
+    assert_eq!(o.events, "step\tlock\nstep\tkeyring\nstep\tupgrade\n");
 }
 
 #[test]
@@ -403,20 +415,29 @@ fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
             gpg.display()
         ),
     );
-    s.stub("pacman", "exit 0");
     s.stub(
         "pacman-key",
         r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; [ "$3" = --populate ] && exit 1; touch "$2/new""#,
     );
-    assert_eq!(s.run("repair", &["run"], &[]).code, 1);
+    assert_eq!(s.run("repair", &["keyring"], &[]).code, 1);
     assert!(gpg.join("old").exists(), "a failed rebuild left no keyring");
     assert!(!s.dir.join("gnupg.new").exists(), "the half new one stays");
     s.stub(
         "pacman-key",
         r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; touch "$2/new""#,
     );
-    assert_eq!(s.run("repair", &["run"], &[]).code, 0);
+    s.stub("gpgconf", "exit 0");
+    let _ = std::fs::remove_file(s.dir.join("calls"));
+    let o = s.run("repair", &["keyring"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
     assert!(gpg.join("new").exists() && !gpg.join("old").exists());
+    // The new keyring's daemons end before it moves, so none answers for it from the old place.
+    let populated = o.calls.find("--populate").unwrap();
+    let killed = o.calls.find(&format!(
+        "gpgconf --homedir {}.new --kill all",
+        gpg.display()
+    ));
+    assert!(killed.is_some_and(|k| k > populated), "{}", o.calls);
     let left: Vec<_> = std::fs::read_dir(&s.dir)
         .unwrap()
         .flatten()
@@ -424,21 +445,32 @@ fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
         .filter(|n| n.starts_with("gnupg."))
         .collect();
     assert!(left.is_empty(), "{left:?}");
+
+    let strange = Sandbox::new("keyring-strange");
+    strange.stub("pacman-conf", r#"case "$1" in GPGDir) echo / ;; esac"#);
+    let o = strange.run("repair", &["keyring"], &[]);
+    assert_eq!(o.code, 11);
+    assert!(!o.calls.contains("pacman-key"), "{}", o.calls);
 }
 
+/// Only what pacdiff lists right now is ever taken, kept or merged.
 #[test]
-fn a_configuration_update_is_only_ever_a_pacnew_or_pacsave() {
+fn a_configuration_update_is_only_ever_one_pacdiff_lists() {
     let s = Sandbox::new("pacnew");
+    s.stub("pacdiff", "echo /etc/x.conf.pacnew");
     for op in ["take", "keep", "merge"] {
-        let o = s.run("pacnew", &[op, "/etc/passwd"], &[]);
-        assert_eq!(o.code, 11, "{op}");
-        assert!(!o.calls.contains("sudo"), "{op}: {}", o.calls);
+        for file in ["/etc/passwd", "/etc/y.conf.pacnew", "/etc/x.conf.pac"] {
+            let o = s.run("pacnew", &[op, file], &[]);
+            assert_eq!(o.code, 11, "{op} {file}");
+            assert!(!o.calls.contains("sudo"), "{op} {file}: {}", o.calls);
+        }
     }
 }
 
 #[test]
 fn a_configuration_update_takes_a_snapshot_where_snapper_keeps_the_root() {
     let s = Sandbox::new("pacnew-snapshot");
+    s.stub("pacdiff", "echo /etc/x.conf.pacnew");
     s.stub("snapper", "exit 0");
     s.stub("mv", "exit 0");
     let o = s.run("pacnew", &["take", "/etc/x.conf.pacnew"], &[]);
@@ -446,7 +478,7 @@ fn a_configuration_update_takes_a_snapshot_where_snapper_keeps_the_root() {
     let snapshots = std::path::Path::new("/etc/snapper/configs/root").exists();
     assert_eq!(
         o.calls
-            .contains("snapper --no-dbus -c root create --cleanup-algorithm number"),
+            .contains("sudo snapper -c root create --cleanup-algorithm number"),
         snapshots,
         "{}",
         o.calls
@@ -460,8 +492,10 @@ fn a_configuration_update_takes_a_snapshot_where_snapper_keeps_the_root() {
     );
 }
 
+/// The check reinstalls nothing: it names the native packages with altered files for a reinstall
+/// the person chooses, and an AUR package only in its output.
 #[test]
-fn repair_reinstalls_the_native_packages_with_altered_files_only() {
+fn repair_finds_the_native_packages_with_altered_files_only() {
     let s = Sandbox::new("repair-files");
     s.stub(
         "pacman",
@@ -486,14 +520,13 @@ esac"#,
     );
     let o = s.run("repair", &["files"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
-    assert!(o.calls.ends_with("pacman -S -- bar\n"), "{}", o.calls);
-    assert!(!o.calls.contains("baz-git") && !o.calls.contains("pacman -S -- pacman"));
+    assert!(!o.calls.contains("pacman -S"), "{}", o.calls);
     assert!(
         o.out.contains("foreign, not reinstalled: baz-git"),
         "{}",
         o.out
     );
-    assert_eq!(o.events, "step\tcheck\nstep\treinstall\n");
+    assert_eq!(o.events, "step\tcheck\nfound\tbar\n");
 
     let clean = Sandbox::new("repair-files-clean");
     clean.stub("pacman", r#"case "$1" in -Qkk) printf 'pacman: 426 total files, 0 altered files\n' ;; -Qqn) echo pacman ;; esac"#);
@@ -507,13 +540,62 @@ esac"#,
     assert_eq!(refused.run("repair", &["files"], &[]).code, 12);
 }
 
+/// What installs from the package lists waits while they are newer than the system, as after an
+/// update that broke off, a package pacman ignores aside. Removing alone does not ask.
+#[test]
+fn nothing_installs_from_package_lists_newer_than_the_system() {
+    let s = Sandbox::new("behind");
+    let pending = s.dir.join("pending");
+    s.stub(
+        "pacman",
+        &format!(
+            r#"case "$1" in -Qu) [ -s '{0}' ] || exit 1; cat '{0}' ;; -Qq) ;; *) exit 0 ;; esac"#,
+            pending.display()
+        ),
+    );
+    let installs: [(&str, &[&str], i32); 4] = [
+        ("packages", &["install", "repo", "foo"], 13),
+        ("packages", &["change", "repo:foo"], 13),
+        ("features", &["install", "flatpak"], 11),
+        ("repair", &["reinstall", "foo"], 13),
+    ];
+    for (script, args, code) in installs {
+        for (lists, refused) in [
+            ("bar 1.0-1 -> 1.1-1\nbaz 1.0-1 -> 1.1-1 [ignored]\n", true),
+            ("baz 1.0-1 -> 1.1-1 [ignored]\n", false),
+            ("", false),
+        ] {
+            std::fs::write(&pending, lists).unwrap();
+            let _ = std::fs::remove_file(s.dir.join("calls"));
+            let o = s.run(script, args, &[]);
+            let label = format!("{script} {args:?} with {lists:?}");
+            assert_eq!(o.code, if refused { code } else { 0 }, "{label}");
+            assert_eq!(
+                o.calls.contains("pacman -S"),
+                !refused,
+                "{label}: {}",
+                o.calls
+            );
+        }
+    }
+    std::fs::write(&pending, "bar 1.0-1 -> 1.1-1\n").unwrap();
+    let _ = std::fs::remove_file(s.dir.join("calls"));
+    let o = s.run("packages", &["change", "remove:foo"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(!o.calls.contains("-Qu"), "{}", o.calls);
+}
+
 #[test]
 fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
     let s = Sandbox::new("upgrade");
     for c in ["pacman", "paru", "flatpak"] {
         s.stub(c, "exit 0");
     }
-    let all = [("SM_AUR", "paru"), ("SM_FLATPAK", "on")];
+    let all = [
+        ("SM_AUR", "paru"),
+        ("SM_FLATPAK", "on"),
+        ("SM_AUR_REVIEW", "off"),
+    ];
     let o = s.run("upgrade", &["run"], &all);
     assert_eq!(o.code, 0, "{}", o.events);
     let order: Vec<&str> = o.calls.lines().filter(|l| !l.starts_with("sudo")).collect();
@@ -805,58 +887,54 @@ fn without_a_session_the_indicator_is_set_up_on_a_private_bus() {
     );
 }
 
+/// GNOME Shell installs the indicator, after asking the person, and takes it out again. A shell
+/// that does not answer leaves it as it is.
 #[test]
-fn the_update_indicator_comes_from_extensions_gnome_org_and_goes_again() {
+fn the_update_indicator_comes_and_goes_through_gnome_shell() {
     let s = Sandbox::new("extension");
-    s.stub("gnome-shell", "echo 'GNOME Shell 51.1'");
-    s.stub(
-        "curl",
-        r#"case "$*" in
-*extension-info*shell_version=51) echo '{"uuid": "x", "download_url": "/download-extension/x.zip?version_tag=1", "pk": 1010}' ;;
-*download-extension*) echo zip ;;
-*) exit 22 ;;
-esac"#,
-    );
+    s.stub("busctl", r#"echo 's "successful"'"#);
     s.stub("gnome-extensions", "exit 0");
     s.stub("gsettings", "exit 0");
     let data = s.dir.join("data");
     let env = [("XDG_DATA_HOME", data.to_str().unwrap())];
     let o = s.run("desktop", &["extension-install"], &env);
     assert_eq!(o.code, 0, "{}", o.events);
-    let calls: Vec<&str> = o
-        .calls
-        .lines()
-        .filter(|l| l.starts_with("gnome-extensions"))
-        .collect();
-    assert!(
-        calls[0].starts_with("gnome-extensions install --force /"),
-        "{calls:?}"
-    );
     assert_eq!(
-        calls[1],
-        "gnome-extensions enable arch-update@RaphaelRochet"
+        o.calls,
+        "busctl --user --timeout=300s call org.gnome.Shell /org/gnome/Shell org.gnome.Shell.Extensions InstallRemoteExtension s arch-update@RaphaelRochet\n"
     );
+    for answer in [r#"echo 's "cancelled"'"#, "exit 1"] {
+        s.stub("busctl", answer);
+        assert_eq!(
+            s.run("desktop", &["extension-install"], &env).code,
+            11,
+            "{answer}"
+        );
+    }
 
-    s.stub("gnome-shell", "echo 'GNOME Shell 99.0'");
-    assert_eq!(s.run("desktop", &["extension-install"], &env).code, 11);
-
-    // The running shell takes it out.
     let dir = indicator_installed(&s);
+    let _ = std::fs::remove_file(s.dir.join("calls"));
     let o = s.run("desktop", &["extension-remove"], &env);
     assert_eq!(o.code, 0, "{}", o.events);
-    assert!(
-        o.calls
-            .contains("gnome-extensions uninstall arch-update@RaphaelRochet")
+    let calls: Vec<&str> = o.calls.lines().collect();
+    assert_eq!(
+        calls,
+        [
+            &format!(
+                "gsettings --schemadir {}/schemas reset-recursively org.gnome.shell.extensions.arch-update",
+                dir.display()
+            ),
+            "gnome-extensions disable arch-update@RaphaelRochet",
+            "gnome-extensions uninstall arch-update@RaphaelRochet",
+        ]
     );
-    assert!(o.calls.contains("gsettings --schemadir"));
-    assert!(dir.exists(), "the stand-in shell removes nothing");
-    // Without a shell, the folder goes by hand.
     s.stub(
         "gnome-extensions",
         r#"[ "$1" = uninstall ] && exit 2; exit 0"#,
     );
-    assert_eq!(s.run("desktop", &["extension-remove"], &env).code, 0);
-    assert!(!dir.exists());
+    assert_ne!(s.run("desktop", &["extension-remove"], &env).code, 0);
+    assert!(dir.exists(), "nothing goes by hand");
+    std::fs::remove_dir_all(&dir).unwrap();
     // Nothing installed, nothing to do.
     assert_eq!(s.run("desktop", &["extension-remove"], &env).code, 0);
 }
@@ -1045,8 +1123,10 @@ fn an_aur_helper_is_built_from_source_and_removed_by_its_owner() {
     );
 }
 
+/// The plan counts a package without its signature, and the run leaves the choice to paccache,
+/// asked as the plan asked it.
 #[test]
-fn cleanup_removes_a_cached_package_with_its_signature() {
+fn the_cache_is_trimmed_by_paccache_as_planned() {
     let s = Sandbox::new("cleanup-sig");
     let cache = s.dir.join("pkg");
     std::fs::create_dir_all(&cache).unwrap();
@@ -1079,10 +1159,13 @@ fn cleanup_removes_a_cached_package_with_its_signature() {
     );
     let o = s.run("cleanup", &["run", "cache"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
-    assert!(!cache.join(package).exists());
-    assert!(
-        !cache.join(format!("{package}.sig")).exists(),
-        "the signature goes with the package"
+    let trims: Vec<&str> = o.calls.lines().filter(|l| l.starts_with("sudo ")).collect();
+    assert_eq!(
+        trims,
+        [
+            "sudo paccache --remove --keep 3",
+            "sudo paccache --remove --uninstalled --keep 0"
+        ]
     );
 }
 
@@ -1377,7 +1460,7 @@ fn packages_install_remove_and_go_back_through_pacman_or_the_helper() {
             &["install", "repo", "a", "b"],
             "pacman -S --needed -- a b\n",
         ),
-        (&["install", "aur", "c"], "paru --skipreview -S -- c\n"),
+        (&["install", "aur", "c"], "paru --skipreview -S -- aur/c\n"),
         (&["remove", "a", "b"], "pacman -Rns -- a b\n"),
         (
             &[
@@ -1388,7 +1471,11 @@ fn packages_install_remove_and_go_back_through_pacman_or_the_helper() {
         ),
     ];
     for (args, call) in runs {
-        let o = s.run("packages", args, &[("SM_AUR", "paru")]);
+        let o = s.run(
+            "packages",
+            args,
+            &[("SM_AUR", "paru"), ("SM_AUR_REVIEW", "off")],
+        );
         assert_eq!(o.code, 0, "{args:?}: {}", o.events);
         assert!(o.calls.ends_with(call), "{args:?}: {}", o.calls);
     }
@@ -1396,6 +1483,35 @@ fn packages_install_remove_and_go_back_through_pacman_or_the_helper() {
     assert!(o.calls.ends_with("pacman -Si -- extra/a\n"), "{}", o.calls);
     s.stub("pacman", "exit 1");
     assert_eq!(s.run("packages", &["info", "local", "gone"], &[]).code, 11);
+}
+
+/// With its review, as by default, the helper asks the person on the terminal, which the runtime
+/// is told to show. Switched off, it goes without the review and its menus.
+#[test]
+fn the_aur_helper_reviews_on_the_terminal_unless_switched_off() {
+    let s = Sandbox::new("aur-review");
+    s.stub("pacman", "exit 0");
+    for (helper, skip) in [
+        ("paru", "--skipreview"),
+        (
+            "yay",
+            "--answerclean None --answerdiff None --answeredit None",
+        ),
+    ] {
+        s.stub(helper, "exit 0");
+        for (review, call, events) in [
+            (None, format!("{helper} -S -- aur/c\n"), "terminal\n"),
+            (Some("on"), format!("{helper} -S -- aur/c\n"), "terminal\n"),
+            (Some("off"), format!("{helper} {skip} -S -- aur/c\n"), ""),
+        ] {
+            let mut env = vec![("SM_AUR", helper)];
+            env.extend(review.map(|r| ("SM_AUR_REVIEW", r)));
+            let o = s.run("packages", &["install", "aur", "c"], &env);
+            assert_eq!(o.code, 0, "{helper} {review:?}: {}", o.events);
+            assert!(o.calls.ends_with(&call), "{helper} {review:?}: {}", o.calls);
+            assert_eq!(o.events, events, "{helper} {review:?}");
+        }
+    }
 }
 
 #[test]
@@ -1415,7 +1531,11 @@ fn a_change_installs_first_and_removes_only_what_is_still_there_by_its_own_name(
         "remove:b",
         "remove:sh",
     ];
-    let o = s.run("packages", &args, &[("SM_AUR", "paru")]);
+    let o = s.run(
+        "packages",
+        &args,
+        &[("SM_AUR", "paru"), ("SM_AUR_REVIEW", "off")],
+    );
     assert_eq!(o.code, 0, "{}", o.events);
     let calls: Vec<&str> = o
         .calls
@@ -1425,8 +1545,9 @@ fn a_change_installs_first_and_removes_only_what_is_still_there_by_its_own_name(
     assert_eq!(
         calls,
         [
+            "pacman -Qu",
             "pacman -S --needed -- extra/x",
-            "paru --skipreview -S -- y",
+            "paru --skipreview -S -- aur/y",
             "pacman -Qq",
             "pacman -Rns -- a",
         ]
@@ -1447,6 +1568,13 @@ fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
     std::fs::write(&current, "a=1\n").unwrap();
     std::fs::write(&new, "a=2\n").unwrap();
     let path = |p: &std::path::Path| p.to_str().unwrap().to_string();
+    s.stub(
+        "pacdiff",
+        &format!(
+            "find '{}' -name '*.pacnew' -o -name '*.pacsave*' -o -name '*.pacorig'",
+            etc.display()
+        ),
+    );
 
     let o = s.run("pacnew", &["diff", &path(&new)], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
@@ -1466,6 +1594,12 @@ fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
     assert_eq!(std::fs::read_to_string(&current).unwrap(), "merged\n");
     assert!(!new.exists());
     assert!(o.calls.contains("meld "), "{}", o.calls);
+    assert!(
+        o.calls
+            .contains(&format!("sudo stat -c %a %u %g -- {}\n", current.display())),
+        "a folder closed to the user still tells owner and mode: {}",
+        o.calls
+    );
 
     // A sudoers that does not parse never replaces the one that does.
     let (sudoers, update) = (
@@ -1494,6 +1628,40 @@ fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
         );
     }
     assert_eq!(s.run("pacnew", &["keep", &path(&current)], &[]).code, 11);
+}
+
+/// A service changes only as the page offers it, for the system as root, for the user without.
+#[test]
+fn a_service_changes_only_by_the_verbs_offered() {
+    let s = Sandbox::new("services-verbs");
+    s.stub("systemctl", "exit 0");
+    for verb in ["start", "stop", "restart", "enable", "disable"] {
+        let o = s.run("services", &["system", verb, "foo.service"], &[]);
+        assert_eq!(o.code, 0, "{verb}: {}", o.events);
+        assert!(
+            o.calls.ends_with(&format!(
+                "sudo systemctl {verb} -- foo.service\nsystemctl {verb} -- foo.service\n"
+            )),
+            "{verb}: {}",
+            o.calls
+        );
+    }
+    let _ = std::fs::remove_file(s.dir.join("calls"));
+    for (scope, verb) in [("system", "mask"), ("user", "isolate"), ("system", "--now")] {
+        let o = s.run("services", &[scope, verb, "foo.service"], &[]);
+        assert_eq!(o.code, 1, "{scope} {verb}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(s.dir.join("calls")).unwrap_or_default(),
+        ""
+    );
+    let o = s.run("services", &["user", "restart", "bar.service"], &[]);
+    assert!(
+        o.calls
+            .ends_with("systemctl --user restart -- bar.service\n"),
+        "{}",
+        o.calls
+    );
 }
 
 #[test]
@@ -1552,6 +1720,27 @@ fn services_are_listed_logged_and_changed_in_their_scope() {
         "{}",
         o.calls
     );
+    // The system's names what the session needs, as systemctl shows each unit apart.
+    s.stub(
+        "systemctl",
+        r#"case "$1" in show) printf 'gdm.service\n\ndbus-broker.service\n' ;; *) echo '[]' ;; esac"#,
+    );
+    let o = s.run("services", &["list", "system"], &[]);
+    assert_eq!(
+        (o.code, o.out.as_str()),
+        (
+            0,
+            "units\t[]\nfiles\t[]\nsession\tgdm.service\nsession\tdbus-broker.service\n"
+        )
+    );
+    assert!(
+        o.calls.contains(
+            "systemctl show --property=Id --value display-manager.service dbus.service\n"
+        ),
+        "{}",
+        o.calls
+    );
+    s.stub("systemctl", "echo '[]'");
     let runs: [(&[&str], &str); 4] = [
         (
             &["log", "user", "a.service"],
@@ -1609,20 +1798,41 @@ fn the_news_the_log_and_a_restart_ask_their_tools() {
     assert_eq!(s.run("system", &["auth"], &[]).code, 1);
 }
 
+/// A configuration as packaged gets the last word appended: by speed, in the country of the time
+/// zone where it has mirrors. One changed by hand stays as it is.
 #[test]
 fn reflector_ranks_by_speed_in_the_country_of_the_time_zone_where_it_has_mirrors() {
     let s = Sandbox::new("reflector");
-    s.stub("pacman", "exit 0");
+    let conf = s.dir.join("reflector.conf");
+    let packaged = "--save /etc/pacman.d/mirrorlist\n--protocol https\n--latest 5\n--sort age\n";
+    // pacman tells a configuration changed by hand where the sandbox's differs from the package's.
+    s.stub(
+        "pacman",
+        &format!(
+            r#"if [ "$1" = -Qkk ] && [ "$(cat '{0}')" != '{1}' ]; then
+echo 'backup file: reflector: /etc/xdg/reflector/reflector.conf (Modification time mismatch)'
+echo 'backup file: reflector: /etc/xdg/reflector/reflector.conf (SHA256 checksum mismatch)'
+fi"#,
+            conf.display(),
+            packaged.trim_end()
+        ),
+    );
     s.stub("systemctl", "exit 0");
-    s.stub("install", r#"cat >"$HOME/reflector.conf""#);
+    s.stub("tee", r#"cat >>"$HOME/reflector.conf""#);
     s.stub("readlink", "echo /usr/share/zoneinfo/Europe/Amsterdam");
     s.stub("reflector", "printf 'Country Code Count\\n------- ---- -----\\nNetherlands NL 30\\nUnited States US 200\\n'");
+    std::fs::write(&conf, packaged).unwrap();
     let o = s.run("features", &["install", "reflector"], &[]);
     assert_eq!(o.code, 0, "{}{}", o.events, o.calls);
-    let conf = std::fs::read_to_string(s.dir.join("reflector.conf")).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&conf).unwrap(),
+        format!("{packaged}\n# System Manager\n--age 12\n--latest 10\n--sort rate\n--country NL\n")
+    );
     assert!(
-        conf.contains("--sort rate\n") && conf.ends_with("--country NL\n"),
-        "{conf}"
+        o.calls
+            .contains("sudo tee -a /etc/xdg/reflector/reflector.conf\n"),
+        "{}",
+        o.calls
     );
     assert!(
         o.calls
@@ -1631,11 +1841,30 @@ fn reflector_ranks_by_speed_in_the_country_of_the_time_zone_where_it_has_mirrors
         o.calls
     );
 
+    // Changed by hand, by the lines before too: nothing is appended, the timer still runs.
+    let changed = std::fs::read_to_string(&conf).unwrap();
+    let o = s.run("features", &["install", "reflector"], &[]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.calls);
+    assert_eq!(std::fs::read_to_string(&conf).unwrap(), changed);
+    assert!(
+        o.out.contains("kept\t/etc/xdg/reflector/reflector.conf"),
+        "{}",
+        o.out
+    );
+    assert!(
+        o.calls
+            .ends_with("systemctl enable --now reflector.timer\n")
+    );
+
     // A country without a mirror ranks them all.
+    std::fs::write(&conf, packaged).unwrap();
     s.stub("readlink", "echo /usr/share/zoneinfo/Pacific/Pitcairn");
     assert_eq!(s.run("features", &["install", "reflector"], &[]).code, 0);
-    let conf = std::fs::read_to_string(s.dir.join("reflector.conf")).unwrap();
-    assert!(!conf.contains("--country"), "{conf}");
+    let appended = std::fs::read_to_string(&conf).unwrap();
+    assert!(
+        appended.ends_with("--sort rate\n") && !appended.contains("--country"),
+        "{appended}"
+    );
 
     let o = s.run("features", &["remove", "reflector"], &[]);
     let (disabled, removed) = (
@@ -1694,9 +1923,9 @@ fn cleanup_drops_unused_runtimes_only_when_asked() {
     );
 }
 
-/// The system's Docker is asked only while it runs, at the socket systemd listens on, and only
-/// its unused images and build cache go, never a container or a volume. A run starts what was
-/// inactive for the clean-up alone and stops it again, also when the clean-up fails.
+/// The system's Docker is asked and cleaned up only while it runs, at the socket systemd listens
+/// on, and only its unused images and build cache go, never a container or a volume. An inactive
+/// Docker stays as it is.
 #[test]
 fn docker_is_asked_only_while_it_runs_and_keeps_containers_and_volumes() {
     let s = Sandbox::new("cleanup-docker");
@@ -1704,8 +1933,7 @@ fn docker_is_asked_only_while_it_runs_and_keeps_containers_and_volumes() {
     let socket = s.dir.join("docker.sock");
     let units = s.dir.join("units");
     std::fs::create_dir_all(&units).unwrap();
-    // Each unit a file, active where it holds `active`. Starting the service pulls in what it
-    // requires and wants, as systemd does.
+    // Each unit a file, active where it holds `active`.
     s.stub(
         "systemctl",
         &format!(
@@ -1713,8 +1941,6 @@ fn docker_is_asked_only_while_it_runs_and_keeps_containers_and_volumes() {
 case "$1" in
 cat) [ -e "$d/$2" ] ;;
 is-active) grep -qx active "$d/$3" 2>/dev/null ;;
-start) for u in "$2" docker.socket containerd.service; do echo active >"$d/$u"; done ;;
-stop) shift; for u; do echo inactive >"$d/$u"; done ;;
 show) echo "$(cat "$d/listen") (Stream)" ;;
 *) exit 1 ;;
 esac"#,
@@ -1827,33 +2053,14 @@ esac"#,
         "{docker:?}"
     );
 
-    // Socket activated: the service starts for the clean-up and stops again, the socket stays.
-    set("inactive", "active", &sock);
-    let o = run();
-    assert_eq!(
-        (o.code, o.events.as_str()),
-        (0, "step\tdocker\n"),
-        "{}",
-        o.calls
-    );
-    assert_eq!(
-        sudo(&o),
-        format!("sudo systemctl start docker.service\n{prune}sudo systemctl stop docker.service\n")
-    );
-    assert!(!active("docker.service") && active("docker.socket"));
-
-    // All of it off: everything started comes down again, also after a failed prune.
-    set("inactive", "inactive", &sock);
-    std::fs::write(s.dir.join("broken"), "").unwrap();
-    let o = run();
-    std::fs::remove_file(s.dir.join("broken")).unwrap();
-    assert_ne!(o.code, 0, "{}", o.calls);
-    assert!(
-        sudo(&o).ends_with("sudo systemctl stop docker.socket docker.service containerd.service\n"),
-        "{}",
-        o.calls
-    );
-    assert!(!active("docker.service") && !active("docker.socket") && !active("containerd.service"));
+    // Socket activated or all of it off, nothing starts and nothing is pruned.
+    for others in ["active", "inactive"] {
+        set("inactive", others, &sock);
+        let o = run();
+        assert_eq!((o.code, o.events.as_str()), (0, ""), "{}", o.calls);
+        assert_eq!(sudo(&o), "", "{}", o.calls);
+        assert!(!active("docker.service"));
+    }
 
     // Without the group docker the run still cleans up, as root.
     set("active", "active", &gone);
@@ -1949,9 +2156,14 @@ esac"#,
         !o.out.contains("clone/pacman"),
         "an installed package keeps its build"
     );
-    // Only the parts given: the cache has nothing, so nothing goes.
+    // Only the parts given.
     let o = s.run("cleanup", &["run", "cache"], &[]);
-    assert_eq!((o.code, o.events.as_str()), (0, ""), "{}", o.calls);
+    assert_eq!(
+        (o.code, o.events.as_str()),
+        (0, "step\tcache\n"),
+        "{}",
+        o.calls
+    );
     assert!(!o.calls.contains("-Rns") && builds.join("gone-pkg").exists());
     let o = s.run("cleanup", &["run", "orphans", "aur"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
@@ -2540,7 +2752,7 @@ fn a_setup_installs_only_what_the_lists_name_and_this_machine_lacks() {
     s.write(".dotfiles/tux/packages/flatpak.txt", "org.example.App\n");
     s.stub("paru", "exit 0");
     let mut env = TUX.to_vec();
-    env.push(("SM_AUR", "paru"));
+    env.extend([("SM_AUR", "paru"), ("SM_AUR_REVIEW", "off")]);
     let o = s.run("dotfiles", &["setup"], &env);
     assert_eq!(o.code, 0, "{}{}", o.events, o.err);
     assert!(
@@ -2694,8 +2906,13 @@ fn a_repository_that_does_not_fit_is_refused_and_the_address_taken_back() {
 
 /// GNOME Shell on the bus, with two extensions on, one of them missing here.
 fn gnome(s: &Sandbox) {
-    s.stub("busctl", "echo 'b true'");
-    s.stub("gnome-shell", "echo 'GNOME Shell 51.1'");
+    s.stub(
+        "busctl",
+        r#"case "$*" in
+*InstallRemoteExtension*) echo 's "successful"' ;;
+*) echo 'b true' ;;
+esac"#,
+    );
     s.stub(
         "gnome-extensions",
         r#"case "$*" in
@@ -2712,14 +2929,6 @@ load) cat >"$HOME/loaded" ;;
 esac"#,
     );
     s.stub("gsettings", "exit 0");
-    s.stub(
-        "curl",
-        r#"case "$*" in
-*extension-info*) echo '{"download_url": "/download-extension/clock.zip"}' ;;
-*download-extension*) echo zip ;;
-*) exit 22 ;;
-esac"#,
-    );
 }
 
 #[test]
@@ -2764,7 +2973,7 @@ fn gnome_extensions_are_backed_up_and_what_the_profile_brings_is_loaded() {
     );
     assert_eq!(s.read("loaded"), "[/]\nposition=left\n");
     assert!(
-        o.calls.contains("gnome-extensions install --force /"),
+        o.calls.contains("InstallRemoteExtension s weather@z\n"),
         "{}",
         o.calls
     );

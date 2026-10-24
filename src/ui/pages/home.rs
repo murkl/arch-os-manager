@@ -309,6 +309,7 @@ mod tests {
             description: String::new(),
             active: active.into(),
             enabled: "enabled".into(),
+            session: false,
         };
         app.ctx.shared.services = Loaded::Ready(vec![service("active"), service("active")]);
         assert_eq!(

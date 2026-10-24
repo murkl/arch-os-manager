@@ -64,11 +64,11 @@ A run shows its step and pacman's progress. **tab** switches to the terminal, wh
 | git's `Password for`, ssh and age passphrases | Hidden text box, held nowhere |
 | ssh's question about an unknown host key | Yes or no, no first, with the fingerprint |
 
-Other prompts wait in the terminal. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked.
+Other prompts wait in the terminal. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked. With `aur-review`, the AUR step switches to the terminal and leaves every question to the person.
 
-An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. Installs and removals run in one transaction, installs first. The update page names foreign packages the AUR does not know, as no update reaches them.
+An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. Installs and removals run in one transaction, installs first. An install waits while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them.
 
-**esc**, **q** and **ctrl+c** ask to stop, yes sends ctrl+c. A run holds off shutdown and sleep, a closed terminal does not stop it.
+**esc**, **q** and **ctrl+c** ask to stop, yes sends ctrl+c. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it.
 
 | Offer after a run | When |
 |---|---|
@@ -93,10 +93,15 @@ Asked once per session before the first elevated run and checked with `sudo --va
 
 | Action | Does |
 |---|---|
-| **Repair the package management** | Removes a database lock no process holds, recreates the keyring, updates |
-| **Check the package files** | `pacman -Qkk`, reinstalls native packages with missing or altered content, type or link. Owner, mode and time are ignored, hand-edited configuration stays, AUR packages are only listed |
+| **Repair the package management** | Removes a database lock no process holds, updates `archlinux-keyring`, then the system |
+| **Recreate the keyring** | Builds the keyring anew from the keyring packages, beside the old one, after confirmation. Keys imported by hand are lost |
+| **Check the package files** | `pacman -Qkk` names native packages with missing or altered content, type or link, **Reinstall** reinstalls them after confirmation. Owner, mode and time are ignored, hand-edited configuration stays, AUR packages are only listed |
 
-Taking over or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
+Only a file pacdiff lists at that moment is taken over, kept or merged. Taking over or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
+
+### Services
+
+Stopping, restarting or disabling the display manager or the system bus asks first, as the session ends with them. GNOME's own user units refuse a manual stop.
 
 ## Clean-Up
 
@@ -111,7 +116,7 @@ Taking over or merging a config update first takes a snapper snapshot where snap
 | `docker` | Unused images and the build cache, `image prune --all`, `builder prune --all` | unmarked |
 | `podman` | Unused images, `image prune --all` | unmarked |
 
-Containers and volumes stay. Reading never starts Docker: an inactive one starts for the clean-up alone and stops again. Its sizes need the group `docker`, the clean-up runs as root. Podman is per user. `? MiB` marks a size known only on removal.
+Containers and volumes stay. Docker is read and cleaned up only while it runs. Its sizes need the group `docker`, the clean-up runs as root. Podman is per user. `? MiB` marks a size known only on removal.
 
 ## Dotfiles
 
@@ -149,7 +154,7 @@ The dotfiles are a git repository in `~/.dotfiles`: what every machine shares at
 | `init.sh` | Where it changed or never ran here |
 | Packages | What the lists name and this machine lacks, from the repositories, the AUR and Flathub. One no repository has any more is named and left out |
 | Groups | The function of each group switched on, where it changed or never ran here |
-| GNOME | Missing extensions from extensions.gnome.org, settings and the list of extensions on where they changed |
+| GNOME | Missing extensions from extensions.gnome.org, each after the shell's question, settings and the list of extensions on where they changed |
 
 **Back up** writes the package lists, the GNOME extensions and each secret changed here into the profile, commits every change of the dotfiles as `Back up <profile>: <parts>`, takes in the remote's commits and uploads. A branch without an upstream gets it at its first push.
 
@@ -255,9 +260,9 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | Package | Beyond pacman |
 |---|---|
 | `paru`, `yay` | Built with makepkg after `git` and `base-devel`, build dependencies removed. Removal takes the owner of the command, such as `paru-bin` |
-| `reflector` | `/etc/xdg/reflector/reflector.conf`: https, synced within 12 h, 10 latest, by speed, country of the time zone. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service` |
+| `reflector` | `/etc/xdg/reflector/reflector.conf` as packaged gets appended: synced within 12 h, 10 latest, by speed, country of the time zone. One changed by hand stays. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service` |
 | `fwupd` | `fwupd-refresh.timer` enabled, disabled on removal |
-| `gnome-arch-update` | Arch Linux Updates Indicator from extensions.gnome.org, enabled for the user, active after the next login. Its commands run this binary. Removed with its settings |
+| `gnome-arch-update` | Arch Linux Updates Indicator from extensions.gnome.org, installed by the running GNOME Shell after its own question, active at once. Its commands run this binary. Removed with its settings |
 
 ## Settings
 
@@ -270,6 +275,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | `usage` | `true`, `false` | `true` |
 | `status` | `true`, `false` | `true` |
 | `aur-helper` | `paru`, `yay`, `none` | paru, else yay |
+| `aur-review` | `true`, `false` | `true` |
 | `output` | `compact`, `verbose` | `compact` |
 | `app-menu` | `true`, `false` | `true` |
 | `notify` | `hourly`, `daily`, `weekly`, `off` | `hourly` |
@@ -283,6 +289,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 - An unparsable file is ignored and named under **Settings › About**
 - Every start and `init` set up the menu entry and the notification per `app-menu` and `notify`. An installer calls `init` from its chroot as the user
 - The timer announces 2 minutes after login, then per `notify`. A notification stays until answered or replaced, and closes once nothing is pending
+- `aur-review: true` shows the terminal for the AUR helper's review and every question of its own. `false` builds without review
 - `flatpak: false` leaves Flatpak to another app store. `all` is read as `true`, `cleanup` and `off` as `false`
 - A hidden message ignores numbers, hex values and hashes
 - The first start takes over the settings of the `arch-os` script before 2.0. `scripts/migrate/migrate.sh` says how to remove this
@@ -355,7 +362,7 @@ One binary carries everything. Scripts are written per process to `$XDG_RUNTIME_
 flowchart LR
     R[Runtime] -->|area.sh op args| S[area.sh]
     S -->|stdout| R
-    S -->|"fd 3: step, fail"| R
+    S -->|"fd 3: step, found, terminal, fail"| R
     S -.->|pseudo terminal| T[Terminal view]
 
     style R fill:#1793d1,stroke:#1793d1,color:#fff
@@ -407,23 +414,26 @@ Every text is English and translated in `locales/de.po`.
 |---|---|
 | `LC_ALL` | `C.UTF-8`, one known wording |
 | `SM_AUR` | AUR helper, empty for none |
+| `SM_AUR_REVIEW` | `off` builds without the helper's review, else with it |
 | `SM_FLATPAK` | `on` where Flatpak is installed and enabled, else `off` |
-| `SM_RUN` | Run title, unset in a query |
+| `SM_RUN` | Title of a run that elevates, else unset |
 | `SM_TERMINAL` | `on` with verbose output, else unset |
 | `SUDO_PROMPT` | Fixed prompt the runtime recognises |
 | `TERM` | `xterm-256color` in a run |
 
-`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob` and ignores a hangup. A run holds off shutdown and sleep through logind and its `run_lock`.
+`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob` and ignores a hangup. A run that elevates holds off shutdown and sleep through logind and its `run_lock`.
 
 | Function | Does |
 |---|---|
 | `operation` | Runs `op_<name>`, last line of every script |
 | `step` | Names the phase of a run |
+| `found` | Names what a run found, for the action after it |
+| `behind` | Whether the package lists are newer than the system |
 | `allow` | Accepts the exit codes named, as `grep` ends with 1 on nothing |
 | `scratch` | Own folder as `$work`, removed at the end |
 | `fetch` | curl bound to https, redirects too, with time limits |
 | `aur` | Helper of `$SM_AUR` |
-| `aur_sync` | Helper without review and menus, with them in verbose output |
+| `aur_sync` | Helper with review and menus on the terminal, without them where `SM_AUR_REVIEW` is `off` and the output compact |
 | `asks` | Whether tools prompt in verbose output, else each tool gets its yes flag |
 | `run_lock` | Lock a run holds, for its queries to wait on |
 

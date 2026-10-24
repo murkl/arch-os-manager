@@ -11,6 +11,3 @@ ops:
       flatpak: Removing unused Flatpak runtimes
       docker: Removing unused Docker images and the build cache
       podman: Removing unused Podman images
-errors:
-  11: |
-    Path outside the caches

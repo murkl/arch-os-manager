@@ -17,7 +17,7 @@ errors:
     Program path unusable in a menu entry
     Move the program to a path without " \ ` $ %.
   11: |
-    Extension download failed
+    Extension not installed
   12: |
     Extension installed by a package
     Remove it on the Packages page.

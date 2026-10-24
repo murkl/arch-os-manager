@@ -46,7 +46,8 @@ fact_gnome() {
 # source, as a -bin build breaks at the next libalpm soname, and its build
 # dependencies go again.
 op_install() {
-    local package="$1" zone country yes
+    local package="$1" conf report zone country yes
+    if behind; then exit 11; fi
     case "$package" in
     paru | yay)
         sudo pacman -S --needed git base-devel
@@ -59,20 +60,28 @@ op_install() {
     *) sudo pacman -S --needed -- "$package" ;;
     esac
 
-    # reflector's own configuration ranks by age, this one by speed, within the
-    # country zone.tab names for the time zone, where Arch has a mirror there, and
-    # weekly.
+    # reflector's own configuration ranks by age, worldwide. As packaged, it gets
+    # lines appended, which have the last word: by speed, within the country
+    # zone.tab names for the time zone where Arch has a mirror there. One whose
+    # content pacman finds changed stays. pacman ends with 1 on altered files of
+    # the package itself.
     if [ "$package" = reflector ]; then
-        zone="$(readlink /etc/localtime)" || zone=""
-        country="$(awk -v zone="${zone#*zoneinfo/}" '!/^#/ && $3 == zone { print $1 }' /usr/share/zoneinfo/zone.tab)"
-        if [ -n "$country" ] && ! reflector --list-countries 2>/dev/null |
-            awk -v code="$country" '$(NF - 1) == code { found = 1 } END { exit !found }'; then
-            country=""
+        conf=/etc/xdg/reflector/reflector.conf
+        report="$(pacman -Qkk reflector 2>&1)" || allow 1
+        if grep -qE "^backup file: reflector: ${conf//./\\.} \((Size|[A-Z0-9]* checksum) mismatch\)$" <<<"$report"; then
+            printf 'kept\t%s\n' "$conf"
+        else
+            zone="$(readlink /etc/localtime)" || zone=""
+            country="$(awk -v zone="${zone#*zoneinfo/}" '!/^#/ && $3 == zone { print $1 }' /usr/share/zoneinfo/zone.tab)"
+            if [ -n "$country" ] && ! reflector --list-countries 2>/dev/null |
+                awk -v code="$country" '$(NF - 1) == code { found = 1 } END { exit !found }'; then
+                country=""
+            fi
+            {
+                printf '%s\n' '' '# System Manager' '--age 12' '--latest 10' '--sort rate'
+                if [ -n "$country" ]; then printf -- '--country %s\n' "$country"; fi
+            } | sudo tee -a "$conf" >/dev/null
         fi
-        {
-            printf '%s\n' '--save /etc/pacman.d/mirrorlist' '--protocol https' '--age 12' '--latest 10' '--sort rate'
-            if [ -n "$country" ]; then printf -- '--country %s\n' "$country"; fi
-        } | sudo install -m 644 /dev/stdin /etc/xdg/reflector/reflector.conf
         sudo systemctl enable --now reflector.timer
     fi
     # Without its timer, fwupd knows only the firmware of its last look.

@@ -83,6 +83,10 @@ impl SettingsPage {
                 let (text, tone) = on_off(ctx.settings.flatpak.unwrap_or(true));
                 (text.into(), tone, false)
             }
+            Target::AurReview => {
+                let (text, tone) = on_off(ctx.settings.aur_review.unwrap_or(true));
+                (text.into(), tone, false)
+            }
             Target::Notifications => {
                 let missing = ctx.features().is_some() && !ctx.available(op::DESKTOP_NOTIFY);
                 if missing {
@@ -274,18 +278,22 @@ impl Page for SettingsPage {
     }
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
-        // Flatpak's row only once Flatpak is known to be installed, the repository and the profile
-        // only with the dotfiles on.
-        let shown = |t: &Target| match t {
-            Target::Flatpak => ctx.features().is_some_and(|f| f.ok("flatpak")),
-            Target::Repository | Target::Profile | Target::UseHomelab => ctx.settings.dotfiles(),
+        // Flatpak's row only once Flatpak is known to be installed, the review's only with an AUR
+        // helper, the repository and the profile only with the dotfiles on.
+        let flatpak = ctx.features().is_some_and(|f| f.ok("flatpak"));
+        let aur = script::aur().is_some();
+        let dotfiles = ctx.settings.dotfiles();
+        let shown = |t: Target| match t {
+            Target::Flatpak => flatpak,
+            Target::AurReview => aur,
+            Target::Repository | Target::Profile | Target::UseHomelab => dotfiles,
             _ => true,
         };
         let headings = [t("Appearance"), t("System"), t("Dotfiles"), ""];
         let mut rows = Vec::new();
         for (heading, group) in headings.into_iter().zip(SETTINGS) {
             rows.push(Row::heading(heading));
-            for &target in group.iter().filter(|t| shown(t)) {
+            for &target in group.iter().filter(|t| shown(**t)) {
                 let (detail, tone, dim) = self.value(target, ctx);
                 let row = Row::new(target, target.label())
                     .icon(target.icon(), Tone::Normal)
@@ -410,6 +418,13 @@ impl Page for SettingsPage {
                     script::set_flatpak(features.flatpak(on));
                 }
                 ctx.reload();
+                ctx.save_settings();
+                Flow::Stay
+            }
+            Target::AurReview => {
+                let on = !ctx.settings.aur_review.unwrap_or(true);
+                ctx.settings.aur_review = crate::settings::switch(on);
+                script::set_aur_review(on);
                 ctx.save_settings();
                 Flow::Stay
             }
@@ -765,6 +780,28 @@ mod tests {
         };
         assert!(spinning(Target::Desktop));
         assert!(!spinning(Target::Notifications));
+    }
+
+    /// With an AUR helper the review's row shows, on by default, and its switch is stored.
+    #[test]
+    fn the_aur_review_is_on_until_switched_off() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        script::set_aur(Some("paru"));
+        for page in Target::AurReview.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("AUR review"));
+        assert!(row.is_some_and(|r| r.ends_with("on")), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(app.ctx.settings.aur_review, Some(false));
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("AUR review"));
+        assert!(row.is_some_and(|r| r.ends_with("off")), "{shown}");
+        script::set_aur_review(true);
     }
 
     /// Flatpak's row shows only where Flatpak is there. Its switch is stored and the updates read

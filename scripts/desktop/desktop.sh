@@ -203,18 +203,17 @@ op_open() {
 # The update indicator from extensions.gnome.org.
 op_extension_install() {
     ego_install "$ARCH_UPDATE" || exit 11
-    on_bus gnome-extensions enable "$ARCH_UPDATE"
 }
 
-# Takes the indicator out of this user's GNOME, with the commands it was given.
+# Takes the indicator out of this user's GNOME, with the commands it was given,
+# through the running shell, which unloads it.
 op_extension_remove() {
     local dir
     dir="$(arch_update_dir)" || return 0
     case "$dir" in /usr/*) exit 12 ;; esac
-    on_bus gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
-    on_bus gnome-extensions disable "$ARCH_UPDATE"
-    # The running shell unloads it. Without one, the folder goes by hand.
-    gnome-extensions uninstall "$ARCH_UPDATE" 2>/dev/null || rm -rf -- "$dir"
+    gsettings --schemadir "${dir}/schemas" reset-recursively org.gnome.shell.extensions.arch-update
+    gnome-extensions disable "$ARCH_UPDATE"
+    gnome-extensions uninstall "$ARCH_UPDATE"
 }
 
 operation "$@"
