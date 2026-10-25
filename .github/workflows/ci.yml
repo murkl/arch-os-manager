@@ -1,13 +1,9 @@
-# Pull requests are checked. On main, release-please keeps a release pull
-# request open, and merging it tags the version, publishes the release, pushes
-# the AUR package and hangs its binary on the release.
+# Pull requests are checked.
 
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions: {}
 
@@ -16,17 +12,15 @@ defaults:
   run:
     shell: bash
 
-# A new push replaces a pull request's run; main queues, so no release is cut
-# short.
+# A new push replaces a pull request's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # `make check` on Arch, as the machines it runs on.
   check:
     name: Check
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     # The date names the base, the digest pins it. Publish uses the same.
@@ -34,10 +28,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - run: pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
+      # git refuses root a checkout owned by the runner's user. The build reads
+      # the last release tag, so the history comes along.
+      - run: |
+          pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       # The compiler comes from today's Arch and keys the cache with the lock
@@ -53,68 +52,3 @@ jobs:
           key: cargo-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}
 
       - run: make check
-
-  # The release pull request, or once that is merged, the tag and the release.
-  # Done as the account, not as the workflow's bot: GitHub holds the checks of
-  # a bot's pull request until someone approves its runs.
-  release:
-    name: Release
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    environment: release
-    outputs:
-      version: ${{ steps.please.outputs.version }}
-    steps:
-      - env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "::error::The repository has no secret RELEASE_TOKEN; docs/CONTRIBUTING.md says how to make it, then rerun this job."
-            exit 1
-          fi
-
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        id: please
-        with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-
-  # The AUR files for the tag's source tarball, built once as a user builds
-  # them, then pushed, and the binary out of that package put on the release.
-  # The key is a secret of the environment aur, which only main
-  # may use; on a failure the release stands, and a rerun of this job does it
-  # all again.
-  publish:
-    name: Publish
-    needs: release
-    if: needs.release.outputs.version != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    container: archlinux:base-devel-20261011.0.609700@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
-    environment: aur
-    permissions:
-      contents: write  # the asset
-    env:
-      VERSION: ${{ needs.release.outputs.version }}
-    steps:
-      - run: pacman -Syu --noconfirm --needed rust git openssh github-cli
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - run: tools/aur.sh build "$VERSION" aur-files
-
-      - env:
-          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
-        run: |
-          if [ -z "$AUR_SSH_KEY" ]; then
-            echo "::error::The environment aur has no secret AUR_SSH_KEY. tools/aur.sh key sets it, then rerun this job."
-            exit 1
-          fi
-          tools/aur.sh push aur-files
-
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: tools/aur.sh upload "$VERSION" aur-files

@@ -1,6 +1,6 @@
-# One pull request a week, titled as title.yml demands. A release is taken
-# after a week: a compromised one is usually pulled by then. The crates are
-# pinned by Cargo.lock and raised by hand.
+# One pull request a week, under a ci: title. A release is taken after a week,
+# as a compromised one is usually pulled by then, except for murkl/workflows.
+# The crates are pinned by Cargo.lock and raised by hand.
 
 version: 2
 
@@ -11,6 +11,7 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+      exclude: ["murkl/*"]
     commit-message:
       prefix: ci
     groups:

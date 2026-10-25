@@ -1,0 +1,82 @@
+# A version tag on main publishes the release, pushes the AUR package and hangs
+# its binary on the release.
+
+name: Release
+
+on:
+  push:
+    tags: ['*']
+
+permissions: {}
+
+# Every step in bash with pipefail, as the Makefile runs its recipes.
+defaults:
+  run:
+    shell: bash
+
+# A tag's run is never cut short.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The tag on main and its notes, or a failure before anything is published.
+  release:
+    name: Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.notes.outputs.version }}
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - id: notes
+        uses: murkl/workflows/notes@21fff230679db7d36e4b6a456297e7eabec34b73 # 1.0.0
+
+  # The release with its notes, the AUR files for the tag's source tarball,
+  # built once as a user builds them, then pushed, and the binary out of that
+  # package put on the release. The key is a secret of the environment aur,
+  # which only version tags may use. On a failure the release stands, and a
+  # rerun of this job does it all again.
+  publish:
+    name: Publish
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: archlinux:base-devel-20261011.0.609700@sha256:061679925e5d5028f2df9395d441ce6c4b9accf0157ff3486c06b6962e014ef1
+    environment: aur
+    permissions:
+      contents: write  # the release and its asset
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - run: pacman -Syu --noconfirm --needed rust git openssh github-cli
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NOTES: ${{ needs.release.outputs.notes }}
+        run: |
+          gh release view "$VERSION" >/dev/null 2>&1 ||
+            gh release create "$VERSION" --verify-tag --latest --title "$VERSION" --notes "$NOTES"
+
+      - run: tools/aur.sh build "$VERSION" aur-files
+
+      - env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_KEY" ]; then
+            echo "::error::The environment aur has no secret AUR_SSH_KEY. tools/aur.sh key sets it, then rerun this job."
+            exit 1
+          fi
+          tools/aur.sh push aur-files
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: tools/aur.sh upload "$VERSION" aur-files
