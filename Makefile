@@ -4,9 +4,7 @@ SHELL       := bash
 
 BIN := target/release/system-manager
 
-# POSIX sh: the scripts in .github/, the same file in every project released
-# this way. Bash: the scripts the runtime runs and the tools.
-POSIX_SCRIPTS := $(wildcard .github/*.sh)
+# Bash: the scripts the runtime runs and the tools.
 BASH_SCRIPTS  := $(wildcard scripts/*/*.sh tools/*.sh)
 
 .PHONY: all build check secrets-check fmt fmt-check lint test aur-check run install screenshots banner github clean
@@ -24,17 +22,14 @@ secrets-check:
 
 fmt:
 	cargo fmt
-	shfmt -w -ln posix -i 4 $(POSIX_SCRIPTS)
 	shfmt -w -i 4 $(BASH_SCRIPTS)
 
 fmt-check:
 	cargo fmt --check
-	shfmt -d -ln posix -i 4 $(POSIX_SCRIPTS)
 	shfmt -d -i 4 $(BASH_SCRIPTS)
 
 lint:
 	cargo clippy --all-targets --locked -- -D warnings
-	shellcheck -s sh -S style $(POSIX_SCRIPTS)
 	shellcheck -x -S style $(BASH_SCRIPTS)
 	yamllint -s .
 	actionlint
@@ -86,10 +81,11 @@ banner:
 		--card docs/screenshots/home.png --card docs/screenshots/update.png \
 		--tagline "Update, maintain and repair<br>Arch Linux from one place." --cell 7
 
-# The repository's settings on GitHub, out of .github/settings/. Run by hand as
-# an admin: a workflow may not change the rules it is held to.
+# The repository's settings on GitHub, out of .github/settings/, by murkl/workflows
+# checked out next to this project. Run by hand as an admin: a workflow may not
+# change the rules it is held to.
 github:
-	.github/settings.sh
+	../workflows/settings/settings.sh
 
 clean:
 	cargo clean

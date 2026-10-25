@@ -80,7 +80,7 @@ A version tag on an up-to-date `main` releases, and `Publish` attaches `system-m
 
 ## The Repository
 
-**[.github/settings/](../.github/settings)** holds the GitHub configuration. An admin logged in with `gh` applies it:
+**[.github/settings/](../.github/settings)** holds the GitHub configuration. An admin logged in with `gh` applies it, with **[murkl/workflows](https://github.com/murkl/workflows)** checked out next to this project:
 
 ```
 make github
@@ -94,6 +94,6 @@ make github
 | `actions.json` | Workflow tokens read only unless stated otherwise |
 | `topics.json` | Topics |
 
-The script also enables Dependabot alerts and private vulnerability reporting. It is the same in every project released this way, `ruleset-main.json` names the checks. No CodeQL: clippy and zizmor cover Rust and the workflows in `make check`.
+The script also enables Dependabot alerts and private vulnerability reporting. `ruleset-main.json` names the checks. No CodeQL: clippy and zizmor cover Rust and the workflows in `make check`.
 
 **Note:** _The social preview `docs/banner.png` is uploaded by hand under **Settings › General › Social preview**, as GitHub has no API for it._
