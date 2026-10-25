@@ -1,9 +1,13 @@
-# Pull requests are checked.
+# Pull requests are checked, and main weekly against today's Arch.
 
 name: CI
 
 on:
   pull_request:
+  # Arch moves daily: Monday's run catches an upstream break and fills the cache
+  # pull requests start from.
+  schedule:
+    - cron: "43 4 * * 1"
 
 permissions: {}
 
@@ -40,15 +44,27 @@ jobs:
           persist-credentials: false
 
       # The compiler comes from today's Arch and keys the cache with the lock
-      # file: a cache built by another one is rebuilt whole and never saved.
+      # file: a cache built by another one is rebuilt whole. Pull requests only
+      # read, Monday's run on main writes, so every pull request starts from
+      # main's cache.
       - id: rust
         run: echo "version=$(rustc -V | cut -d' ' -f2)" >>"$GITHUB_OUTPUT"
 
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             target
-          key: cargo-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          key: check-${{ steps.rust.outputs.version }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: check-${{ steps.rust.outputs.version }}-
 
       - run: make check
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'schedule' && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}
