@@ -2,7 +2,7 @@
 // scripts declare, and names its version.
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::{env, fs, path::Path};
+use std::{env, fs, path::Path, process::Command};
 
 /// Of a script's yaml, only which operations it declares.
 #[derive(Deserialize)]
@@ -50,13 +50,12 @@ fn main() {
     fs::write(out.join("embedded.rs"), code).unwrap();
     fs::write(out.join("ops.rs"), ops()).unwrap();
 
-    // What a release hands in, else a pre-release of the patch after the last release, as
-    // release-please keeps it.
+    // What a release hands in, else a pre-release of the patch after the last release tag.
     println!("cargo::rerun-if-env-changed=SM_VERSION");
-    println!("cargo::rerun-if-changed=.release-please-manifest.json");
+    println!("cargo::rerun-if-changed=.git/refs/tags");
     let version = match env::var("SM_VERSION") {
         Ok(v) if !v.is_empty() => v,
-        _ => next_dev(&fs::read_to_string(".release-please-manifest.json").unwrap()),
+        _ => next_dev(&last_release()),
     };
     println!("cargo::rustc-env=SM_VERSION={version}");
 }
@@ -85,12 +84,31 @@ fn ops() -> String {
     code
 }
 
-/// `{ ".": "1.9.1" }` as `1.9.2-dev`.
-fn next_dev(manifest: &str) -> String {
-    let released = manifest.split('"').nth(3).unwrap_or_default();
+/// The newest release tag before HEAD, `v` dropped, by the patterns of murkl/workflows.
+fn last_release() -> String {
+    let out = Command::new("git")
+        .args(["describe", "--tags", "--abbrev=0"])
+        .args([
+            "--match",
+            "[0-9]*.[0-9]*.[0-9]*",
+            "--match",
+            "v[0-9]*.[0-9]*.[0-9]*",
+        ])
+        .output()
+        .expect("git runs");
+    assert!(
+        out.status.success(),
+        "no release tag in reach: fetch the tags or set SM_VERSION"
+    );
+    let tag = String::from_utf8(out.stdout).unwrap();
+    tag.trim().trim_start_matches('v').to_owned()
+}
+
+/// `1.9.1` as `1.9.2-dev`.
+fn next_dev(released: &str) -> String {
     let parts: Vec<u64> = released.split('.').filter_map(|p| p.parse().ok()).collect();
     let [major, minor, patch] = parts[..] else {
-        panic!(".release-please-manifest.json names no x.y.z: {released:?}");
+        panic!("the release tag {released:?} names no x.y.z");
     };
     format!("{major}.{minor}.{}-dev", patch + 1)
 }
