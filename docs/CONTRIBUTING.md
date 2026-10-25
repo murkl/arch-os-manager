@@ -54,14 +54,15 @@ The title is the one line `main` keeps. The release notes are read from it, per 
 | `feat!: settings move to ~/.config` | 2.0.0 → 3.0.0 | ⚠ BREAKING CHANGES |
 | `docs:` `refactor:` `test:` `build:` `ci:` `chore:` | none | nothing |
 
-- Written for users. A title without a type lands under Other Changes
+- Written for users, as a short phrase: the release notes show it from a capital, `* Keep the news while offline`
+- A title without a type lands under Other Changes
 - The merge description stays empty
 
 ## What CI Runs
 
 | Job | When | Does |
 | --- | --- | --- |
-| `Check` | Every pull request | `make check` |
+| `Check` | Every pull request, Monday morning | `make check`. Pull requests read the build cache, Monday's run on `main` writes it |
 | `Release` | A version tag | Checks the tag, writes the release notes |
 | `Publish` | A release | Publishes the release page, stamps `aur/PKGBUILD` for the tag, builds it with makepkg, pushes it to the AUR, attaches the binary to the release |
 
