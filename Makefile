@@ -70,14 +70,15 @@ screenshots:
 	SM_VERSION="$(VERSION)" cargo test --locked --lib ui::app::tests::screenshots -- --ignored --exact
 	ls docs/screenshots
 
-# docs/banner.png out of two screenshots, so after `make screenshots`. Of the
-# product, docs/banner.py reads the built-in theme's accent and the wordmark.
+# docs/banner.png out of two screenshots, so after `make screenshots`, by
+# banner.py of murkl/workflows checked out next to this project. Of the product,
+# it reads the built-in theme's accent and the wordmark.
 # Needs chromium, imagemagick and FiraCode Nerd Font.
 banner:
 	mkdir -p target
 	accent="$$(sed -n 's/^ *accent: *"\(#[0-9A-Fa-f]*\)".*/\1/p' themes/nord.yaml)"; \
 	{ printf 'accent: "%s"\nlogo: |\n' "$$accent"; sed 's/^/  /' docs/wordmark.txt; } >target/product.yaml
-	python3 docs/banner.py --product target/product.yaml --logo scripts/desktop/logo.svg \
+	python3 ../workflows/banner/banner.py --product target/product.yaml --logo scripts/desktop/logo.svg \
 		--card docs/screenshots/home.png --card docs/screenshots/update.png \
 		--tagline "Update, maintain and repair<br>Arch Linux from one place." --cell 7
 
