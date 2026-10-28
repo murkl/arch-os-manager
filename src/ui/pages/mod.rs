@@ -1,4 +1,6 @@
+pub mod ask;
 pub mod cleanup;
+pub mod dotfiles;
 pub mod features;
 pub mod firmware;
 pub mod home;

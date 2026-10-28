@@ -23,6 +23,22 @@ sm_failed() {
     exit 1
 }
 
+# What the script made for its own use, removed as it ends, also on an error or
+# ctrl+c: the folder of scratch, and each file written beside its target until
+# it takes the target's place.
+sm_made=()
+# The same of root, which sudo removes without asking: the run used it just
+# before.
+sm_made_root=()
+trap sm_clean EXIT
+sm_clean() {
+    local path
+    rm -rf -- "${sm_made[@]}"
+    for path in "${sm_made_root[@]}"; do
+        if [ -e "$path" ]; then sudo -n rm -rf -- "$path" 2>/dev/null || true; fi
+    done
+}
+
 # Runs the operation the first argument names: the function op_<name>, a dash
 # in the name an underscore in the function.
 operation() {
@@ -122,15 +138,29 @@ allow() {
     return "$status"
 }
 
-# A folder of the operation's own as $work, removed when it ends.
+# A folder of the operation's own as $work, made at its first use.
 scratch() {
+    if [ -n "${work:-}" ]; then return 0; fi
     work="$(mktemp -d)"
-    trap 'rm -rf "$work"' EXIT
+    sm_made+=("$work")
 }
 
-# Every request leaving the machine, bound to https, redirects included.
+# The name a file is written under beside its target before it takes the
+# target's place, as $new, which the caller declares local:
+# `beside <file>; <command> >"$new"; mv -f -- "$new" <file>`. Absolute, as the
+# script may change folders, with the links in it kept.
+beside() {
+    new="$(realpath -ms -- "$1").new"
+    sm_made+=("$new")
+}
+
+# Every request leaving the machine, bound to the protocol of its address,
+# redirects included: https stays https, the plain http of a server at home
+# stays at home.
 fetch() {
-    curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --connect-timeout 10 --max-time 60 "$@"
+    local url="${*: -1}"
+    local proto="${url%%://*}"
+    curl --proto "=${proto}" --proto-redir "=${proto}" --tlsv1.2 -fsSL --connect-timeout 10 --max-time 60 "$@"
 }
 
 # The AUR helper chosen in the settings, empty for none.
@@ -163,6 +193,18 @@ on_bus() {
     else
         dbus-run-session -- "$@"
     fi
+}
+
+# An extension of extensions.gnome.org through the running GNOME Shell, which
+# asks the person, takes the version for itself and loads it at once. The call
+# returns with the answer, or with an error. The shell itself serves it: the
+# name org.gnome.Shell.Extensions starts a helper that drops a call left
+# waiting for the person.
+ego_install() {
+    local answer
+    answer="$(busctl --user --timeout=300s call org.gnome.Shell /org/gnome/Shell \
+        org.gnome.Shell.Extensions InstallRemoteExtension s "$1")" || return 1
+    if [ "$answer" != 's "successful"' ]; then return 1; fi
 }
 
 # The GNOME extension that shows pending updates in the top bar.

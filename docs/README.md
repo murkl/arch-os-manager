@@ -30,6 +30,7 @@
 - Config updates compared, merged or taken over
 - Mirror ranking, firmware updates
 - Keyring renewal, package file repair
+- [Dotfiles](REFERENCE.md#dotfiles) with chezmoi in a git repository, secrets encrypted
 - Terminal, Linux console or own window
 - Compact or verbose output
 - English and German

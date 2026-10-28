@@ -189,16 +189,24 @@ impl Run {
     /// The person's answer to the open question.
     pub fn answer(&mut self, text: &str) {
         let line = self.lines.current();
-        if self.prompt == Some(Prompt::Password) {
-            // An empty one counts as a failed attempt towards the lock of pam_faillock. A
-            // terminal that echoes would print it into the output and the log.
-            if text.is_empty() || self.session.echoes() {
-                return;
+        match self.prompt {
+            Some(Prompt::Password) => {
+                // An empty one counts as a failed attempt towards the lock of pam_faillock. A
+                // terminal that echoes would print it into the output and the log.
+                if text.is_empty() || self.session.echoes() {
+                    return;
+                }
+                sudo::set(text.to_string());
+                self.rejected = false;
             }
-            sudo::set(text.to_string());
-            self.rejected = false;
-        } else {
-            crate::info!("{}: answered {text:?} to {line:?}", self.op);
+            // Held nowhere, so neither logged nor typed where the terminal shows it.
+            Some(Prompt::Secret { .. }) => {
+                if text.is_empty() || self.session.echoes() {
+                    return;
+                }
+                crate::info!("{}: answered a secret to {line:?}", self.op);
+            }
+            _ => crate::info!("{}: answered {text:?} to {line:?}", self.op),
         }
         self.send(text, line);
     }

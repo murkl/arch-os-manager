@@ -46,6 +46,9 @@ pub struct Settings {
     /// Journal messages like one of these, numbers aside, are left out of the log page.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_log: Vec<String>,
+    /// The dotfiles in chezmoi's source folder, off unless switched on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dotfiles: Option<bool>,
 }
 
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
@@ -162,6 +165,11 @@ impl Settings {
         self.output() == "verbose"
     }
 
+    /// Whether the dotfiles are switched on.
+    pub fn dotfiles(&self) -> bool {
+        self.dotfiles.unwrap_or(false)
+    }
+
     /// Whether the clean-up takes a part, as chosen or by default.
     pub fn cleans(&self, part: Part) -> bool {
         self.cleanup
@@ -226,6 +234,7 @@ mod tests {
             flatpak: Some(false),
             cleanup: BTreeMap::from([("docker".into(), true), ("flatpak".into(), false)]),
             hidden_log: vec!["ACPI Error: with space".into()],
+            dotfiles: Some(true),
         };
         let yaml = serde_saphyr::to_string(&s).unwrap();
         assert_eq!(Settings::parse(&yaml).unwrap(), s);
@@ -241,6 +250,9 @@ mod tests {
         assert!(Settings::parse("flatpak: updates").is_err());
         assert!(Settings::parse("cleanup: {trash: true}").is_err());
         assert!(Settings::parse("cleanup: {docker: maybe}").is_err());
+        assert!(Settings::parse("dotfiles: maybe").is_err());
+        assert!(!Settings::default().dotfiles());
+        assert!(Settings::parse("dotfiles: true").unwrap().dotfiles());
         assert_eq!(
             Settings::parse("notify: weekly").unwrap().notify(),
             "weekly"

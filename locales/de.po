@@ -1345,3 +1345,345 @@ msgstr "Fortschritt, Rückfragen als Dialog"
 
 msgid "terminal, every command and prompt"
 msgstr "Terminal, alle Befehle und Rückfragen"
+
+msgid ""
+"The repository wants other credentials\n"
+"A run asks for them. A token or key may lack the right to read or write.\n"
+msgstr ""
+"Das Repository verlangt andere Zugangsdaten\n"
+"Ein Lauf fragt danach. Einem Token oder Schlüssel fehlt vielleicht das Recht zu lesen oder zu schreiben.\n"
+
+msgid ""
+"The repository could not be reached\n"
+"Check the address and the internet connection.\n"
+msgstr ""
+"Das Repository war nicht erreichbar\n"
+"Prüfe die Adresse und die Internetverbindung.\n"
+
+msgid "Only what lies in the home folder\n"
+msgstr "Nur was im Home-Ordner liegt\n"
+
+msgid "It lies in the dotfiles, the cache or the state\n"
+msgstr "Es liegt in den Dotfiles, im Cache oder im State\n"
+
+msgid "It holds the dotfiles, the cache or the state\n"
+msgstr "Es enthält die Dotfiles, den Cache oder den State\n"
+
+msgid "It is a link\n"
+msgstr "Es ist ein Link\n"
+
+msgid "Neither a file nor a folder\n"
+msgstr "Weder Datei noch Ordner\n"
+
+msgid "It is a git repository\n"
+msgstr "Es ist ein Git-Repository\n"
+
+msgid "It holds links, sockets or devices\n"
+msgstr "Es enthält Links, Sockets oder Geräte\n"
+
+msgid "It holds no file\n"
+msgstr "Es enthält keine Datei\n"
+
+msgid ""
+"It holds more than 100 files\n"
+"That is the data of a program, not its configuration.\n"
+msgstr ""
+"Es enthält mehr als 100 Dateien\n"
+"Das sind Daten eines Programms, nicht seine Konfiguration.\n"
+
+msgid "The dotfiles keep it already\n"
+msgstr "Die Dotfiles haben es schon\n"
+
+msgid "The dotfiles do not keep it\n"
+msgstr "Die Dotfiles haben es nicht\n"
+
+msgid ""
+"Plain http and git:// are refused\n"
+"They carry the dotfiles unencrypted. Take the https or ssh address.\n"
+msgstr ""
+"Einfaches http und git:// werden abgewiesen\n"
+"Sie übertragen die Dotfiles unverschlüsselt. Nimm die Adresse für https oder ssh.\n"
+
+msgid "Reading the dotfiles"
+msgstr "Dotfiles werden gelesen"
+
+msgid "Fetching the dotfiles"
+msgstr "Dotfiles werden abgerufen"
+
+msgid "Listing what the dotfiles keep"
+msgstr "Verwaltete Dateien werden gelesen"
+
+msgid "Connecting the repository"
+msgstr "Repository wird verknüpft"
+
+msgid "Setting up from the dotfiles"
+msgstr "Rechner wird eingerichtet"
+
+msgid "Backing up into the dotfiles"
+msgstr "Rechner wird gesichert"
+
+msgid "Adding to the dotfiles"
+msgstr "Wird zu den Dotfiles hinzugefügt"
+
+msgid "Taking out of the dotfiles"
+msgstr "Wird aus den Dotfiles genommen"
+
+msgid "Adding the secret"
+msgstr "Secret wird hinzugefügt"
+
+msgid "Taking the secret out"
+msgstr "Secret wird entfernt"
+
+msgid "Fetching the latest state"
+msgstr "Neuester Stand wird geholt"
+
+msgid "Committing"
+msgstr "Wird committet"
+
+msgid "Uploading"
+msgstr "Wird hochgeladen"
+
+msgid "Keeps the dotfiles in a repository."
+msgstr "Hält die Dotfiles in einem Repository."
+
+msgid "Dotfiles"
+msgstr "Dotfiles"
+
+msgid "Repository"
+msgstr "Repository"
+
+msgid "Set up"
+msgstr "Einrichten"
+
+msgid "Back up"
+msgstr "Sichern"
+
+msgid "Files"
+msgstr "Dateien"
+
+msgid "Remove a file"
+msgstr "Datei entfernen"
+
+msgid "Add a secret"
+msgstr "Secret hinzufügen"
+
+msgid "Remove a secret"
+msgstr "Secret entfernen"
+
+msgid "Parent folder"
+msgstr "Übergeordneter Ordner"
+
+msgid "Choose this folder"
+msgstr "Diesen Ordner wählen"
+
+msgid "parent folder"
+msgstr "Ordner höher"
+
+msgid "Answer cannot be empty."
+msgstr "Antwort darf nicht leer sein."
+
+msgid "{n} new commit"
+msgstr "{n} neuer Commit"
+
+msgid "{n} new commits"
+msgstr "{n} neue Commits"
+
+msgid "empty"
+msgstr "leer"
+
+msgid "not usable"
+msgstr "nicht nutzbar"
+
+msgid "not backed up"
+msgstr "nicht gesichert"
+
+msgid "backed up"
+msgstr "gesichert"
+
+msgid "not uploaded"
+msgstr "nicht hochgeladen"
+
+msgid "this machine only"
+msgstr "nur dieser Rechner"
+
+msgid "The repository was not reached: {why}"
+msgstr "Das Repository war nicht erreichbar: {why}"
+
+msgid "No dotfiles yet. Back up makes them, Settings › Repository fetches them from a repository."
+msgstr "Noch keine Dotfiles. Sichern legt sie an, Einstellungen › Repository holt sie aus einem Repository."
+
+msgid "The address to clone from and to upload to, as GitHub or Gitea show it for cloning. Empty, the dotfiles stay on this machine."
+msgstr "Die Adresse zum Klonen und Hochladen, wie GitHub oder Gitea sie zum Klonen zeigen. Leer bleiben die Dotfiles auf diesem Rechner."
+
+msgid "The user name for {url}"
+msgstr "Der Benutzername für {url}"
+
+msgid "The password or token for {url}"
+msgstr "Das Passwort oder Token für {url}"
+
+msgid "The passphrase of the key {key}"
+msgstr "Die Passphrase des Schlüssels {key}"
+
+msgid "Trust the host {host}? The fingerprint of its key is {fingerprint}."
+msgstr "Dem Host {host} vertrauen? Der Fingerabdruck seines Schlüssels ist {fingerprint}."
+
+msgid ""
+"Take the secret {path} out of the dotfiles?\n"
+"Its file stays where it is."
+msgstr ""
+"Das Secret {path} aus den Dotfiles nehmen?\n"
+"Seine Datei bleibt, wo sie ist."
+
+msgid ""
+"Disconnect the repository?\n"
+"The dotfiles stay on this machine. The repository keeps what it holds."
+msgstr ""
+"Das Repository trennen?\n"
+"Die Dotfiles bleiben auf diesem Rechner. Das Repository behält, was es hat."
+
+msgid "Password or token"
+msgstr "Passwort oder Token"
+
+msgid "Passphrase"
+msgstr "Passphrase"
+
+msgid "User name"
+msgstr "Benutzername"
+
+msgid ""
+"Connect the dotfiles to {url}?\n"
+"Back up uploads to it from then on."
+msgstr ""
+"Die Dotfiles mit {url} verbinden?\n"
+"Sichern lädt ab dann dorthin hoch."
+
+msgid ""
+"Git has no user name\n"
+"Set it once with git config --global user.name and user.email.\n"
+msgstr ""
+"Kein Benutzername in Git\n"
+"Einmal mit git config --global user.name und user.email setzen.\n"
+
+msgid ""
+"No branch is checked out\n"
+"Check one out in chezmoi's source folder with git switch.\n"
+msgstr ""
+"Kein Branch ausgecheckt\n"
+"Im Quellordner von chezmoi einen mit git switch auschecken.\n"
+
+msgid ""
+"Take {path} out of the dotfiles?\n"
+"The file stays where it is, and the dotfiles no longer keep it."
+msgstr ""
+"{path} aus den Dotfiles nehmen?\n"
+"Die Datei bleibt, wo sie ist, und die Dotfiles behalten sie nicht mehr."
+
+msgid "Taking in what changed here"
+msgstr "Hier Geändertes wird übernommen"
+
+msgid ""
+"The branch is gone from the repository\n"
+"It was deleted or renamed. Check out the default branch in chezmoi's source folder.\n"
+msgstr ""
+"Branch fehlt im Repository\n"
+"Er wurde gelöscht oder umbenannt. Im Quellordner von chezmoi den Standard-Branch auschecken.\n"
+
+msgid ""
+"The changes here and in the repository collide\n"
+"Nothing changed. Resolve it in chezmoi's source folder with git rebase.\n"
+msgstr ""
+"Änderungen hier und im Repository widersprechen sich\n"
+"Nichts wurde geändert. Im Quellordner von chezmoi mit git rebase lösen.\n"
+
+msgid ""
+"The dotfiles are no repository of their own\n"
+"chezmoi's source folder is a bare repository or a folder inside another. Move it away, then try again.\n"
+msgstr ""
+"Dotfiles kein eigenes Repository\n"
+"Der Quellordner von chezmoi ist ein Bare-Repository oder ein Ordner in einem anderen. Ihn verschieben, dann erneut versuchen.\n"
+
+msgid ""
+"The repository and the dotfiles do not fit together\n"
+"They share no history. Move chezmoi's source folder away, then connect again.\n"
+msgstr ""
+"Repository und Dotfiles passen nicht zusammen\n"
+"Sie teilen keine Geschichte. Den Quellordner von chezmoi verschieben, dann erneut verbinden.\n"
+
+msgid "Writes the dotfiles into the home folder."
+msgstr "Schreibt die Dotfiles in den Home-Ordner."
+
+msgid ""
+"chezmoi refused\n"
+"Its words are in the details.\n"
+msgstr ""
+"Von chezmoi abgelehnt\n"
+"Seine Worte stehen in den Details.\n"
+
+msgid "A template of the dotfiles does not render. chezmoi's words are in the log."
+msgstr "Ein Template der Dotfiles lässt sich nicht rendern. chezmois Worte stehen im Log."
+
+msgid "Add a file"
+msgstr "Datei hinzufügen"
+
+msgid ""
+"Add {path} as a secret?\n"
+"chezmoi encrypts it into the dotfiles as its configuration says. The file stays where it is."
+msgstr ""
+"{path} als Secret hinzufügen?\n"
+"chezmoi verschlüsselt es in die Dotfiles, wie seine Konfiguration es vorgibt. Die Datei bleibt, wo sie ist."
+
+msgid ""
+"Add {path} to the dotfiles?\n"
+"chezmoi copies it into {dir}. The file stays where it is."
+msgstr ""
+"{path} zu den Dotfiles hinzufügen?\n"
+"chezmoi kopiert sie nach {dir}. Die Datei bleibt, wo sie ist."
+
+msgid "Applying the dotfiles"
+msgstr "Dotfiles werden angewendet"
+
+msgid ""
+"Back up this machine into the dotfiles?\n"
+"Takes in what changed here and commits every change. Without a repository they stay on this machine."
+msgstr ""
+"Diesen Rechner in die Dotfiles sichern?\n"
+"Übernimmt, was sich hier geändert hat, und committet jede Änderung. Ohne Repository bleiben sie auf diesem Rechner."
+
+msgid ""
+"Back up this machine into the dotfiles?\n"
+"Takes in what changed here, commits every change and uploads it to {remote}."
+msgstr ""
+"Diesen Rechner in die Dotfiles sichern?\n"
+"Übernimmt, was sich hier geändert hat, committet jede Änderung und lädt sie nach {remote} hoch."
+
+msgid ""
+"Clone {url} into chezmoi's source folder?\n"
+"Set up applies the dotfiles to this machine afterwards."
+msgstr ""
+"{url} in den Quellordner von chezmoi klonen?\n"
+"Einrichten wendet die Dotfiles danach auf diesen Rechner an."
+
+msgid ""
+"Set up this machine from the dotfiles?\n"
+"Fetches the latest state and applies it with chezmoi. It asks in the terminal for passphrases and values of its configuration, and before it replaces a file changed here or found here before."
+msgstr ""
+"Diesen Rechner aus den Dotfiles einrichten?\n"
+"Holt den neuesten Stand und wendet ihn mit chezmoi an. chezmoi fragt im Terminal nach Passphrasen und Werten seiner Konfiguration und bevor es eine hier geänderte oder vorgefundene Datei ersetzt."
+
+msgid "The dotfiles keep no file."
+msgstr "Die Dotfiles behalten keine Datei."
+
+msgid "The dotfiles keep no secret."
+msgstr "Die Dotfiles behalten kein Secret."
+
+msgid "not readable"
+msgstr "nicht lesbar"
+
+msgid "{n} change to apply"
+msgstr "{n} Änderung anzuwenden"
+
+msgid "{n} changes to apply"
+msgstr "{n} Änderungen anzuwenden"
+
+msgid "not set up"
+msgstr "nicht eingerichtet"

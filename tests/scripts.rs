@@ -10,6 +10,8 @@ use system_manager::script::{op, query};
 
 struct Sandbox {
     dir: PathBuf,
+    /// Removed with the sandbox, also where the test fails.
+    _tmp: tempfile::TempDir,
 }
 
 struct Outcome {
@@ -22,12 +24,15 @@ struct Outcome {
 
 impl Sandbox {
     fn new(test: &str) -> Sandbox {
-        let dir = std::env::temp_dir().join(format!("sm-scripts-{test}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let tmp = tempfile::Builder::new()
+            .prefix(&format!("sm-scripts-{test}-"))
+            .tempdir()
+            .unwrap();
+        let dir = tmp.path().to_path_buf();
         std::fs::create_dir_all(dir.join("bin")).unwrap();
-        let sandbox = Sandbox { dir };
+        let sandbox = Sandbox { dir, _tmp: tmp };
         // sudo runs the command as it is: the sandbox has nothing to elevate.
-        sandbox.stub("sudo", r#"exec "$@""#);
+        sandbox.stub("sudo", r#"if [ "$1" = -n ]; then shift; fi; exec "$@""#);
         // The machine's own container engines stay out of reach, unless a test asks for one.
         for engine in ["docker", "podman"] {
             sandbox.absent(engine);
@@ -57,6 +62,11 @@ impl Sandbox {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    /// The commands a run finds: the stand-ins first, then the machine's own.
+    fn search(&self) -> String {
+        format!("{}:/usr/bin", self.dir.join("bin").display())
+    }
+
     fn run(&self, script: &str, args: &[&str], env: &[(&str, &str)]) -> Outcome {
         let scripts = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts");
         let events = self.dir.join("events");
@@ -65,10 +75,7 @@ impl Sandbox {
             .arg(r#"exec 3>"$SM_EVENTS"; exec bash --noprofile --norc "$0" "$@""#)
             .arg(format!("{scripts}/{script}/{script}.sh"))
             .args(args)
-            .env(
-                "PATH",
-                format!("{}:/usr/bin", self.dir.join("bin").display()),
-            )
+            .env("PATH", self.search())
             .env("SM_EVENTS", &events)
             .env("SM_AUR", "")
             // The machine's own Flatpak stays out of reach, unless a test asks for it.
@@ -79,6 +86,9 @@ impl Sandbox {
             .env("HOME", &self.dir)
             .env("XDG_CONFIG_HOME", self.dir.join("config"))
             .env("XDG_CACHE_HOME", self.dir.join("cache"))
+            // chezmoi keeps its source there, and no run may reach the machine's own.
+            .env("XDG_DATA_HOME", self.dir.join(".local/share"))
+            .env("XDG_STATE_HOME", self.dir.join(".local/state"))
             .envs(env.iter().copied())
             .output()
             .unwrap();
@@ -416,6 +426,7 @@ fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
     );
     assert_eq!(s.run("repair", &["keyring"], &[]).code, 1);
     assert!(gpg.join("old").exists(), "a failed rebuild left no keyring");
+    assert!(!s.dir.join("gnupg.new").exists(), "the half new one stays");
     s.stub(
         "pacman-key",
         r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; touch "$2/new""#,
@@ -1259,8 +1270,8 @@ case "$1" in get) cat "$store" ;; set) echo "$4" >"$store" ;; esac"#,
 /// release no longer has.
 #[test]
 fn a_release_replaces_what_the_aur_has() {
-    let dir = std::env::temp_dir().join(format!("sm-aur-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
     std::fs::create_dir_all(dir.join("seed")).unwrap();
     let remote = dir.join("aur/arch-os-manager.git");
     let sh = |script: &str| {
@@ -1268,7 +1279,7 @@ fn a_release_replaces_what_the_aur_has() {
             .arg("-c")
             .arg(script)
             .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .env("DIR", &dir)
+            .env("DIR", dir)
             .env("REMOTE", &remote)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_COUNT", "1")
@@ -1296,7 +1307,6 @@ fn a_release_replaces_what_the_aur_has() {
     let commit = sh(r#"git -C "$REMOTE" log -1 --format='%an <%ae> %s' master"#);
     assert_eq!(commit, "murkl <murkl@users.noreply.github.com> 2.0.0\n");
     assert!(sh(r#"tools/aur.sh push "$DIR/stamped""#).contains("there already"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A release built as root, as in CI, gets what the package needs before makepkg, which builds
@@ -2172,4 +2182,453 @@ esac"#,
     let o = s.run("cleanup", &["run", "trash"], &[]);
     assert_eq!(o.code, 1, "{}", o.events);
     assert!(o.events.starts_with("fail\t"), "{}", o.events);
+}
+
+/// What the dotfiles need beside the real git and chezmoi: a git identity.
+fn dotfiles(test: &str) -> Sandbox {
+    let s = Sandbox::new(test);
+    std::fs::write(
+        s.dir.join(".gitconfig"),
+        "[user]\n\tname = Tux\n\temail = tux@example.org\n[init]\n\tdefaultBranch = main\n",
+    )
+    .unwrap();
+    s
+}
+
+/// git without the machine's own configuration.
+const TUX: [(&str, &str); 1] = [("GIT_CONFIG_NOSYSTEM", "1")];
+
+/// chezmoi's source folder in a sandbox, where the dotfiles live.
+const SOURCE: &str = ".local/share/chezmoi";
+
+impl Sandbox {
+    fn dotfiles(&self, args: &[&str]) -> Outcome {
+        self.run("dotfiles", args, &TUX)
+    }
+
+    fn write(&self, path: &str, text: &str) {
+        let path = self.dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    fn read(&self, path: &str) -> String {
+        std::fs::read_to_string(self.dir.join(path)).unwrap_or_default()
+    }
+
+    /// A file of the dotfiles, by its path in chezmoi's source folder.
+    fn source(&self, path: &str) -> String {
+        self.read(&format!("{SOURCE}/{path}"))
+    }
+
+    fn put(&self, path: &str, text: &str) {
+        self.write(&format!("{SOURCE}/{path}"), text);
+    }
+
+    fn path(&self, path: &str) -> String {
+        self.dir.join(path).display().to_string()
+    }
+
+    fn git(&self, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .args(["-C", self.dir.join(SOURCE).to_str().unwrap()])
+            .args(args)
+            .env("HOME", &self.dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into()
+    }
+
+    /// chezmoi's configuration with an age key of its own, as a person sets it up for secrets.
+    fn encryption(&self) {
+        let key = self.dir.join("config/chezmoi/key.txt");
+        std::fs::create_dir_all(key.parent().unwrap()).unwrap();
+        let made = Command::new("chezmoi")
+            .args(["age-keygen", "--output"])
+            .arg(&key)
+            .env("HOME", &self.dir)
+            .env("PATH", self.search())
+            .output()
+            .unwrap();
+        assert!(
+            made.status.success(),
+            "{}",
+            String::from_utf8_lossy(&made.stderr)
+        );
+        let public = Command::new("chezmoi")
+            .args(["age-keygen", "--convert"])
+            .arg(&key)
+            .env("HOME", &self.dir)
+            .env("PATH", self.search())
+            .output()
+            .unwrap();
+        let recipient = String::from_utf8_lossy(&public.stdout).trim().to_string();
+        assert!(recipient.starts_with("age1"), "{recipient}");
+        self.write(
+            "config/chezmoi/chezmoi.toml",
+            &format!(
+                "encryption = \"age\"\n[age]\n    identity = \"{}\"\n    recipient = \"{recipient}\"\n",
+                key.display()
+            ),
+        );
+    }
+}
+
+/// A bare repository beside a sandbox, as GitHub or Gitea would hold the dotfiles.
+fn remote(s: &Sandbox) -> String {
+    let dir = s.dir.join("remote.git");
+    let ok = Command::new("git")
+        .args(["init", "--quiet", "--bare", "--initial-branch=main"])
+        .arg(&dir)
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
+    format!("file://{}", dir.display())
+}
+
+#[test]
+fn dotfiles_are_added_backed_up_and_set_up_on_another_machine() {
+    let a = dotfiles("dotfiles-a");
+    assert_eq!(
+        a.dotfiles(&["state"]).out.lines().nth(2),
+        Some("repo\tmissing")
+    );
+    a.write(".config/nvim/init.lua", "vim.o.number = true\n");
+    a.write(".zshrc", "alias ll='ls -l'\n");
+    for path in [".config/nvim", ".zshrc"] {
+        let o = a.dotfiles(&["add", &a.path(path)]);
+        assert_eq!(o.code, 0, "{path}: {}{}", o.events, o.err);
+    }
+    // chezmoi's copies, and the files in the home folder stay as they are.
+    assert_eq!(a.source("dot_zshrc"), "alias ll='ls -l'\n");
+    assert_eq!(
+        a.source("dot_config/nvim/init.lua"),
+        "vim.o.number = true\n"
+    );
+    assert!(!a.dir.join(".zshrc").is_symlink());
+    let state = a.dotfiles(&["state"]).out;
+    assert!(
+        state.contains("files\t2\nsecrets\t0\ndue\t0\nchanged\t0\n"),
+        "{state}"
+    );
+
+    let o = a.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(o.events, "step\tfiles\nstep\tcommit\n");
+    let host = std::fs::read_to_string("/proc/sys/kernel/hostname").unwrap();
+    assert_eq!(
+        a.git(&["log", "--format=%s"]),
+        format!("Back up {}: nvim, zshrc\n", host.trim())
+    );
+    let url = remote(&a);
+    assert_eq!(a.dotfiles(&["connect", &url]).code, 0);
+    // Changed here: a backup takes it in through chezmoi re-add and uploads it.
+    a.write(".zshrc", "alias ll='ls -la'\n");
+    let state = a.dotfiles(&["state"]).out;
+    assert!(state.contains("due\t0\nchanged\t1\n"), "{state}");
+    let o = a.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(
+        o.events.ends_with("step\tpull\nstep\tpush\n"),
+        "{}",
+        o.events
+    );
+    assert_eq!(a.source("dot_zshrc"), "alias ll='ls -la'\n");
+    assert!(a.dotfiles(&["state"]).out.contains("changed\t0\n"));
+    assert!(
+        a.git(&["status", "-sb"])
+            .starts_with("## main...origin/main\n")
+    );
+
+    // Another machine: connected, then set up through chezmoi in the terminal.
+    let b = dotfiles("dotfiles-b");
+    let o = b.dotfiles(&["connect", &url]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert!(b.dotfiles(&["state"]).out.contains("due\t2\n"));
+    let o = b.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(o.events, "step\tpull\nstep\tapply\nterminal\n");
+    assert_eq!(b.read(".config/nvim/init.lua"), "vim.o.number = true\n");
+    assert_eq!(b.read(".zshrc"), "alias ll='ls -la'\n");
+    assert!(b.dotfiles(&["state"]).out.contains("due\t0\nchanged\t0\n"));
+}
+
+#[test]
+fn dotfiles_name_what_they_keep_and_refuse_what_is_no_configuration() {
+    let s = dotfiles("dotfiles-keep");
+    s.write(".config/app/a.conf", "a\n");
+    s.write(".config/app/b.conf", "b\n");
+    let home = s.dir.display().to_string();
+    let add = |path: &str| s.dotfiles(&["add", &format!("{home}/{path}")]).code;
+    assert_eq!(add(".config/app"), 0);
+    assert_eq!(add(".config/app"), 33, "kept already");
+    assert_eq!(s.dotfiles(&["add", "/etc/hosts"]).code, 24);
+    std::os::unix::fs::symlink("/etc/hosts", s.dir.join("hosts")).unwrap();
+    assert_eq!(add("hosts"), 27);
+    // The cache as XDG_CACHE_HOME puts it, and chezmoi's folder with its configuration.
+    s.write("cache/x", "x\n");
+    assert_eq!(add("cache/x"), 25);
+    s.write("config/chezmoi/chezmoi.toml", "\n");
+    assert_eq!(add("config/chezmoi/chezmoi.toml"), 25);
+    std::fs::create_dir_all(s.dir.join("empty")).unwrap();
+    assert_eq!(add("empty"), 31);
+    for i in 0..101 {
+        s.write(&format!("many/{i}"), "x\n");
+    }
+    assert_eq!(add("many"), 32);
+    s.write("project/.git/HEAD", "x\n");
+    assert_eq!(add("project"), 29);
+    assert_eq!(add("nothing"), 28);
+    // A folder holding nothing but kept files is named whole, the one above as well.
+    let o = s.dotfiles(&["managed"]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(
+        o.out,
+        format!(
+            "dir\t{home}/.config/\ndir\t{home}/.config/app/\nfile\t{home}/.config/app/a.conf\nfile\t{home}/.config/app/b.conf\n"
+        )
+    );
+    assert_eq!(s.dotfiles(&["remove", &format!("{home}/.zshrc")]).code, 34);
+    // Taken out, the files stay and no empty folder is left in the dotfiles to be made.
+    assert_eq!(
+        s.dotfiles(&["remove", &format!("{home}/.config/app")]).code,
+        0
+    );
+    assert_eq!(s.read(".config/app/a.conf"), "a\n");
+    assert!(!s.dir.join(SOURCE).join("dot_config").exists());
+    assert_eq!(s.dotfiles(&["managed"]).out, "");
+}
+
+#[test]
+fn secrets_are_encrypted_as_chezmoi_is_configured_and_named_apart() {
+    let s = dotfiles("dotfiles-secrets");
+    s.write(".ssh/id_ed25519", "PRIVATE\n");
+    // Without encryption in chezmoi's configuration chezmoi refuses in its own words.
+    let o = s.dotfiles(&["secret-add", &s.path(".ssh/id_ed25519")]);
+    assert_eq!(o.code, 47, "{}{}", o.events, o.err);
+    assert!(!o.err.is_empty());
+    s.encryption();
+    let o = s.dotfiles(&["secret-add", &s.path(".ssh/id_ed25519")]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let sealed = s.git(&["ls-files"]);
+    let file = sealed
+        .lines()
+        .find(|l| l.ends_with(".age"))
+        .unwrap()
+        .to_string();
+    assert!(file.starts_with("dot_ssh/encrypted_"), "{sealed}");
+    // age's file, armored as chezmoi writes it.
+    let bytes = std::fs::read(s.dir.join(SOURCE).join(&file)).unwrap();
+    assert!(
+        bytes.starts_with(b"-----BEGIN AGE ENCRYPTED FILE-----\n"),
+        "{bytes:?}"
+    );
+    assert!(!bytes.windows(7).any(|w| w == b"PRIVATE"));
+    s.write(".zshrc", "x\n");
+    assert_eq!(s.dotfiles(&["add", &s.path(".zshrc")]).code, 0);
+    let state = s.dotfiles(&["state"]).out;
+    assert!(state.contains("files\t1\nsecrets\t1\n"), "{state}");
+    let home = s.dir.display().to_string();
+    assert_eq!(
+        s.dotfiles(&["managed"]).out,
+        format!("file\t{home}/.zshrc\nsecret\t{home}/.ssh/id_ed25519\n")
+    );
+    // A secret is no file to remove, and taken out as a secret its file stays.
+    assert_eq!(s.dotfiles(&["remove", &s.path(".ssh/id_ed25519")]).code, 34);
+    let o = s.dotfiles(&["secret-remove", &s.path(".ssh/id_ed25519")]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(s.read(".ssh/id_ed25519"), "PRIVATE\n");
+    assert!(!s.dir.join(SOURCE).join("dot_ssh").exists());
+}
+
+#[test]
+fn a_template_changed_here_is_named_as_a_backup_cannot_take_it_in() {
+    let s = dotfiles("dotfiles-template");
+    s.put("dot_npmrc.tmpl", "init-author-name={{ \"Tux\" }}\n");
+    let ok = Command::new("git")
+        .args([
+            "-C",
+            s.dir.join(SOURCE).to_str().unwrap(),
+            "init",
+            "--quiet",
+        ])
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert_eq!(s.read(".npmrc"), "init-author-name=Tux\n");
+    s.write(".npmrc", "init-author-name=Tuxedo\n");
+    let o = s.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(
+        o.out,
+        format!(
+            "Changed here, its source a template: {}\n",
+            s.path(".npmrc")
+        )
+    );
+    assert_eq!(
+        s.source("dot_npmrc.tmpl"),
+        "init-author-name={{ \"Tux\" }}\n"
+    );
+}
+
+#[test]
+fn a_backup_takes_back_nothing_the_dotfiles_brought_since_the_last_setup() {
+    let s = dotfiles("dotfiles-incoming");
+    s.write(".zshrc", "one\n");
+    s.write(".aliases", "one\n");
+    for path in [".zshrc", ".aliases"] {
+        assert_eq!(s.dotfiles(&["add", &s.path(path)]).code, 0);
+    }
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
+    // What a pull brought and no setup applied yet, one of them changed here as well.
+    s.put("dot_zshrc", "two\n");
+    s.put("dot_aliases", "two\n");
+    s.git(&["commit", "--quiet", "--all", "--message", "pulled"]);
+    s.write(".aliases", "mine\n");
+    let o = s.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(
+        o.out,
+        format!("Changed here and in the dotfiles: {}\n", s.path(".aliases"))
+    );
+    assert_eq!(s.source("dot_zshrc"), "two\n");
+    assert_eq!(s.source("dot_aliases"), "two\n");
+    assert_eq!(s.read(".aliases"), "mine\n");
+}
+
+#[test]
+fn dotfiles_in_a_folder_of_their_repository_are_read_set_up_and_backed_up() {
+    let s = dotfiles("dotfiles-root");
+    s.put(".chezmoiroot", "home\n");
+    s.put("README.md", "# Dotfiles\n");
+    s.put("home/dot_zshrc", "one\n");
+    s.git(&["init", "--quiet"]);
+    assert_eq!(s.dotfiles(&["setup"]).code, 0);
+    assert_eq!(s.read(".zshrc"), "one\n");
+    assert!(!s.dir.join("README.md").exists());
+    let state = s.dotfiles(&["state"]).out;
+    assert!(state.contains("repo\tready\n"), "{state}");
+    assert!(state.contains("files\t1\n"), "{state}");
+    s.write(".zshrc", "two\n");
+    s.write(".aliases", "x\n");
+    assert_eq!(s.dotfiles(&["add", &s.path(".aliases")]).code, 0);
+    let o = s.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(s.source("home/dot_zshrc"), "two\n");
+    assert_eq!(s.source("home/dot_aliases"), "x\n");
+    assert_eq!(s.git(&["status", "--porcelain"]), "");
+}
+
+#[test]
+fn a_configuration_chezmoi_never_made_here_waits_for_a_setup() {
+    let s = dotfiles("dotfiles-unconfigured");
+    s.put(".chezmoi.toml.tmpl", "[data]\n    tag = \"x\"\n");
+    s.put("dot_profile.tmpl", "{{ .tag }}\n");
+    let ok = Command::new("git")
+        .args([
+            "-C",
+            s.dir.join(SOURCE).to_str().unwrap(),
+            "init",
+            "--quiet",
+        ])
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
+    let state = s.dotfiles(&["state"]).out;
+    assert!(state.ends_with("config\tmissing\n"), "{state}");
+    let o = s.dotfiles(&["setup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(s.read(".profile"), "x\n");
+    assert!(s.dotfiles(&["state"]).out.contains("due\t0\n"));
+    // A template that does not render leaves the state unknown, its words in the details.
+    s.put("dot_profile.tmpl", "{{ .missing.value }}\n");
+    let o = s.dotfiles(&["state"]);
+    assert!(o.out.ends_with("status\tfailed\n"), "{}", o.out);
+    assert!(o.err.contains("missing"), "{}", o.err);
+}
+
+#[test]
+fn what_is_added_is_backed_up_though_a_global_ignore_file_names_it() {
+    let s = dotfiles("dotfiles-ignored");
+    let config = s.read(".gitconfig");
+    s.write("ignore", "CLAUDE.md\n*.age\n");
+    s.write(
+        ".gitconfig",
+        &format!(
+            "{config}[core]\n\texcludesFile = {}\n",
+            s.dir.join("ignore").display()
+        ),
+    );
+    s.write(".claude/CLAUDE.md", "# Rules\n");
+    let o = s.dotfiles(&["add", &s.path(".claude/CLAUDE.md")]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    s.encryption();
+    s.write(".ssh/id_ed25519", "PRIVATE\n");
+    let o = s.dotfiles(&["secret-add", &s.path(".ssh/id_ed25519")]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let o = s.dotfiles(&["backup"]);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    let files = s.git(&["ls-files"]);
+    assert!(files.contains("dot_claude/CLAUDE.md\n"), "{files}");
+    assert!(files.contains("dot_ssh/encrypted_"), "{files}");
+}
+
+#[test]
+fn a_repository_that_does_not_fit_is_refused_and_the_address_taken_back() {
+    let s = dotfiles("dotfiles-connect");
+    s.write(".zshrc", "x\n");
+    assert_eq!(s.dotfiles(&["add", &s.path(".zshrc")]).code, 0);
+    assert_eq!(s.dotfiles(&["backup"]).code, 0);
+    let ours = remote(&s);
+    assert_eq!(s.dotfiles(&["connect", &ours]).code, 0);
+    // A repository with a history of its own.
+    let other = s.dir.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    for args in [
+        &["init", "--quiet", "--initial-branch=main"][..],
+        &["commit", "--quiet", "--allow-empty", "-m", "elsewhere"],
+    ] {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&other)
+            .args(args)
+            .env("HOME", &s.dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "{args:?}");
+    }
+    let foreign = format!("file://{}", other.display());
+    assert_eq!(s.dotfiles(&["connect", &foreign]).code, 36);
+    assert_eq!(s.git(&["remote", "get-url", "origin"]), format!("{ours}\n"));
+    assert_eq!(s.git(&["branch", "--remotes"]), "", "nothing of it stays");
+    assert_eq!(
+        s.dotfiles(&["connect", "http://example.org/dotfiles.git"])
+            .code,
+        37
+    );
+    let gone = format!("file://{}/gone.git", s.dir.display());
+    assert_eq!(s.dotfiles(&["connect", &gone]).code, 12);
+    assert_eq!(s.git(&["remote", "get-url", "origin"]), format!("{ours}\n"));
+    assert_eq!(s.dotfiles(&["connect", ""]).code, 0);
+    assert_eq!(s.git(&["remote"]), "");
+    // Not a repository of its own, nothing is touched.
+    let t = dotfiles("dotfiles-bare");
+    assert!(
+        Command::new("git")
+            .args(["init", "--quiet", "--bare"])
+            .arg(t.dir.join(SOURCE))
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(t.dotfiles(&["state"]).out.contains("repo\tinvalid\n"));
+    assert_eq!(t.dotfiles(&["setup"]).code, 10);
 }

@@ -6,10 +6,23 @@ use std::sync::OnceLock;
 static HOME: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn home() -> &'static PathBuf {
-    HOME.get_or_init(|| match std::env::var_os("SM_HOME") {
+    HOME.get_or_init(locate)
+}
+
+#[cfg(not(test))]
+fn locate() -> PathBuf {
+    match std::env::var_os("SM_HOME") {
         Some(dir) if !dir.is_empty() => PathBuf::from(dir),
         _ => PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".arch-os"),
-    })
+    }
+}
+
+/// One home per test process, held as long as it runs: those of earlier runs go here.
+#[cfg(test)]
+fn locate() -> PathBuf {
+    let base = std::env::temp_dir();
+    crate::script::sweep(&base, "sm-test-");
+    base.join(format!("sm-test-{}", std::process::id()))
 }
 
 pub fn settings() -> PathBuf {
@@ -66,6 +79,18 @@ pub fn write_atomic(path: &std::path::Path, content: &[u8]) -> std::io::Result<(
 mod tests {
     use super::*;
 
+    /// Whichever test asks first, none writes the settings of the person running it.
+    #[test]
+    fn a_test_has_a_home_of_its_own() {
+        let person = PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".arch-os");
+        assert!(!home().starts_with(person), "{}", home().display());
+        assert!(
+            home().starts_with(std::env::temp_dir()),
+            "{}",
+            home().display()
+        );
+    }
+
     #[test]
     fn the_program_is_where_it_lay_at_the_start() {
         assert_eq!(program().unwrap(), std::env::current_exe().unwrap());
@@ -73,22 +98,23 @@ mod tests {
 
     #[test]
     fn an_atomic_write_replaces_the_file_and_leaves_nothing_beside_it() {
-        let dir = std::env::temp_dir().join(format!("sm-atomic-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let path = dir.join("state.yaml");
         write_atomic(&path, b"one").unwrap();
         write_atomic(&path, b"two").unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"two");
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 1);
         // A folder in the way: the copy is written, the rename refused.
         std::fs::create_dir_all(dir.join("taken/inside")).unwrap();
         assert!(write_atomic(&dir.join("taken"), b"x").is_err());
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 2);
     }
 
     #[test]
     fn an_atomic_write_through_a_link_keeps_the_link() {
-        let dir = std::env::temp_dir().join(format!("sm-atomic-link-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         std::fs::create_dir_all(dir.join("dotfiles")).unwrap();
         let (real, link) = (
             dir.join("dotfiles/settings.yaml"),
@@ -99,6 +125,5 @@ mod tests {
         write_atomic(&link, b"two").unwrap();
         assert!(link.symlink_metadata().unwrap().is_symlink());
         assert_eq!(std::fs::read(&real).unwrap(), b"two");
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

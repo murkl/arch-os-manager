@@ -149,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn names_each_package_once_in_one_of_two_groups() {
+    fn names_each_package_once_in_one_of_its_groups() {
         let mut names: Vec<&str> = packages().map(|(_, name, _)| name).collect();
         names.sort();
         let all = names.len();
@@ -158,7 +158,7 @@ mod tests {
         for helper in AUR_HELPERS {
             assert!(packages().any(|(group, name, _)| group == "packages" && name == helper));
         }
-        assert!(packages().all(|(group, ..)| group == "packages" || group == "desktop"));
+        assert!(packages().all(|(group, ..)| ["packages", "desktop", "dotfiles"].contains(&group)));
         assert_eq!(packages().filter(|(_, _, p)| p.extension).count(), 1);
     }
 

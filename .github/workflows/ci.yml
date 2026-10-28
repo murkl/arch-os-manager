@@ -35,7 +35,7 @@ jobs:
       # git refuses root a checkout owned by the runner's user. The build reads
       # the last release tag, so the history comes along.
       - run: |
-          pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
+          pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git chezmoi
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

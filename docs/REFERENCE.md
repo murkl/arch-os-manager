@@ -6,7 +6,7 @@
 |---|---|
 | `system-manager` | Interface in the terminal, else in a window |
 | `system-manager --window` | Interface in a window |
-| `system-manager <page>` | Opens `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `settings` or `features` |
+| `system-manager <page>` | Opens `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `dotfiles`, `settings` or `features` |
 | `system-manager init` | Sets up the menu entry, the update notification and the update indicator |
 | `system-manager check` | Prints pending updates like checkupdates, AUR as `aur/name`, an unknown version as `?`. Exit 2 without updates, 1 if a source failed and none had updates |
 | `system-manager notify` | Announces pending updates, with `--new` only unannounced ones |
@@ -60,6 +60,9 @@ A run shows its step and pacman's progress. **tab** switches to the terminal, wh
 | `Enter a number (default=N):` | Numbered choices |
 | `Enter a selection`, helper menus ending in `==>` | Text box, empty keeps the default |
 | sudo prompt | Password |
+| git's `Username for` | Text box |
+| git's `Password for`, ssh passphrases | Hidden text box, held nowhere |
+| ssh's question about an unknown host key | Yes or no, no first, with the fingerprint |
 
 Other prompts wait in the terminal. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked. With `aur-review`, the AUR step switches to the terminal and leaves every question to the person.
 
@@ -115,6 +118,26 @@ Stopping, restarting or disabling the display manager or the system bus asks fir
 
 Containers and volumes stay. Docker is read and cleaned up only while it runs. Its sizes need the group `docker`, the clean-up runs as root. Podman is per user. `? MiB` marks a size known only on removal.
 
+## Dotfiles
+
+**Settings › Dotfiles** switches them on, off by default. The start page then shows **Dotfiles** with what waits: new commits, changes to apply, or changes here to back up.
+
+The dotfiles are [chezmoi](https://www.chezmoi.io)'s source folder, a git repository, `~/.local/share/chezmoi` unless chezmoi's configuration names another. A `.chezmoiroot` keeps chezmoi's files in a folder of it. The manager asks chezmoi and git and puts nothing of its own into the dotfiles.
+
+**Settings › Repository** takes the address GitHub or Gitea show for cloning. Without the source folder it clones, else it binds the dotfiles to it, once the repository answers and shares their history. Empty, the dotfiles stay on this machine. Plain http and `git://` are refused, as they carry the dotfiles unencrypted. git and ssh ask for what they need in the run.
+
+| Action | Does |
+|---|---|
+| **Set up** | The remote's commits as a fast-forward or a rebase, then in the terminal `chezmoi init` where the dotfiles bring a configuration template, and `chezmoi apply --keep-going --less-interactive` |
+| **Back up** | `chezmoi re-add` of each file changed here, every change committed as `Back up <host>: <parts>`, the remote's commits taken in, then uploaded |
+| **Files › Add a file** | `chezmoi add` of a file or folder of the home folder |
+| **Files › Add a secret** | `chezmoi add --encrypt`, with the encryption of chezmoi's configuration |
+| **Files › Remove …** | `chezmoi forget`, the file stays |
+
+chezmoi asks in the terminal for the values of its configuration, for passphrases and before it replaces a file changed here. A back up leaves out a file whose source is a template and one the dotfiles changed as well since chezmoi last wrote it, and names both. A branch without an upstream gets it at its first push.
+
+Refused are paths outside the home folder, the cache, the state, chezmoi's configuration folder and the dotfiles themselves, links, git repositories, and folders without a file or with more than 100.
+
 ## Optional Packages
 
 | Group | Package | Adds |
@@ -126,6 +149,8 @@ Containers and volumes stay. Docker is read and cleaned up only while it runs. I
 | `desktop` | `gnome-arch-update` | Shows pending updates in the top bar |
 | `desktop` | `libnotify` | Shows desktop notifications about new updates |
 | `desktop` | `meld` | Merges configuration updates side by side |
+| `dotfiles` | `git` | Keeps the dotfiles in a repository |
+| `dotfiles` | `chezmoi` | Writes the dotfiles into the home folder |
 
 A package counts when its `command` in `scripts/features/features.yaml` works. One that `needs` a fact is offered only where it holds:
 
@@ -162,6 +187,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | `flatpak` | `true`, `false` | `true` |
 | `cleanup` | a part with `true` or `false` | `orphans`, `cache`, `aur`, `flatpak` |
 | `hidden-log` | hidden system log messages | none |
+| `dotfiles` | `true`, `false` | `false` |
 
 - An unparsable file is ignored and named under **Settings › About**
 - Every start and `init` set up the menu entry and the notification per `app-menu` and `notify`. An installer calls `init` from its chroot as the user

@@ -21,6 +21,8 @@ optdepends=(
     'fwupd: updates the firmware of the device'
     'libnotify: desktop notifications about new updates'
     'meld: merges configuration updates side by side'
+    'git: keeps the dotfiles in a repository'
+    'chezmoi: writes the dotfiles into the home folder'
 )
 provides=('system-manager')
 conflicts=('system-manager')

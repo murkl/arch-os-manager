@@ -1,0 +1,93 @@
+ops:
+  state:
+    title: Reading the dotfiles
+    needs: [git, chezmoi]
+  fetch:
+    title: Fetching the dotfiles
+    needs: [git, chezmoi]
+  managed:
+    title: Listing what the dotfiles keep
+    needs: [git, chezmoi]
+  connect:
+    title: Connecting the repository
+    needs: [git, chezmoi]
+  setup:
+    title: Setting up from the dotfiles
+    needs: [git, chezmoi]
+    steps:
+      pull: Fetching the latest state
+      apply: Applying the dotfiles
+  backup:
+    title: Backing up into the dotfiles
+    needs: [git, chezmoi]
+    steps:
+      files: Taking in what changed here
+      commit: Committing
+      pull: Fetching the latest state
+      push: Uploading
+  add:
+    title: Adding to the dotfiles
+    needs: [git, chezmoi]
+  remove:
+    title: Taking out of the dotfiles
+    needs: [git, chezmoi]
+  secret-add:
+    title: Adding the secret
+    needs: [git, chezmoi]
+  secret-remove:
+    title: Taking the secret out
+    needs: [git, chezmoi]
+errors:
+  10: |
+    The dotfiles are no repository of their own
+    chezmoi's source folder is a bare repository or a folder inside another. Move it away, then try again.
+  11: |
+    The repository wants other credentials
+    A run asks for them. A token or key may lack the right to read or write.
+  12: |
+    The repository could not be reached
+    Check the address and the internet connection.
+  13: |
+    No branch is checked out
+    Check one out in chezmoi's source folder with git switch.
+  14: |
+    The branch is gone from the repository
+    It was deleted or renamed. Check out the default branch in chezmoi's source folder.
+  15: |
+    The changes here and in the repository collide
+    Nothing changed. Resolve it in chezmoi's source folder with git rebase.
+  19: |
+    Git has no user name
+    Set it once with git config --global user.name and user.email.
+  24: |
+    Only what lies in the home folder
+  25: |
+    It lies in the dotfiles, the cache or the state
+  26: |
+    It holds the dotfiles, the cache or the state
+  27: |
+    It is a link
+  28: |
+    Neither a file nor a folder
+  29: |
+    It is a git repository
+  30: |
+    It holds links, sockets or devices
+  31: |
+    It holds no file
+  32: |
+    It holds more than 100 files
+    That is the data of a program, not its configuration.
+  33: |
+    The dotfiles keep it already
+  34: |
+    The dotfiles do not keep it
+  36: |
+    The repository and the dotfiles do not fit together
+    They share no history. Move chezmoi's source folder away, then connect again.
+  37: |
+    Plain http and git:// are refused
+    They carry the dotfiles unencrypted. Take the https or ssh address.
+  47: |
+    chezmoi refused
+    Its words are in the details.

@@ -58,3 +58,10 @@ probe:
       command: [meld, --version]
       adds: Merges configuration updates side by side.
       needs: desktop
+  dotfiles:
+    git:
+      command: [git, --version]
+      adds: Keeps the dotfiles in a repository.
+    chezmoi:
+      command: [chezmoi, --version]
+      adds: Writes the dotfiles into the home folder.

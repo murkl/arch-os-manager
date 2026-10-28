@@ -3,10 +3,10 @@
 use std::process::{Command, Output};
 
 fn run(args: &[&str]) -> Output {
-    let home = std::env::temp_dir().join(format!("sm-cli-{}", std::process::id()));
+    let home = tempfile::tempdir().unwrap();
     Command::new(env!("CARGO_BIN_EXE_system-manager"))
         .args(args)
-        .env("SM_HOME", &home)
+        .env("SM_HOME", home.path())
         .output()
         .unwrap()
 }

@@ -483,12 +483,13 @@ impl RunPage {
     /// Fills the answer list when a new question appears.
     fn prepare(&mut self) {
         let rows = match self.prompt().cloned() {
-            Some(Prompt::YesNo { yes, .. }) => {
+            Some(prompt @ (Prompt::YesNo { .. } | Prompt::HostKey { .. })) => {
+                let [yes, no] = prompt.answers().unwrap_or(["y", "n"]);
                 let rows = vec![
-                    Row::new("y".to_string(), t("Yes")),
-                    Row::new("n".to_string(), t("No")),
+                    Row::new(yes.to_string(), t("Yes")),
+                    Row::new(no.to_string(), t("No")),
                 ];
-                let default = String::from(if yes { "y" } else { "n" });
+                let default = prompt.default_answer().unwrap_or(no).to_string();
                 if self.choices.rows() != rows.as_slice() {
                     self.choices = List::new(rows);
                     self.choices.focus(&default);
@@ -569,7 +570,7 @@ impl RunPage {
         let Some(prompt) = self.prompt().cloned() else {
             return;
         };
-        self.input.masked = prompt == Prompt::Password;
+        self.input.masked = matches!(prompt, Prompt::Password | Prompt::Secret { .. });
         self.input.placeholder = prompt.placeholder().to_string();
         if prompt == Prompt::Password {
             let rejected = self.run.as_ref().is_some_and(|r| r.rejected);
@@ -586,7 +587,9 @@ impl RunPage {
         let w = area.width.min(68);
         let question = wrap(&prompt.friendly(), w.saturating_sub(6) as usize);
         let answers = match &prompt {
-            Prompt::YesNo { .. } | Prompt::Choice { .. } => self.choices.rows().len() as u16,
+            Prompt::YesNo { .. } | Prompt::Choice { .. } | Prompt::HostKey { .. } => {
+                self.choices.rows().len() as u16
+            }
             _ => 1,
         };
         let inner = card(area, buf, w, question.len() as u16 + answers + 5, ctx);
@@ -600,7 +603,7 @@ impl RunPage {
         }
         y += 1;
         match &prompt {
-            Prompt::YesNo { .. } | Prompt::Choice { .. } => {
+            Prompt::YesNo { .. } | Prompt::Choice { .. } | Prompt::HostKey { .. } => {
                 self.choices.draw(
                     Rect::new(
                         inner.x + 2,
@@ -612,9 +615,13 @@ impl RunPage {
                     ctx,
                 );
             }
-            Prompt::Password | Prompt::Text { .. } => {
+            Prompt::Password | Prompt::Secret { .. } | Prompt::Text { .. } => {
                 self.input.draw(buf, inner.x, y, inner.width, ctx);
             }
+        }
+        if matches!(prompt, Prompt::Secret { .. }) && self.empty {
+            let note = t("Answer cannot be empty.");
+            put(buf, inner.x, y + 1, note, inner.width, s.tone(Tone::Error));
         }
     }
 
@@ -860,7 +867,7 @@ impl Page for RunPage {
             return vec![("tab", details), ("ctrl+c", Does::Stop)];
         }
         match self.prompt() {
-            Some(Prompt::Password | Prompt::Text { .. }) => {
+            Some(Prompt::Password | Prompt::Text { .. } | Prompt::Secret { .. }) => {
                 vec![("⏎", Does::Answer), ("tab", details), ("esc", Does::Stop)]
             }
             Some(_) => vec![("↑↓", Does::Choose), ("⏎", Does::Answer), ("tab", details)],
@@ -898,7 +905,10 @@ impl Page for RunPage {
             };
         }
         let details = self.details || terminal;
-        let typing = matches!(self.prompt(), Some(Prompt::Password | Prompt::Text { .. }));
+        let typing = matches!(
+            self.prompt(),
+            Some(Prompt::Password | Prompt::Text { .. } | Prompt::Secret { .. })
+        );
         let asks_to_stop = key == Key::Ctrl('c')
             || (!details && (key == Key::Esc || (key == Key::Char('q') && !typing)));
         if asks_to_stop {
@@ -915,12 +925,12 @@ impl Page for RunPage {
             return Flow::Stay;
         }
         match self.prompt().cloned() {
-            Some(prompt @ (Prompt::Password | Prompt::Text { .. })) => {
+            Some(prompt @ (Prompt::Password | Prompt::Text { .. } | Prompt::Secret { .. })) => {
                 if key != Key::Enter {
                     if self.input.key(key) {
                         self.empty = false;
                     }
-                } else if prompt == Prompt::Password && self.input.text.is_empty() {
+                } else if !matches!(prompt, Prompt::Text { .. }) && self.input.text.is_empty() {
                     self.empty = true;
                 } else {
                     let text = self.input.text.clone();

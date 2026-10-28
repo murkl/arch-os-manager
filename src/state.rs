@@ -81,7 +81,8 @@ mod tests {
 
     #[test]
     fn an_update_keeps_what_another_process_wrote_meanwhile() {
-        let dir = std::env::temp_dir().join(format!("sm-state-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let path = dir.join("state.yaml");
         let ui = State::update_at(&path, |s| s.news_read = Some(vec!["a".into()]));
         State::update_at(&path, |s| s.notified = vec!["linux 7.2".into()]);
@@ -93,14 +94,14 @@ mod tests {
         assert_eq!(later.news_read, Some(vec!["a".into(), "b".into()]));
         std::fs::write(&path, "news-read: [unclosed").unwrap();
         assert_eq!(State::load_from(&path), State::default());
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// The timer and the window change the file at the same moment: the second waits for the
     /// first and keeps its change.
     #[test]
     fn two_updates_at_once_keep_each_others_change() {
-        let dir = std::env::temp_dir().join(format!("sm-state-lock-{}", std::process::id()));
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
         let path = dir.join("state.yaml");
         let slow = std::thread::spawn({
             let path = path.clone();
@@ -122,6 +123,5 @@ mod tests {
         let both = State::load_from(&path);
         assert_eq!(both.notified, ["linux 7.2"]);
         assert_eq!(both.news_read, Some(vec!["a".into()]));
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
