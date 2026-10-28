@@ -6,7 +6,7 @@
 |---|---|
 | `system-manager` | Interface in the terminal, else in a window |
 | `system-manager --window` | Interface in a window |
-| `system-manager <page>` | Opens `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `settings` or `features` |
+| `system-manager <page>` | Opens `upgrade`, `news`, `packages`, `services`, `log`, `cleanup`, `pacnew`, `mirrors`, `firmware`, `repair`, `homelab`, `settings` or `features` |
 | `system-manager init` | Sets up the menu entry, the update notification and the update indicator |
 | `system-manager check` | Prints pending updates like checkupdates, AUR as `aur/name`, an unknown version as `?`. Exit 2 without updates, 1 if a source failed and none had updates |
 | `system-manager notify` | Announces pending updates, with `--new` only unannounced ones |
@@ -60,6 +60,9 @@ A run shows its step and pacman's progress. **tab** switches to the terminal, wh
 | `Enter a number (default=N):` | Numbered choices |
 | `Enter a selection`, helper menus ending in `==>` | Text box, empty keeps the default |
 | sudo prompt | Password |
+| git's `Username for` | Text box |
+| git's `Password for`, ssh passphrases | Hidden text box, held nowhere |
+| ssh's question about an unknown host key | Yes or no, no first, with the fingerprint |
 
 Other prompts wait in the terminal. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked. With `aur-review`, the AUR step switches to the terminal and leaves every question to the person.
 
@@ -115,6 +118,27 @@ Stopping, restarting or disabling the display manager or the system bus asks fir
 
 Containers and volumes stay. Docker is read and cleaned up only while it runs. Its sizes need the group `docker`, the clean-up runs as root. Podman is per user. `? MiB` marks a size known only on removal.
 
+## Homelab
+
+**Settings › Homelab** takes the https address of [Arcane](https://getarcane.app), off without one. Connecting asks for the user name and password of Arcane in the run and keeps a key of the manager's own in the keyring:
+
+| Right of the key | For |
+|---|---|
+| `environments:list` | The servers |
+| `projects:list`, `projects:read` | The stacks, their services and images |
+| `projects:deploy` | **Update** and **Redeploy** |
+| `gitops:list`, `gitops:read`, `gitops:sync` | The Git sync of a stack, **Sync** |
+
+The session ends before the key is checked, and a key that may list the keys of Arcane is dropped. A key made before by the manager is deleted in Arcane. The key reaches curl through a file descriptor, never on a command line. **Disconnect** takes it out of the keyring, Arcane keeps it until it is deleted there.
+
+The start page counts the updates Arcane found. A server's page lists its stacks, a stack's page its images:
+
+| Action | Does |
+|---|---|
+| **Sync** | Runs the Git sync of the stack now |
+| **Update** | Pulls the newest images of its tags, then starts each service whose image changed |
+| **Redeploy** | Creates every service of the stack anew |
+
 ## Optional Packages
 
 | Group | Package | Adds |
@@ -126,6 +150,7 @@ Containers and volumes stay. Docker is read and cleaned up only while it runs. I
 | `desktop` | `gnome-arch-update` | Shows pending updates in the top bar |
 | `desktop` | `libnotify` | Shows desktop notifications about new updates |
 | `desktop` | `meld` | Merges configuration updates side by side |
+| `homelab` | `libsecret` | Keeps the key of Arcane in the keyring |
 
 A package counts when its `command` in `scripts/features/features.yaml` works. One that `needs` a fact is offered only where it holds:
 
@@ -162,6 +187,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | `flatpak` | `true`, `false` | `true` |
 | `cleanup` | a part with `true` or `false` | `orphans`, `cache`, `aur`, `flatpak` |
 | `hidden-log` | hidden system log messages | none |
+| `homelab` | the https address of Arcane | none |
 
 - An unparsable file is ignored and named under **Settings › About**
 - Every start and `init` set up the menu entry and the notification per `app-menu` and `notify`. An installer calls `init` from its chroot as the user
@@ -213,6 +239,7 @@ Icons are Nerd Font symbols, in a terminal from `ttf-nerd-fonts-symbols`. The Li
 | `~/.local/share/icons/hicolor/scalable/apps/system-manager.svg` | Icon |
 | `~/.config/systemd/user/system-manager-notify.{service,timer}` | Update notification |
 | `~/.local/share/gnome-shell/extensions/arch-update@RaphaelRochet/` | Update indicator |
+| Keyring, `service` `system-manager` | Key of Arcane, with the homelab on |
 
 `SM_HOME` moves all of it, for a throwaway run.
 

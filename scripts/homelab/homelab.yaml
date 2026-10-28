@@ -1,0 +1,51 @@
+ops:
+  get:
+    title: Reading the homelab
+    needs: [libsecret]
+  login:
+    title: Connecting to Arcane
+    needs: [libsecret]
+  logout:
+    title: Disconnecting from Arcane
+    needs: [libsecret]
+  sync:
+    title: Syncing the stack
+    needs: [libsecret]
+  update:
+    title: Updating the stack
+    needs: [libsecret]
+    steps:
+      pull: Pulling the images
+      up: Starting what changed
+  redeploy:
+    title: Redeploying the stack
+    needs: [libsecret]
+errors:
+  10: |
+    Arcane could not be reached
+    Check the address and the network.
+  11: |
+    Arcane refused the key
+    Connect again under Settings › Homelab.
+  12: |
+    The key lacks a right
+    Connect again under Settings › Homelab.
+  13: |
+    No key in the keyring
+    Connect under Settings › Homelab.
+  14: |
+    Only https
+    The key travels encrypted only.
+  15: |
+    Arcane wants a new password first
+    Sign in to Arcane once in the browser.
+  16: |
+    User name or password wrong
+  17: |
+    The key may do more than it needs
+    Nothing was kept. Check the roles in Arcane.
+  18: |
+    Arcane refused the action
+    Its answer is in the details.
+  19: |
+    A control character in the user name or password

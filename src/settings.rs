@@ -46,6 +46,9 @@ pub struct Settings {
     /// Journal messages like one of these, numbers aside, are left out of the log page.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hidden_log: Vec<String>,
+    /// The https address of Arcane, which serves the homelab, off without one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homelab: Option<String>,
 }
 
 pub const AUR_HELPERS: [&str; 2] = ["paru", "yay"];
@@ -126,6 +129,12 @@ impl Settings {
         {
             return Err(format!("output: {o} is not one of {}", OUTPUT.join(", ")));
         }
+        if let Some(h) = &s.homelab
+            && h.strip_prefix("https://")
+                .is_none_or(|rest| rest.is_empty())
+        {
+            return Err(format!("homelab: {h} is no https address"));
+        }
         Ok(s)
     }
 
@@ -160,6 +169,11 @@ impl Settings {
     /// Whether runs use verbose output.
     pub fn terminal(&self) -> bool {
         self.output() == "verbose"
+    }
+
+    /// The address of Arcane where the homelab is switched on.
+    pub fn homelab(&self) -> Option<&str> {
+        self.homelab.as_deref()
     }
 
     /// Whether the clean-up takes a part, as chosen or by default.
@@ -226,6 +240,7 @@ mod tests {
             flatpak: Some(false),
             cleanup: BTreeMap::from([("docker".into(), true), ("flatpak".into(), false)]),
             hidden_log: vec!["ACPI Error: with space".into()],
+            homelab: Some("https://arcane.fritz.box".into()),
         };
         let yaml = serde_saphyr::to_string(&s).unwrap();
         assert_eq!(Settings::parse(&yaml).unwrap(), s);
@@ -241,6 +256,15 @@ mod tests {
         assert!(Settings::parse("flatpak: updates").is_err());
         assert!(Settings::parse("cleanup: {trash: true}").is_err());
         assert!(Settings::parse("cleanup: {docker: maybe}").is_err());
+        assert!(Settings::parse("homelab: http://arcane.fritz.box").is_err());
+        assert!(Settings::parse("homelab: 'https://'").is_err());
+        assert!(Settings::default().homelab().is_none());
+        assert_eq!(
+            Settings::parse("homelab: https://arcane.fritz.box")
+                .unwrap()
+                .homelab(),
+            Some("https://arcane.fritz.box"),
+        );
         assert_eq!(
             Settings::parse("notify: weekly").unwrap().notify(),
             "weekly"

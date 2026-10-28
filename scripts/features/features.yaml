@@ -58,3 +58,7 @@ probe:
       command: [meld, --version]
       adds: Merges configuration updates side by side.
       needs: desktop
+  homelab:
+    libsecret:
+      command: [secret-tool, search, service, system-manager]
+      adds: Keeps the key of Arcane in the keyring.

@@ -57,6 +57,7 @@ op_merge() {
     # reads half a configuration. Its folder may be closed to the user.
     meta="$(sudo stat -c '%a %u %g' -- "$target")"
     read -r mode owner group <<<"$meta"
+    sm_made_root+=("${target}.sm-new")
     sudo install -m "$mode" -o "$owner" -g "$group" -- "${work}/current" "${target}.sm-new"
     sudo mv -f -- "${target}.sm-new" "$target"
     sudo rm -f -- "$file"

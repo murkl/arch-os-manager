@@ -21,6 +21,7 @@ optdepends=(
     'fwupd: updates the firmware of the device'
     'libnotify: desktop notifications about new updates'
     'meld: merges configuration updates side by side'
+    'libsecret: keeps the key of Arcane in the keyring'
 )
 provides=('system-manager')
 conflicts=('system-manager')

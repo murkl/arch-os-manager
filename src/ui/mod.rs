@@ -28,6 +28,7 @@ use std::time::{Duration, Instant};
 use crate::data::cleanup::Plan;
 use crate::data::features::Features;
 use crate::data::firmware::Firmware;
+use crate::data::homelab::Homelab;
 use crate::data::journal::Entry;
 use crate::data::mirrors::Mirrors;
 use crate::data::news::Item;
@@ -223,6 +224,7 @@ pub enum Fresh {
     Cleanup(Result<Plan, Failure>),
     Mirrors(Result<Mirrors, Failure>),
     Firmware(Result<Vec<Firmware>, Failure>),
+    Homelab(Result<Box<Homelab>, Failure>),
     /// settings.yaml written, or why not.
     Saved(Result<(), String>),
 }
@@ -410,6 +412,7 @@ pub struct Shared {
     pub cleanup: Loaded<Plan>,
     pub mirrors: Loaded<Mirrors>,
     pub firmware: Loaded<Vec<Firmware>>,
+    pub homelab: Loaded<Homelab>,
 }
 
 /// A wait shorter than this never shows, so nothing flashes.

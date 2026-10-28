@@ -9,7 +9,7 @@ use super::target::Target;
 use super::{
     Ctx, Does, Flow, Fresh, Key, Loaded, Msg, Nav, Page, PageId, Shared, Style, draw, pages,
 };
-use crate::data::{self, features::Features};
+use crate::data::{self, features::Features, homelab::Homelab};
 use crate::i18n::{self, Lang};
 use crate::script::{self, Failure, op, query};
 use crate::settings::Settings;
@@ -334,6 +334,14 @@ impl App {
             Firmware,
             load_firmware()
         );
+        if let Some(url) = ctx.settings.homelab().map(str::to_string) {
+            match missing(op::HOMELAB_GET) {
+                Some(package) => ctx.shared.homelab = Loaded::Missing(package),
+                None => ctx.remote(op::HOMELAB_GET, move || {
+                    Fresh::Homelab(Homelab::load(&url).map(Box::new))
+                }),
+            }
+        }
     }
 
     fn fresh(&mut self, fresh: Fresh) {
@@ -410,6 +418,7 @@ impl App {
             Fresh::Cleanup(r) => s.cleanup = Loaded::from(r),
             Fresh::Mirrors(r) => s.mirrors = Loaded::from(r),
             Fresh::Firmware(r) => s.firmware = Loaded::from(r),
+            Fresh::Homelab(r) => s.homelab = Loaded::from(r.map(|h| *h)),
             Fresh::Saved(Ok(())) => {
                 self.ctx.settings_error = None;
                 self.ctx.settings_unsaved = None;
@@ -518,9 +527,6 @@ pub mod tests {
     /// An app without background loads, for pressing keys and reading the screen.
     pub fn app() -> (App, Terminal<TestBackend>) {
         let (tx, _rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
-        let dir = std::env::temp_dir().join(format!("sm-test-{}", std::process::id()));
-        // SAFETY: tests that read the environment read only SM_HOME, set to the same value by all.
-        unsafe { std::env::set_var("SM_HOME", &dir) };
         let (themes, _) = crate::theme::all();
         let ctx = Ctx {
             settings: Settings::default(),
@@ -614,7 +620,7 @@ pub mod tests {
         use crate::data::{packages::Installed, services::Service, system::System, updates};
         let s = &mut app.ctx.shared;
         s.features = Loaded::Ready(Features::parse(
-            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\nreflector\tok\t2023-2\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
+            "paru\tok\t2.1.0-1\nyay\tmissing\nfwupd\tok\t2.0.16-1\ngnome-arch-update\tmissing\nmeld\tmissing\nlibnotify\tok\t0.8.8-1\nflatpak\tok\t1:1.18.4-1\nreflector\tok\t2023-2\nlibsecret\tok\t0.21.8.2-1\n@desktop\tok\n@wayland\tok\n@gnome\tok\n",
         ));
         crate::script::set_aur(Some("paru"));
         s.system = Loaded::Ready(System {
@@ -685,6 +691,7 @@ pub mod tests {
             servers: vec!["mirror.example.org".into()],
         });
         s.firmware = Loaded::Ready(Vec::new());
+        s.homelab = Loaded::Ready(crate::data::homelab::example());
     }
 
     #[test]
@@ -753,7 +760,6 @@ pub mod tests {
     #[ignore]
     fn preview() {
         let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
-        unsafe { std::env::set_var("SM_HOME", std::env::temp_dir().join("sm-preview")) };
         let mut app = App::new(tx, Arc::new(|| {}), false, None);
         app.start();
         press(&mut app, &[Key::Esc]);

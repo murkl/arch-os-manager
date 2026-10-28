@@ -30,6 +30,7 @@
 - Config updates compared, merged or taken over
 - Mirror ranking, firmware updates
 - Keyring renewal, package file repair
+- [Homelab](REFERENCE.md#homelab) stacks of Arcane synced, updated and redeployed
 - Terminal, Linux console or own window
 - Compact or verbose output
 - English and German

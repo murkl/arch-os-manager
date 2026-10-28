@@ -26,6 +26,7 @@ fn status(s: &Status) -> (String, Tone) {
 fn group(id: &str) -> (&'static str, &'static str) {
     match id {
         "desktop" => (t("Desktop"), icon::APP),
+        "homelab" => (t("Homelab"), icon::HOMELAB),
         _ => (t("Packages"), icon::PACKAGE),
     }
 }

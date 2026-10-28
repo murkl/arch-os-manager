@@ -44,4 +44,7 @@ pub const CPU: &str = "\u{f0ee0}";
 pub const MEMORY: &str = "\u{f035b}";
 pub const DISK: &str = "\u{f02ca}";
 pub const USAGE: &str = "\u{f029a}";
+pub const HOMELAB: &str = "\u{f048b}";
+pub const STACK: &str = "\u{f0868}";
+pub const SYNC: &str = "\u{f04e6}";
 pub const STATUS: &str = "\u{f0262}";

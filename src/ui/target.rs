@@ -19,6 +19,7 @@ pub enum Target {
     Mirrors,
     Firmware,
     Repair,
+    Homelab,
     Settings,
     Language,
     Theme,
@@ -32,6 +33,7 @@ pub enum Target {
     Desktop,
     Hidden,
     Features,
+    UseHomelab,
     About,
 }
 
@@ -46,7 +48,7 @@ pub const HOME: &[&[Target]] = &[
         Target::Firmware,
         Target::Repair,
     ],
-    &[Target::Settings],
+    &[Target::Homelab, Target::Settings],
 ];
 
 /// The settings page, group by group: appearance, the system, then about.
@@ -67,6 +69,7 @@ pub const SETTINGS: &[&[Target]] = &[
         Target::Desktop,
         Target::Features,
     ],
+    &[Target::UseHomelab],
     &[Target::About],
 ];
 
@@ -82,6 +85,7 @@ pub const ALL: &[Target] = &[
     Target::Mirrors,
     Target::Firmware,
     Target::Repair,
+    Target::Homelab,
     Target::Settings,
     Target::Language,
     Target::Theme,
@@ -95,6 +99,7 @@ pub const ALL: &[Target] = &[
     Target::Notifications,
     Target::Desktop,
     Target::Features,
+    Target::UseHomelab,
     Target::About,
 ];
 
@@ -113,6 +118,7 @@ impl Target {
             Target::Mirrors => "mirrors",
             Target::Firmware => "firmware",
             Target::Repair => "repair",
+            Target::Homelab => "homelab",
             Target::Settings => "settings",
             Target::Language => "language",
             Target::Theme => "theme",
@@ -126,6 +132,7 @@ impl Target {
             Target::Desktop => "desktop",
             Target::Hidden => "hidden",
             Target::Features => "features",
+            Target::UseHomelab => "use-homelab",
             Target::About => "about",
         }
     }
@@ -147,6 +154,7 @@ impl Target {
             Target::Mirrors => t("Mirrors"),
             Target::Firmware => t("Firmware"),
             Target::Repair => t("Repair"),
+            Target::Homelab | Target::UseHomelab => t("Homelab"),
             Target::Settings => t("Settings"),
             Target::Language => t("Language"),
             Target::Theme => t("Theme"),
@@ -178,6 +186,7 @@ impl Target {
             Target::Mirrors => icon::MIRRORS,
             Target::Firmware => icon::FIRMWARE,
             Target::Repair => icon::REPAIR,
+            Target::Homelab | Target::UseHomelab => icon::HOMELAB,
             Target::Settings => icon::SETTINGS,
             Target::Language => icon::LANGUAGE,
             Target::Theme => icon::THEME,
@@ -206,6 +215,7 @@ impl Target {
             Target::Cleanup => Some(op::CLEANUP_PLAN),
             Target::Firmware => Some(op::FIRMWARE_LIST),
             Target::Notifications => Some(op::DESKTOP_NOTIFY),
+            Target::Homelab | Target::UseHomelab => Some(op::HOMELAB_GET),
             _ => None,
         }
     }
@@ -240,6 +250,7 @@ impl Target {
             Target::Mirrors => Box::new(pages::mirrors::MirrorsPage::new()),
             Target::Firmware => Box::new(pages::firmware::FirmwarePage::new()),
             Target::Repair => Box::new(pages::repair::RepairPage::new()),
+            Target::Homelab => Box::new(pages::homelab::HomelabPage::new()),
             Target::Settings => Box::new(pages::settings::SettingsPage::new(None)),
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
@@ -258,7 +269,8 @@ impl Target {
             | Target::Status
             | Target::Desktop
             | Target::Flatpak
-            | Target::AurReview => {
+            | Target::AurReview
+            | Target::UseHomelab => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };

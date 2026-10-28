@@ -119,6 +119,10 @@ impl SettingsPage {
                 Tone::Muted,
                 false,
             ),
+            Target::UseHomelab => match ctx.settings.homelab() {
+                Some(url) => (short(url), Tone::Muted, false),
+                None => (t("off").into(), Tone::Muted, false),
+            },
             Target::Features => match &ctx.shared.features {
                 Loaded::Ready(f) => {
                     let ok = f.list.iter().filter(|(p, _)| f.ok(p)).count();
@@ -156,6 +160,24 @@ fn on_off(on: bool) -> (&'static str, Tone) {
     }
 }
 
+/// A repository's address as it reads best: host and path, without scheme, user and `.git`.
+fn short(url: &str) -> String {
+    let rest = match url.split_once("://") {
+        Some((_, rest)) => rest.to_string(),
+        // scp-like, as `git@github.com:tux/dotfiles.git`.
+        None => url.replacen(':', "/", 1),
+    };
+    // A user stands before the host, which ends at the first slash.
+    let host = rest.split('/').next().unwrap_or_default();
+    let rest = match host.split_once('@') {
+        Some((user, _)) => &rest[user.len() + 1..],
+        None => rest.as_str(),
+    };
+    rest.trim_end_matches('/')
+        .trim_end_matches(".git")
+        .to_string()
+}
+
 /// What an interval of `NOTIFY` says in a sentence.
 fn label(every: &str) -> &'static str {
     match every {
@@ -189,8 +211,9 @@ impl Page for SettingsPage {
             Target::AurReview => aur,
             _ => true,
         };
+        let headings = [t("Appearance"), t("System"), "", ""];
         let mut rows = Vec::new();
-        for (heading, group) in [t("Appearance"), t("System"), ""].into_iter().zip(SETTINGS) {
+        for (heading, group) in headings.into_iter().zip(SETTINGS) {
             rows.push(Row::heading(heading));
             for &target in group.iter().filter(|t| shown(**t)) {
                 let (detail, tone, dim) = self.value(target, ctx);
@@ -278,6 +301,14 @@ impl Page for SettingsPage {
                 ctx.save_settings();
                 Flow::Stay
             }
+            // On with the key of a login, off with the key out of the keyring.
+            Target::UseHomelab => match ctx.settings.homelab().map(str::to_string) {
+                Some(url) => Flow::Push(super::homelab::disconnect(&url, ctx)),
+                None => match Target::UseHomelab.missing(ctx) {
+                    Some(package) => Flow::Push(Box::new(FeaturesPage::new(Some(package.into())))),
+                    None => Flow::Push(super::homelab::setup()),
+                },
+            },
             // The check, the update and the notification follow at once.
             Target::Flatpak => {
                 let on = !ctx.settings.flatpak.unwrap_or(true);
@@ -797,6 +828,59 @@ mod tests {
         assert!(screen(&mut app, &mut term).contains("CPU"));
     }
 
+    /// The homelab is on with an address of Arcane, asked as its row opens, and off after a
+    /// question.
+    #[test]
+    fn the_homelab_asks_for_the_address_of_arcane_and_switches_off_after_a_question() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        for page in Target::UseHomelab.open(&mut app.ctx) {
+            open(&mut app, page);
+        }
+        let row = |shown: &str| {
+            let line = shown.lines().find(|l| l.contains("Homelab"));
+            line.unwrap_or_default().trim_end().to_string()
+        };
+        assert!(row(&screen(&mut app, &mut term)).ends_with("off"));
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("The address of Arcane, https only."),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Esc]);
+        app.ctx.settings.homelab = Some("https://arcane.fritz.box".into());
+        assert!(row(&screen(&mut app, &mut term)).ends_with("arcane.fritz.box"));
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Disconnect the homelab?"), "{shown}");
+    }
+
+    #[test]
+    fn an_address_reads_as_host_and_path() {
+        for (url, read) in [
+            ("git@github.com:tux/dotfiles.git", "github.com/tux/dotfiles"),
+            (
+                "https://github.com/tux/dotfiles.git",
+                "github.com/tux/dotfiles",
+            ),
+            (
+                "ssh://git@git.example.org:2222/tux/dotfiles.git",
+                "git.example.org:2222/tux/dotfiles",
+            ),
+            (
+                "https://git.example.org/tux/a@b/",
+                "git.example.org/tux/a@b",
+            ),
+            ("file:///srv/dotfiles.git", "/srv/dotfiles"),
+        ] {
+            assert_eq!(short(url), read, "{url}");
+        }
+    }
+
     #[test]
     fn appearance_and_system_stand_apart_and_about_last_on_its_own() {
         use crate::ui::app::tests::{app, open, screen};
@@ -823,10 +907,10 @@ mod tests {
         assert_eq!(lines[system - 1], "", "{shown}");
         assert!(at("Optional packages") < at("About"), "{shown}");
         assert_eq!(lines[at("Optional packages") + 1], "", "{shown}");
-        assert_eq!(
-            at("Optional packages") + 2,
-            at("About"),
-            "one blank line: {shown}"
+        let about = at("About");
+        assert!(
+            lines[about - 1].is_empty() && !lines[about - 2].is_empty(),
+            "{shown}"
         );
     }
 

@@ -10,6 +10,8 @@ use system_manager::script::{op, query};
 
 struct Sandbox {
     dir: PathBuf,
+    /// Removed with the sandbox, also where the test fails.
+    _tmp: tempfile::TempDir,
 }
 
 struct Outcome {
@@ -22,12 +24,15 @@ struct Outcome {
 
 impl Sandbox {
     fn new(test: &str) -> Sandbox {
-        let dir = std::env::temp_dir().join(format!("sm-scripts-{test}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        let tmp = tempfile::Builder::new()
+            .prefix(&format!("sm-scripts-{test}-"))
+            .tempdir()
+            .unwrap();
+        let dir = tmp.path().to_path_buf();
         std::fs::create_dir_all(dir.join("bin")).unwrap();
-        let sandbox = Sandbox { dir };
+        let sandbox = Sandbox { dir, _tmp: tmp };
         // sudo runs the command as it is: the sandbox has nothing to elevate.
-        sandbox.stub("sudo", r#"exec "$@""#);
+        sandbox.stub("sudo", r#"if [ "$1" = -n ]; then shift; fi; exec "$@""#);
         // The machine's own container engines stay out of reach, unless a test asks for one.
         for engine in ["docker", "podman"] {
             sandbox.absent(engine);
@@ -57,6 +62,11 @@ impl Sandbox {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    /// The commands a run finds: the stand-ins first, then the machine's own.
+    fn search(&self) -> String {
+        format!("{}:/usr/bin", self.dir.join("bin").display())
+    }
+
     fn run(&self, script: &str, args: &[&str], env: &[(&str, &str)]) -> Outcome {
         let scripts = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts");
         let events = self.dir.join("events");
@@ -65,10 +75,7 @@ impl Sandbox {
             .arg(r#"exec 3>"$SM_EVENTS"; exec bash --noprofile --norc "$0" "$@""#)
             .arg(format!("{scripts}/{script}/{script}.sh"))
             .args(args)
-            .env(
-                "PATH",
-                format!("{}:/usr/bin", self.dir.join("bin").display()),
-            )
+            .env("PATH", self.search())
             .env("SM_EVENTS", &events)
             .env("SM_AUR", "")
             // The machine's own Flatpak stays out of reach, unless a test asks for it.
@@ -416,6 +423,7 @@ fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
     );
     assert_eq!(s.run("repair", &["keyring"], &[]).code, 1);
     assert!(gpg.join("old").exists(), "a failed rebuild left no keyring");
+    assert!(!s.dir.join("gnupg.new").exists(), "the half new one stays");
     s.stub(
         "pacman-key",
         r#"[ "$1" = --gpgdir ] || exit 3; mkdir -p "$2"; touch "$2/new""#,
@@ -1259,8 +1267,8 @@ case "$1" in get) cat "$store" ;; set) echo "$4" >"$store" ;; esac"#,
 /// release no longer has.
 #[test]
 fn a_release_replaces_what_the_aur_has() {
-    let dir = std::env::temp_dir().join(format!("sm-aur-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
     std::fs::create_dir_all(dir.join("seed")).unwrap();
     let remote = dir.join("aur/arch-os-manager.git");
     let sh = |script: &str| {
@@ -1268,7 +1276,7 @@ fn a_release_replaces_what_the_aur_has() {
             .arg("-c")
             .arg(script)
             .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .env("DIR", &dir)
+            .env("DIR", dir)
             .env("REMOTE", &remote)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_COUNT", "1")
@@ -1296,7 +1304,6 @@ fn a_release_replaces_what_the_aur_has() {
     let commit = sh(r#"git -C "$REMOTE" log -1 --format='%an <%ae> %s' master"#);
     assert_eq!(commit, "murkl <murkl@users.noreply.github.com> 2.0.0\n");
     assert!(sh(r#"tools/aur.sh push "$DIR/stamped""#).contains("there already"));
-    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// A release built as root, as in CI, gets what the package needs before makepkg, which builds
@@ -2172,4 +2179,278 @@ esac"#,
     let o = s.run("cleanup", &["run", "trash"], &[]);
     assert_eq!(o.code, 1, "{}", o.events);
     assert!(o.events.starts_with("fail\t"), "{}", o.events);
+}
+
+impl Sandbox {
+    fn write(&self, path: &str, text: &str) {
+        let path = self.dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+
+    fn read(&self, path: &str) -> String {
+        std::fs::read_to_string(self.dir.join(path)).unwrap_or_default()
+    }
+}
+
+/// Arcane as curl meets it: the method, the path, the header read from its file descriptor and the
+/// body, answered by `answer` in `$HOME/arcane`, a function of `$method $path $auth` that prints
+/// the status, then the answer. What reaches curl's command line is logged, the header and the
+/// body only as what they are read from.
+fn arcane(s: &Sandbox, answer: &str) {
+    s.write(".arcane-answer", answer);
+    s.stub(
+        "curl",
+        r#"method=GET out='' format='' auth='' body='' url=''
+while [ $# -gt 0 ]; do
+    case "$1" in
+    -X) method="$2"; shift ;;
+    -o) out="$2"; shift ;;
+    -w) format="$2"; shift ;;
+    -H) case "$2" in @*) auth="$(cat "${2#@}")" ;; esac; shift ;;
+    --data-binary) body="$(cat "${2#@}")"; shift ;;
+    --proto | --proto-redir | --connect-timeout | --max-time) shift ;;
+    -*) ;;
+    *) url="$1" ;;
+    esac
+    shift
+done
+path="${url#https://arcane.lan/api}"
+printf '%s %s %s\n' "$method" "$path" "$auth" >>"$HOME/requests"
+if [ -n "$body" ]; then printf '%s\n' "$body" >>"$HOME/bodies"; fi
+. "$HOME/.arcane-answer"
+reply="$(answer "$method" "$path" "$auth")"
+status="${reply%%$'\n'*}"
+text="${reply#*$'\n'}"
+if [ -n "$out" ]; then printf '%s' "$text" >"$out"; else printf '%s' "$text"; fi
+format="${format//'%{http_code}'/$status}"
+printf "$format""#,
+    );
+    s.stub(
+        "secret-tool",
+        r#"cmd="$1"; shift; id=''
+while [ $# -gt 0 ]; do case "$1" in key-id) id="$2"; shift 2 ;; *) shift ;; esac; done
+case "$cmd" in
+store) cat >"$HOME/keyring"; printf '%s' "$id" >"$HOME/keyring.id" ;;
+lookup) cat "$HOME/keyring" 2>/dev/null || exit 1 ;;
+search) if [ -f "$HOME/keyring" ]; then printf 'attribute.key-id = %s\n' "$(cat "$HOME/keyring.id")"; fi ;;
+clear) rm -f "$HOME/keyring" "$HOME/keyring.id" ;;
+esac"#,
+    );
+}
+
+/// Arcane with one admin, whose key the manager makes, as 2.17 answers.
+const ARCANE: &str = r#"answer() {
+    case "$1 $2" in
+    "POST /auth/login")
+        if grep -q '"password":"right \\"one\\""' "$HOME/bodies"; then
+            printf '200\n{"success":true,"data":{"token":"session-1","refreshToken":"r","user":{"requiresPasswordChange":false}}}'
+        else
+            printf '401\n{"title":"Unauthorized","status":401}'
+        fi ;;
+    "POST /api-keys") printf '201\n{"success":true,"data":{"id":"key-2","key":"arc_secret","name":"x","permissions":[]}}' ;;
+    "DELETE /api-keys/key-1") printf '204\n' ;;
+    "POST /auth/logout") printf '200\n{}' ;;
+    "GET /environments")
+        case "$3" in
+        "X-Api-Key: arc_secret") printf '200\n{"success":true,"data":[{"id":"0","name":"nas","status":"online"}]}' ;;
+        *) printf '401\n{"detail":"Unauthorized: invalid API key"}' ;;
+        esac ;;
+    "GET /api-keys") printf '403\n{"detail":"permission denied: apikeys:list"}' ;;
+    *) printf '404\n{"detail":"not found"}' ;;
+    esac
+}"#;
+
+const LAB: [(&str, &str); 0] = [];
+
+#[test]
+fn a_login_makes_a_narrow_key_kept_in_the_keyring_and_never_on_a_command_line() {
+    let s = Sandbox::new("homelab-login");
+    arcane(&s, ARCANE);
+    s.write("keyring", "arc_old");
+    s.write("keyring.id", "key-1");
+    let login = |input: &str| {
+        let path = s.dir.join("input");
+        std::fs::write(&path, input).unwrap();
+        Command::new("bash")
+            .arg("-c")
+            .arg(r#"exec 3>"$HOME/events"; exec bash --noprofile --norc "$0" login https://arcane.lan/ <"$HOME/input""#)
+            .arg(concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/homelab/homelab.sh"))
+            .env("PATH", format!("{}:/usr/bin", s.dir.join("bin").display()))
+            .env("HOME", &s.dir)
+            .output()
+            .unwrap()
+    };
+    let o = login("admin\nwrong\n");
+    assert_eq!(
+        o.status.code(),
+        Some(16),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let o = login("admin\nright \"one\"\n");
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    assert_eq!(s.read("keyring"), "arc_secret");
+    assert_eq!(s.read("keyring.id"), "key-2");
+    let requests = s.read("requests");
+    assert!(
+        requests.contains("DELETE /api-keys/key-1 Authorization: Bearer session-1\n"),
+        "the key of the last login goes: {requests}"
+    );
+    let logout = requests.find("POST /auth/logout").unwrap();
+    assert!(
+        logout
+            < requests
+                .find("GET /environments X-Api-Key: arc_secret")
+                .unwrap(),
+        "the session ends before the key is checked: {requests}"
+    );
+    assert!(
+        requests.ends_with("GET /api-keys X-Api-Key: arc_secret\n"),
+        "{requests}"
+    );
+    let bodies = s.read("bodies");
+    for right in ["projects:deploy", "gitops:sync", "environments:list"] {
+        assert!(
+            bodies.contains(&format!(r#"{{"permission":"{right}"}}"#)),
+            "{bodies}"
+        );
+    }
+    for broad in ["apikeys", "gitops:create", "projects:update", "containers"] {
+        assert!(!bodies.contains(broad), "{broad}: {bodies}");
+    }
+    let calls = s.read("calls");
+    for secret in ["arc_secret", "session-1", "right"] {
+        assert!(
+            !calls.contains(secret),
+            "{secret} on a command line: {calls}"
+        );
+    }
+    // A key that may list the keys of Arcane is not kept.
+    std::fs::remove_file(s.dir.join("keyring")).unwrap();
+    arcane(
+        &s,
+        &ARCANE.replace(
+            "printf '403\\n{\"detail\":\"permission denied: apikeys:list\"}'",
+            "printf '200\\n{\"data\":[]}'",
+        ),
+    );
+    let o = login("admin\nright \"one\"\n");
+    assert_eq!(o.status.code(), Some(17));
+    assert!(!s.dir.join("keyring").exists());
+}
+
+#[test]
+fn arcane_is_reached_over_https_only_and_each_answer_read_apart() {
+    let s = Sandbox::new("homelab-get");
+    arcane(
+        &s,
+        r#"answer() {
+    case "$2" in
+    /environments) printf '200\n{"data":[{"id":"0"}]}' ;;
+    /environments/9/projects) printf '502\n{"error":"agent offline"}' ;;
+    *) printf '404\n{"detail":"not found"}' ;;
+    esac
+}"#,
+    );
+    assert_eq!(
+        s.run(
+            "homelab",
+            &["get", "http://arcane.lan", "/environments"],
+            &LAB
+        )
+        .code,
+        14
+    );
+    assert_eq!(
+        s.run(
+            "homelab",
+            &["get", "https://arcane.lan", "/environments"],
+            &LAB
+        )
+        .code,
+        13
+    );
+    s.write("keyring", "arc_secret");
+    let o = s.run(
+        "homelab",
+        &[
+            "get",
+            "https://arcane.lan",
+            "/environments",
+            "/environments/9/projects",
+        ],
+        &LAB,
+    );
+    assert_eq!(o.code, 0, "{}{}", o.events, o.err);
+    assert_eq!(o.out, "{\"data\":[{\"id\":\"0\"}]}\0\0");
+    assert_eq!(
+        o.err, "agent offline\n",
+        "the refusal goes into the details"
+    );
+    arcane(
+        &s,
+        r#"answer() { printf '401\n{"detail":"Unauthorized"}'; }"#,
+    );
+    assert_eq!(
+        s.run(
+            "homelab",
+            &["get", "https://arcane.lan", "/environments"],
+            &LAB
+        )
+        .code,
+        11
+    );
+    s.stub("curl", "exit 7");
+    assert_eq!(
+        s.run(
+            "homelab",
+            &["get", "https://arcane.lan", "/environments"],
+            &LAB
+        )
+        .code,
+        10
+    );
+}
+
+#[test]
+fn an_update_pulls_then_starts_and_shows_what_arcane_streams() {
+    let s = Sandbox::new("homelab-update");
+    s.write("keyring", "arc_secret");
+    arcane(
+        &s,
+        r#"answer() {
+    case "$2" in
+    */pull) printf '200\n{"type":"activity"}\n{"log":"v1: Pulling from \\"x\\"\\u00e9"}\n{"done":true}\n' ;;
+    */up) printf '200\n{"log":" Container web-1 Started"}\n{"error":"web-1 unhealthy"}\n' ;;
+    esac
+}"#,
+    );
+    assert_eq!(
+        s.run(
+            "homelab",
+            &["update", "https://arcane.lan", "0", "../x"],
+            &LAB
+        )
+        .code,
+        18
+    );
+    let o = s.run(
+        "homelab",
+        &["update", "https://arcane.lan", "0", "p-1"],
+        &LAB,
+    );
+    assert_eq!(o.code, 18, "{}{}", o.events, o.err);
+    assert_eq!(o.events, "step\tpull\nstep\tup\n");
+    assert_eq!(o.out, "v1: Pulling from \"x\"é\n Container web-1 Started\n");
+    assert_eq!(o.err, "web-1 unhealthy\n");
+    assert!(
+        s.read("requests")
+            .contains("POST /environments/0/projects/p-1/pull X-Api-Key: arc_secret\n")
+    );
 }

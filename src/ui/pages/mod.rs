@@ -1,7 +1,9 @@
+pub mod ask;
 pub mod cleanup;
 pub mod features;
 pub mod firmware;
 pub mod home;
+pub mod homelab;
 pub mod log;
 pub mod mirrors;
 pub mod news;

@@ -1345,3 +1345,201 @@ msgstr "Fortschritt, Rückfragen als Dialog"
 
 msgid "terminal, every command and prompt"
 msgstr "Terminal, alle Befehle und Rückfragen"
+
+msgid "Answer cannot be empty."
+msgstr "Antwort darf nicht leer sein."
+
+msgid "The user name for {url}"
+msgstr "Der Benutzername für {url}"
+
+msgid "The password or token for {url}"
+msgstr "Das Passwort oder Token für {url}"
+
+msgid "The passphrase of the key {key}"
+msgstr "Die Passphrase des Schlüssels {key}"
+
+msgid "Trust the host {host}? The fingerprint of its key is {fingerprint}."
+msgstr "Dem Host {host} vertrauen? Der Fingerabdruck seines Schlüssels ist {fingerprint}."
+
+msgid "Homelab"
+msgstr "Homelab"
+
+msgid "not reached"
+msgstr "nicht erreicht"
+
+msgid "unchecked"
+msgstr "ungeprüft"
+
+msgid "update"
+msgstr "Update"
+
+msgid "{image} available"
+msgstr "{image} verfügbar"
+
+msgid "Password or token"
+msgstr "Passwort oder Token"
+
+msgid "Passphrase"
+msgstr "Passphrase"
+
+msgid "User name"
+msgstr "Benutzername"
+
+msgid ""
+"A control character in the user name or password\n"
+msgstr ""
+"Steuerzeichen in Benutzername oder Passwort\n"
+
+msgid "Arcane checked {n} days ago."
+msgstr "Arcane hat vor {n} Tagen geprüft."
+
+msgid "Arcane checked {n} h ago."
+msgstr "Arcane hat vor {n} h geprüft."
+
+msgid "Arcane checked {n} min ago."
+msgstr "Arcane hat vor {n} min geprüft."
+
+msgid ""
+"Arcane could not be reached\n"
+"Check the address and the network.\n"
+msgstr ""
+"Arcane nicht erreichbar\n"
+"Adresse und Netz prüfen.\n"
+
+msgid "Arcane does not reach this server."
+msgstr "Arcane erreicht diesen Server nicht."
+
+msgid "Arcane names no check."
+msgstr "Arcane nennt keine Prüfung."
+
+msgid "Arcane names no server."
+msgstr "Arcane nennt keinen Server."
+
+msgid "Arcane names this server no more."
+msgstr "Arcane nennt diesen Server nicht mehr."
+
+msgid "Arcane names this stack no more."
+msgstr "Arcane nennt diesen Stack nicht mehr."
+
+msgid ""
+"Arcane refused the action\n"
+"Its answer is in the details.\n"
+msgstr ""
+"Aktion von Arcane abgelehnt\n"
+"Die Antwort steht in den Details.\n"
+
+msgid ""
+"Arcane refused the key\n"
+"Connect again under Settings › Homelab.\n"
+msgstr ""
+"Key von Arcane abgelehnt\n"
+"Unter Einstellungen › Homelab neu verbinden.\n"
+
+msgid ""
+"Arcane wants a new password first\n"
+"Sign in to Arcane once in the browser.\n"
+msgstr ""
+"Neues Passwort für Arcane nötig\n"
+"Einmal im Browser bei Arcane anmelden.\n"
+
+msgid "Connecting to Arcane"
+msgstr "Arcane wird verbunden"
+
+msgid ""
+"Disconnect the homelab?\n"
+"The key leaves the keyring. Arcane keeps it until it is deleted there."
+msgstr ""
+"Homelab trennen?\n"
+"Der Key verlässt den Schlüsselbund. Arcane behält ihn, bis er dort gelöscht wird."
+
+msgid "Disconnecting from Arcane"
+msgstr "Arcane wird getrennt"
+
+msgid "Keeps the key of Arcane in the keyring."
+msgstr "Hält den Key von Arcane im Schlüsselbund."
+
+msgid ""
+"No key in the keyring\n"
+"Connect under Settings › Homelab.\n"
+msgstr ""
+"Kein Key im Schlüsselbund\n"
+"Unter Einstellungen › Homelab verbinden.\n"
+
+msgid ""
+"Only https\n"
+"The key travels encrypted only.\n"
+msgstr ""
+"Nur https\n"
+"Der Key geht nur verschlüsselt über das Netz.\n"
+
+msgid "Pulling the images"
+msgstr "Images werden geholt"
+
+msgid "Reading the homelab"
+msgstr "Homelab wird gelesen"
+
+msgid "Redeploy"
+msgstr "Neu ausrollen"
+
+msgid ""
+"Redeploy {stack}?\n"
+"Every service of it starts anew."
+msgstr ""
+"{stack} neu ausrollen?\n"
+"Jeder seiner Dienste startet neu."
+
+msgid "Redeploying the stack"
+msgstr "Stack wird neu ausgerollt"
+
+msgid "Starting what changed"
+msgstr "Geändertes wird gestartet"
+
+msgid "Sync"
+msgstr "Synchronisieren"
+
+msgid "Sync failed: {why}"
+msgstr "Sync fehlgeschlagen: {why}"
+
+msgid "Syncing the stack"
+msgstr "Stack wird synchronisiert"
+
+msgid "The address of Arcane, https only. Empty, the homelab stays off."
+msgstr "Die Adresse von Arcane, nur https. Leer bleibt das Homelab aus."
+
+msgid ""
+"The key lacks a right\n"
+"Connect again under Settings › Homelab.\n"
+msgstr ""
+"Key ohne nötiges Recht\n"
+"Unter Einstellungen › Homelab neu verbinden.\n"
+
+msgid ""
+"The key may do more than it needs\n"
+"Nothing was kept. Check the roles in Arcane.\n"
+msgstr ""
+"Key darf mehr als nötig\n"
+"Nichts wurde behalten. Rollen in Arcane prüfen.\n"
+
+msgid ""
+"Update {stack}?\n"
+"Pulls the newest images of its tags and starts anew each service whose image changed."
+msgstr ""
+"{stack} aktualisieren?\n"
+"Holt die neuesten Images seiner Tags und startet jeden Dienst neu, dessen Image sich geändert hat."
+
+msgid "Updating the stack"
+msgstr "Stack wird aktualisiert"
+
+msgid ""
+"User name or password wrong\n"
+msgstr ""
+"Benutzername oder Passwort falsch\n"
+
+msgid "no server"
+msgstr "kein Server"
+
+msgid "not in git"
+msgstr "nicht in Git"
+
+msgid "sync failed"
+msgstr "Sync fehlgeschlagen"

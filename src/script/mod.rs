@@ -58,7 +58,8 @@ pub struct Meta {
     /// Output a failure is recognised by. lib.yaml's apply to every script.
     #[serde(default)]
     pub hints: BTreeMap<String, Hint>,
-    /// features only: the optional packages by group, `packages` or `desktop`, then by name.
+    /// features only: the optional packages by group, `packages`, `desktop` or `homelab`, then
+    /// by name.
     #[serde(default)]
     pub probe: BTreeMap<String, BTreeMap<String, Probe>>,
     /// features only: what a package may need of the system, with why it is not offered
@@ -216,6 +217,7 @@ fn dir() -> Result<&'static Path, String> {
         let base = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
+        sweep(&base, "system-manager-");
         let dir = base.join(format!("system-manager-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::DirBuilder::new()
@@ -240,6 +242,24 @@ fn dir() -> Result<&'static Path, String> {
 pub fn cleanup() {
     if let Some(Ok(dir)) = DIR.get() {
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// Removes the folders `<prefix><pid>` whose process is gone: one killed, or a test, ends without
+/// its cleanup.
+pub(crate) fn sweep(base: &Path, prefix: &str) {
+    for entry in std::fs::read_dir(base).into_iter().flatten().flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name
+            .to_str()
+            .and_then(|n| n.strip_prefix(prefix))
+            .filter(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()))
+        else {
+            continue;
+        };
+        if !Path::new("/proc").join(pid).exists() {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
     }
 }
 
@@ -418,6 +438,22 @@ mod tests {
             }
         }
         found
+    }
+
+    #[test]
+    fn the_scripts_of_a_process_gone_are_swept_and_those_of_one_running_kept() {
+        let base = tempfile::tempdir().unwrap();
+        // No process has a number past the kernel's limit of 2^22.
+        let gone = base.path().join(format!("system-manager-{}", i32::MAX));
+        let running = base
+            .path()
+            .join(format!("system-manager-{}", std::process::id()));
+        let other = base.path().join("system-manager-notes");
+        for dir in [&gone, &running, &other] {
+            std::fs::create_dir_all(dir.join("lib")).unwrap();
+        }
+        sweep(base.path(), "system-manager-");
+        assert!(!gone.exists() && running.exists() && other.exists());
     }
 
     #[test]
