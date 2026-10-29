@@ -199,7 +199,8 @@ impl ArticlePage {
                 mark(ctx, &link, !read);
                 Flow::Pop
             })
-            .icon(icon::NEWS),
+            .icon(icon::NEWS)
+            .does(if read { Does::Unread } else { Does::Read }),
         ];
         let mut detail = Detail::default();
         detail.set(body, acts);

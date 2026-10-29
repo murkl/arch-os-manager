@@ -723,7 +723,11 @@ impl RunPage {
                         acts.push(reinstall(altered));
                     }
                     acts.extend(next_steps(self.job.op, ctx));
-                    acts.push(Act::new(t("Back"), |_| Flow::Pop).icon(icon::BACK));
+                    acts.push(
+                        Act::new(t("Back"), |_| Flow::Pop)
+                            .icon(icon::BACK)
+                            .does(Does::Back),
+                    );
                     (body, acts)
                 }
             }
@@ -740,7 +744,8 @@ impl RunPage {
                         Act::new(target.label(), move |ctx: &mut Ctx| {
                             replace_with(target, ctx)
                         })
-                        .icon(target.icon()),
+                        .icon(target.icon())
+                        .does(Does::Open),
                     );
                 }
                 let job = self.job.clone();
@@ -750,7 +755,11 @@ impl RunPage {
                     })
                     .icon(icon::UPDATE),
                 );
-                acts.push(Act::new(t("Back"), |_| Flow::Pop).icon(icon::BACK));
+                acts.push(
+                    Act::new(t("Back"), |_| Flow::Pop)
+                        .icon(icon::BACK)
+                        .does(Does::Back),
+                );
                 (body, acts)
             }
         };
@@ -1035,7 +1044,8 @@ fn next_steps(done: Op, ctx: &Ctx) -> Vec<Act> {
                 replace_with(target, ctx)
             })
             .icon(target.icon())
-            .note(note, tone),
+            .note(note, tone)
+            .does(Does::Open),
         );
     };
     if s.system.ready().is_some_and(|x| x.reboot) {

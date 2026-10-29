@@ -19,16 +19,16 @@ Runs as the user and asks for the sudo password itself. As root only `check` wor
 |---|---|---|
 | **↑↓**, **j k** | Choose | ↑↓ choose |
 | **⇞⇟**, wheel | Scroll | the same |
-| **⏎**, **l**, **→** | Open | ⏎ open, → cursor right |
+| **⏎**, **l**, **→** | What the footer names | ⏎ the same, → cursor right |
 | **esc** | Back | Close the box |
 | **backspace**, **h**, **←** | Back | backspace delete left, ← cursor left |
 | **f**, **/** | Filter, search on the start page | typed |
 | **g**, **G**, **home**, **end** | First, last | g G typed, home end start and end of the text |
 | **q** | Quit | typed |
 | **ctrl+c** | Quit, in a run ask to stop | the same |
-| **tab** | Run: compact view or terminal. Packages: mark | the same |
+| **tab** | Run: details or compact view. Packages: mark | the same |
 | **space** | News: read or unread | typed |
-| **r** | Start page: read again | typed |
+| **r** | Start page: reload | typed |
 | **delete** | | Delete right |
 | **ctrl+←→** | | Cursor a word left, right |
 | **ctrl+backspace**, **ctrl+w** | | Delete the word left |
@@ -50,7 +50,7 @@ The top row shows usage in percent, read every 2 s. `usage: false` hides it.
 
 ## Runs
 
-A run shows its step and pacman's progress. **tab** switches to the terminal, where every key goes to the program.
+A run shows its step and pacman's progress. **tab** switches to the details, where every key goes to the program.
 
 <img src="screenshots/run.png" width="720" alt="An update under way: its step, the progress bar and the package being upgraded">
 

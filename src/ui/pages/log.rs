@@ -119,7 +119,8 @@ impl EntryPage {
                 hide(&message, ctx);
                 Flow::Pop
             })
-            .icon(crate::ui::icon::HIDDEN),
+            .icon(crate::ui::icon::HIDDEN)
+            .does(Does::Hide),
         ];
         let mut detail = Detail::default();
         detail.set(body, acts);

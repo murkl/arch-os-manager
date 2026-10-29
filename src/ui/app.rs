@@ -1058,6 +1058,27 @@ pub mod tests {
         assert_eq!(app.pages.len(), 1);
     }
 
+    /// The footer names what enter does on the row under the cursor.
+    #[test]
+    fn enter_is_named_after_the_row_it_is_on() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        open(&mut app, Box::new(pages::services::ServicesPage::new()));
+        open(&mut app, Box::new(pages::repair::RepairPage::new()));
+        let job = pages::run::Job::new(op::REPAIR_RUN, Vec::new());
+        let failed = Err(Failure::new(op::REPAIR_RUN, "failed"));
+        open(
+            &mut app,
+            Box::new(pages::run::RunPage::finished(job, failed)),
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("⏎ run"), "{shown}");
+        press(&mut app, &[Key::Down]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("⏎ back"), "{shown}");
+    }
+
     #[test]
     fn back_after_a_success_leads_past_the_page_the_action_was_chosen_on() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());

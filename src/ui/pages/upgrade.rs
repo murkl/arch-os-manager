@@ -115,7 +115,8 @@ impl UpgradePage {
                 Act::new(t("Read the news"), |_| {
                     Flow::Push(Box::new(NewsPage::new()))
                 })
-                .icon(icon::NEWS),
+                .icon(icon::NEWS)
+                .does(Does::Open),
             );
         }
         if known_current {
@@ -126,6 +127,7 @@ impl UpgradePage {
                     Flow::Stay
                 })
                 .icon(icon::UPDATE)
+                .does(Does::Reload)
                 .unless(checking),
             );
         } else {
