@@ -18,7 +18,7 @@
     "tui",
     "ratatui",
     "rust",
-    "linux",
+    "system-monitor",
     "system-manager"
   ]
 }
