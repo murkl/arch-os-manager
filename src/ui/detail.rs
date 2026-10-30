@@ -219,6 +219,7 @@ impl Detail {
             .any(|l| matches!(l, Line::Row(lead, ..) if lead.shows(s)));
         let shown = head
             .iter()
+            .take(head_height)
             .chain(lines.iter().skip(self.scroll).take(rest_height));
         for (n, line) in shown.enumerate() {
             let y = area.y + n as u16;
@@ -519,6 +520,22 @@ mod tests {
                 && rows[2..].iter().any(|r| r.ends_with('┃')),
             "the bar spans the rest: {rows:#?}"
         );
+    }
+
+    /// A head taller than its room is cut where the actions begin.
+    #[test]
+    fn a_head_taller_than_its_room_leaves_the_actions_alone() {
+        let (app, _) = crate::ui::app::tests::app();
+        let mut d = Detail::default();
+        let mut body: Vec<Block> = (0..8)
+            .map(|i| Block::Field(format!("Field {i}"), format!("value {i}"), Tone::Normal))
+            .collect();
+        body.push(Block::Blank);
+        d.set(body, vec![Act::new("Remove", |_| Flow::Stay)]);
+        d.pin_head();
+        let rows = drawn(&mut d, Rect::new(0, 0, 30, 5), &app.ctx);
+        assert!(rows.last().unwrap().contains("Remove"), "{rows:#?}");
+        assert!(!rows.iter().any(|r| r.contains("value 4")), "{rows:#?}");
     }
 
     #[test]

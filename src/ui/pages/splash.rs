@@ -193,10 +193,6 @@ impl Page for SplashPage {
             false => crate::ui::BEAT,
         }
     }
-
-    fn typing(&self) -> bool {
-        true
-    }
 }
 
 #[cfg(test)]
@@ -259,6 +255,21 @@ mod tests {
         assert!(next.contains("Listing the services"), "{next}");
         app.handle(Msg::Loaded(ids[2]));
         assert!(app.ctx.busy() && matches!(page.tick(&mut app.ctx), Flow::Pop));
+    }
+
+    /// Pasted text is no key press: the splash stays, and nothing of it reaches the pages below.
+    #[test]
+    fn pasted_text_presses_no_key() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let page = SplashPage::after(END + FADE, &app.ctx);
+        open(&mut app, Box::new(page));
+        app.handle(Msg::Paste("all".into()));
+        app.handle(Msg::Paste("qemu-full".into()));
+        assert!(!app.done());
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Press any key"), "{shown}");
     }
 
     #[test]

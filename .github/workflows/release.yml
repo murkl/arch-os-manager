@@ -34,11 +34,11 @@ jobs:
       - id: notes
         uses: murkl/workflows/notes@961fe2d3d2e4409ee836e5893f503e6038ce7c41 # 1.1.0
 
-  # The release with its notes, the AUR files for the tag's source tarball,
-  # built once as a user builds them, then pushed, and the binary out of that
+  # The AUR files for the tag's source tarball, built once as a user builds
+  # them, then the release with its notes, the push, and the binary out of that
   # package put on the release. The key is a secret of the environment aur,
-  # which only version tags may use. On a failure the release stands, and a
-  # rerun of this job does it all again.
+  # which only version tags may use. A build that fails publishes nothing. On a
+  # later failure the release stands, and a rerun of this job does it all again.
   publish:
     name: Publish
     needs: release
@@ -57,6 +57,8 @@ jobs:
         with:
           persist-credentials: false
 
+      - run: tools/aur.sh build "$VERSION" aur-files
+
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -64,8 +66,6 @@ jobs:
         run: |
           gh release view "$VERSION" >/dev/null 2>&1 ||
             gh release create "$VERSION" --verify-tag --latest --title "$VERSION" --notes "$NOTES"
-
-      - run: tools/aur.sh build "$VERSION" aur-files
 
       - env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}

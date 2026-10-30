@@ -2,8 +2,9 @@
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # What an update would bring: repo, aur or flatpak, the name, the version now and the
-# one to come, for Flatpak then the name it shows and the branch. A source that cannot
-# be asked is a line `failed` and its name, so the others still count.
+# one to come, for Flatpak then the name it shows and the branch. The AUR or Flatpak,
+# where it cannot be asked, is a line `failed` and its name, so the others still count.
+# Mirrors out of reach fail the whole check.
 op_list() {
     # checkupdates syncs a copy of the databases, so nothing half-synced is
     # left, and ends with 2 when nothing is pending. Two at once, as the timer

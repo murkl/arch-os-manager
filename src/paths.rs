@@ -7,6 +7,8 @@ static HOME: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn home() -> &'static PathBuf {
     HOME.get_or_init(|| match std::env::var_os("SM_HOME") {
+        // Unit tests share one process, and the first to ask fixes the folder for all.
+        _ if cfg!(test) => std::env::temp_dir().join(format!("sm-test-{}", std::process::id())),
         Some(dir) if !dir.is_empty() => PathBuf::from(dir),
         _ => PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".arch-os"),
     })
@@ -65,6 +67,16 @@ pub fn write_atomic(path: &std::path::Path, content: &[u8]) -> std::io::Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Whichever test asks first, none writes into the real home.
+    #[test]
+    fn tests_keep_out_of_the_real_home() {
+        assert!(
+            home().starts_with(std::env::temp_dir()),
+            "{home:?}",
+            home = home()
+        );
+    }
 
     #[test]
     fn the_program_is_where_it_lay_at_the_start() {

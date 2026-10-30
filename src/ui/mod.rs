@@ -119,6 +119,7 @@ impl Key {
                 Key::Char(_)
                     | Key::Backspace
                     | Key::CtrlBackspace
+                    | Key::Ctrl('w')
                     | Key::Delete
                     | Key::Left
                     | Key::Right
@@ -143,7 +144,13 @@ impl Key {
                 vec![0x1b, b'O', last]
             }
             Key::Char(c) => c.to_string().into_bytes(),
-            Key::Ctrl(c) => vec![(c.to_ascii_lowercase() as u8) & 0x1f],
+            Key::Ctrl(c) => match c.to_ascii_lowercase() {
+                c @ ('a'..='z' | '@' | '[' | '\\' | ']' | '^' | '_' | ' ') => {
+                    vec![(c as u8) & 0x1f]
+                }
+                c @ '4'..='7' => vec![c as u8 - b'4' + 0x1c],
+                _ => Vec::new(),
+            },
             Key::Enter => b"\r".to_vec(),
             Key::Esc => b"\x1b".to_vec(),
             Key::Backspace => b"\x7f".to_vec(),
@@ -443,7 +450,7 @@ struct Load {
 
 pub struct Ctx {
     pub settings: Settings,
-    /// Why settings.yaml was not used, until it is written again.
+    /// Why settings.yaml was not used. It is then never written.
     pub settings_error: Option<String>,
     /// Why the settings chosen last could not be written, until a write succeeds.
     pub settings_unsaved: Option<String>,
@@ -584,7 +591,12 @@ impl Ctx {
     }
 
     /// Writes the settings as they are now, behind the interface. A failure shows in Settings.
+    /// A file not parsed stays as it is, with all it holds besides the error.
     pub fn save_settings(&mut self) {
+        if let Some(e) = &self.settings_error {
+            self.settings_unsaved = Some(e.clone());
+            return;
+        }
         let settings = self.settings.clone();
         self.store(move || Fresh::Saved(settings.save().map_err(|e| e.to_string())));
     }
@@ -630,6 +642,22 @@ mod tests {
         );
         assert_eq!(Key::PageDown.bytes(true), b"\x1b[6~");
         assert_eq!(Key::Char('q').bytes(true), b"q");
+    }
+
+    /// Ctrl sends a control code only where a terminal sends one: ctrl+# of a German layout
+    /// would stop the program unasked, ctrl+- answer its question. crossterm names ^\ to ^_
+    /// by the digits 4 to 7.
+    #[test]
+    fn ctrl_sends_only_the_control_codes_of_a_terminal() {
+        assert_eq!(Key::Ctrl('a').bytes(false), b"\x01");
+        assert_eq!(Key::Ctrl('z').bytes(false), b"\x1a");
+        assert_eq!(Key::Ctrl(' ').bytes(false), b"\x00");
+        assert_eq!(Key::Ctrl('\\').bytes(false), b"\x1c");
+        assert_eq!(Key::Ctrl('4').bytes(false), b"\x1c");
+        assert_eq!(Key::Ctrl('7').bytes(false), b"\x1f");
+        for c in ['#', '-', 'ä', 'ü', '<', 'с'] {
+            assert_eq!(Key::Ctrl(c).bytes(false), b"", "{c}");
+        }
     }
 
     #[test]

@@ -37,7 +37,9 @@ stamp() {
 
 # The tarball lies beside the PKGBUILD, where makepkg looks first and checks it
 # against the sum. As root, the container's, makepkg runs as a builder with a
-# home of its own for cargo.
+# home of its own for cargo, on a copy: the build runs the code of every crate,
+# and what root later pushes with the key stays out of its reach. What it
+# started ends with it, and only the package comes back, never a link.
 build() {
     local version="$1" out="$2" name url tar needed
     name="$(sed -n 's/^pkgname=//p' aur/PKGBUILD)"
@@ -51,8 +53,14 @@ build() {
         mapfile -t needed < <(sed -n 's/^\t\(make\)\?depends = //p' "${out}/.SRCINFO")
         pacman -S --needed --noconfirm -- "${needed[@]}"
         useradd --create-home builder
-        chown -R builder "$out"
-        (cd "$out" && runuser -u builder -- env HOME=/home/builder makepkg --noconfirm)
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        cp -r "$out" "${work}/package"
+        chown -R builder "$work"
+        (cd "${work}/package" && runuser -u builder -- env HOME=/home/builder makepkg --noconfirm)
+        pkill -KILL -u builder || [ "$?" -eq 1 ]
+        find "${work}/package" -maxdepth 1 -type f -name "${name}-${version}-*-x86_64.pkg.tar.zst" \
+            -exec install -m 644 -t "$out" -- {} +
     else
         (cd "$out" && makepkg --noconfirm)
     fi
@@ -61,7 +69,7 @@ build() {
 # A stamped folder in place of what the AUR has. The host key is the one whose
 # fingerprint https://aur.archlinux.org names.
 push() {
-    local dir name version install maintainer email
+    local dir name version install maintainer email there
     dir="$(cd "$1" && pwd)"
     name="$(sed -n 's/^pkgbase = //p' "${dir}/.SRCINFO")"
     version="$(sed -n 's/^\tpkgver = //p' "${dir}/.SRCINFO")"
@@ -86,6 +94,14 @@ push() {
     fi
     git clone --quiet "ssh://aur@aur.archlinux.org/${name}.git" "${work}/repo"
     cd "${work}/repo"
+    # A newer version there stays, as after a rerun for an older tag.
+    if [ -f .SRCINFO ]; then
+        there="$(sed -n 's/^\tpkgver = //p' .SRCINFO)"
+        if [ -n "$there" ] && [ "$(vercmp "$version" "$there")" -lt 0 ]; then
+            echo "aur: ${name} ${there} is newer than ${version}"
+            return 0
+        fi
+    fi
     # What is there goes first, so a file the release no longer has goes with it.
     git rm -q -r --ignore-unmatch -- .
     cp "${dir}/PKGBUILD" "${dir}/.SRCINFO" .

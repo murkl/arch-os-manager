@@ -16,9 +16,13 @@ op_diff() {
     esac
 }
 
-# The new version in place of the current one.
+# The new version in place of the current one. An account database or sudoers
+# as packaged locks the people out who are in the own one, so it is merged only.
 op_take() {
     update "$1"
+    case "${1%.pac*}" in
+    /etc/passwd | /etc/group | /etc/shadow | /etc/gshadow | /etc/sudoers) exit 14 ;;
+    esac
     if snapshots; then
         step snapshot
         sudo snapper -c root create --cleanup-algorithm number --description "system-manager: ${1%.pac*}"
@@ -54,8 +58,9 @@ op_merge() {
     */sudoers | */sudoers.d/*) sudo visudo --check --file "${work}/current" >/dev/null || exit 13 ;;
     esac
     # Written beside it with its owner and mode, then renamed over it, so nothing
-    # reads half a configuration. Its folder may be closed to the user.
-    meta="$(sudo stat -c '%a %u %g' -- "$target")"
+    # reads half a configuration. Its folder may be closed to the user. A link
+    # gives the owner and mode of its target, its own mode is 777.
+    meta="$(sudo stat -L -c '%a %u %g' -- "$target")"
     read -r mode owner group <<<"$meta"
     sudo install -m "$mode" -o "$owner" -g "$group" -- "${work}/current" "${target}.sm-new"
     sudo mv -f -- "${target}.sm-new" "$target"

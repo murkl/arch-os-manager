@@ -1,9 +1,12 @@
-# Pull requests are checked, and main weekly against today's Arch.
+# Pull requests and main are checked, main weekly also against today's Arch.
 
 name: CI
 
 on:
   pull_request:
+  # What main holds after a merge.
+  push:
+    branches: [main]
   # Arch moves daily: Monday's run catches an upstream break and fills the cache
   # pull requests start from.
   schedule:
@@ -44,9 +47,8 @@ jobs:
           persist-credentials: false
 
       # The compiler comes from today's Arch and keys the cache with the lock
-      # file: a cache built by another one is rebuilt whole. Pull requests only
-      # read, Monday's run on main writes, so every pull request starts from
-      # main's cache.
+      # file: a cache built by another one is rebuilt whole. Only Monday's run
+      # on main writes, the others read, so every run starts from main's cache.
       - id: rust
         run: echo "version=$(rustc -V | cut -d' ' -f2)" >>"$GITHUB_OUTPUT"
 
