@@ -7,6 +7,9 @@ ops:
   auth:
     title: Checking the password
     root: true
+  renew:
+    title: Renewing the sudo time stamp
+    root: true
   reboot:
     title: Restarting
     confirm: |

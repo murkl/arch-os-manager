@@ -33,6 +33,7 @@ operation() {
     fi
     shift
     sm_hold
+    sm_sudo
     if asks; then sm_terminal; fi
     "op_${name//-/_}" "$@"
 }
@@ -60,6 +61,23 @@ sm_hold() {
     if ! systemd-inhibit --list >/dev/null 2>&1; then return 0; fi
     systemd-inhibit --what=shutdown:sleep --mode=block --who="System Manager" --why="$SM_RUN" \
         tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
+}
+
+# A run that elevates with the password held gets it on fd 4 and fd 5, never on
+# the terminal, where any program of the run could ask for it in sudo's words.
+# sudo takes it from fd 4, and the program renews sudo's time stamp from fd 5
+# each minute while this shell lives. A refusal goes to fd 3 as `refused`, and
+# sudo then asks the person.
+sm_sudo() {
+    if [ "${SM_PASSWORD:-}" != on ]; then return 0; fi
+    unset SM_PASSWORD
+    if ! sudo --stdin --prompt= --validate <&4; then
+        printf 'refused\n' >&3
+    elif [ -n "${SM_PROGRAM:-}" ]; then
+        "$SM_PROGRAM" sudo-renew "$$" 60 "${BASH_SOURCE[0]%/*}/../system/system.sh" \
+            <&5 >/dev/null 2>&1 3>&- 4<&- 5<&- &
+    fi
+    exec 4<&- 5<&-
 }
 
 # The lock a run of this script holds, for a query to wait on, in this user's

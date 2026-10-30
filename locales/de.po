@@ -124,6 +124,9 @@ msgstr "Pakete werden geprüft"
 msgid "Checking the password"
 msgstr "Passwort wird geprüft"
 
+msgid "Renewing the sudo time stamp"
+msgstr "sudo-Zeitstempel wird erneuert"
+
 msgid "Checking sudo"
 msgstr "sudo wird geprüft"
 

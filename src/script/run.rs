@@ -141,6 +141,9 @@ impl Run {
                     self.found.push(item.to_string());
                 } else if line.starts_with("fail\t") && self.fail.is_none() {
                     self.fail = Some(line);
+                } else if line == "refused" {
+                    sudo::forget();
+                    self.rejected = true;
                 }
             }
             Event::Exit(code) => {
@@ -187,7 +190,8 @@ impl Run {
         }
         match &self.prompt {
             // Asked again right after an answer, sudo refused it, also where its words for
-            // that are its own. The password goes to the person, never twice unasked.
+            // that are its own. The held password reaches sudo through a pipe only, see
+            // session.rs, so the person answers the question.
             Some(Prompt::Password)
                 if recent
                     .iter()
@@ -197,13 +201,6 @@ impl Run {
             {
                 sudo::forget();
                 self.rejected = true;
-            }
-            Some(Prompt::Password) => {
-                if let Some(password) = sudo::get()
-                    && !self.session.echoes()
-                {
-                    self.send(&password, current);
-                }
             }
             Some(p) if !self.verbose && !self.handed => {
                 if let Some(answer) = p.automatic() {
@@ -518,7 +515,7 @@ mod tests {
     }
 
     /// A refusal in other words than sudo's own, as `Defaults insults` gives, is told by the
-    /// question coming again: the held password is not tried twice.
+    /// question coming again right after the person's answer.
     #[test]
     fn asks_the_person_after_a_refused_password_however_sudo_words_it() {
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -526,7 +523,7 @@ mod tests {
             sudo::REJECTED,
             "Have you considered trying to match wits with a rutabaga?",
         ] {
-            sudo::set("wrong".into());
+            sudo::forget();
             let (tx, rx) = mpsc::channel();
             let mut cmd = std::process::Command::new("bash");
             cmd.arg("-c")
@@ -536,13 +533,16 @@ mod tests {
             let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
             let mut run = Run::with(crate::script::op::SYSTEM_AUTH, session, (24, 80));
             let deadline = Instant::now() + Duration::from_secs(10);
-            let mut asked = false;
+            let (mut tried, mut asked) = (false, false);
             while run.result().is_none() && Instant::now() < deadline {
                 if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
                     run.on_event(e);
                 }
                 run.check_prompt();
-                if run.rejected && run.prompt == Some(Prompt::Password) && !asked {
+                if run.prompt == Some(Prompt::Password) && !tried {
+                    tried = true;
+                    run.answer("wrong");
+                } else if run.rejected && run.prompt == Some(Prompt::Password) && !asked {
                     asked = true;
                     run.answer("right");
                 }
@@ -557,32 +557,29 @@ mod tests {
         }
     }
 
+    /// The held password goes to sudo through a pipe only: any program of the run can print
+    /// sudo's prompt with echo off, and gets nothing.
     #[test]
-    fn hands_the_password_over_only_while_echo_is_off() {
+    fn never_types_the_held_password_into_the_terminal() {
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         sudo::set("s3cret word".into());
         let (_, out) = drive(
-            r#"stty -echo; printf '%s' "$SUDO_PROMPT"; read -r pw; stty echo; echo; [ "$pw" = "s3cret word" ] && echo accepted"#,
+            r#"stty -echo; printf '%s' "$SUDO_PROMPT"; read -r -t 2 pw || { echo; echo unanswered; }; [ -n "${pw:-}" ] && echo "got $pw""#,
         );
         sudo::forget();
-        assert!(out.contains("accepted"), "{out}");
-        assert!(
-            !out.contains("s3cret"),
-            "the password reached the output: {out}"
-        );
+        assert!(out.contains("unanswered"), "{out}");
+        assert!(!out.contains("s3cret"), "{out}");
     }
 
-    /// Asked again after the command's own output, as once its timestamp ran out, sudo gets the
-    /// held password again. Right after an answer, the same question is a refusal.
+    /// lib.sh tells of a password sudo refused from its pipe: it is forgotten, so no later run
+    /// tries it, and the person answers.
     #[test]
-    fn answers_sudo_again_once_other_output_came_between() {
+    fn a_password_refused_from_the_pipe_is_forgotten() {
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        sudo::set("pw".into());
-        let (_, out) = drive(
-            r#"stty -echo; for i in 1 2; do printf '%s' "$SUDO_PROMPT"; read -r p; echo; [ "$p" = pw ] && echo "got $i"; printf 'a\nb\nc\n'; done; stty echo"#,
-        );
-        sudo::forget();
-        assert!(out.contains("got 1") && out.contains("got 2"), "{out}");
+        sudo::set("old".into());
+        let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "repo", "");
+        run.on_event(Event::Script("refused".into()));
+        assert!(run.rejected && sudo::get().is_none());
     }
 
     #[test]

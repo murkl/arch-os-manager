@@ -86,7 +86,7 @@ Back after a success also closes the page the action came from.
 
 ### Password
 
-Asked once per session before the first elevated run and checked with `sudo --validate`. Skipped with `NOPASSWD`. Never sent empty, as pam_faillock counts empty attempts. Kept in memory only, never in a core dump, and answers every sudo prompt of the session, AUR helper included.
+Asked once per session before the first elevated run and checked with `sudo --validate`. Skipped with `NOPASSWD`. Never sent empty, as pam_faillock counts empty attempts. Kept in memory only, never in a core dump, and never typed into a terminal, where any program of a run could ask for it in sudo's words. Each elevated run hands it to `sudo --stdin --validate` through a pipe, and the program renews sudo's time stamp every minute while the run lasts, so the AUR helper is not asked either. A sudo prompt that comes all the same, as with `timestamp_timeout=0`, is answered by the person.
 
 ### Repair
 
@@ -241,7 +241,7 @@ One binary carries everything. Scripts are written per process to `$XDG_RUNTIME_
 flowchart LR
     R[Runtime] -->|area.sh op args| S[area.sh]
     S -->|stdout| R
-    S -->|"fd 3: step, found, terminal, fail"| R
+    S -->|"fd 3: step, found, terminal, fail, refused"| R
     S -.->|pseudo terminal| T[Terminal view]
 
     style R fill:#1793d1,stroke:#1793d1,color:#fff
@@ -295,6 +295,8 @@ Every text is English and translated in `locales/de.po`.
 | `SM_AUR` | AUR helper, empty for none |
 | `SM_AUR_REVIEW` | `off` builds without the helper's review, else with it |
 | `SM_FLATPAK` | `on` where Flatpak is installed and enabled, else `off` |
+| `SM_PASSWORD` | `on` where a run that elevates gets the password on fd 4 and fd 5, else unset |
+| `SM_PROGRAM` | This program, which renews sudo's time stamp for the run |
 | `SM_RUN` | Title of a run that elevates, else unset |
 | `SM_TERMINAL` | `on` with verbose output, else unset |
 | `SUDO_PROMPT` | Fixed prompt the runtime recognises |
