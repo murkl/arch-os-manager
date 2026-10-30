@@ -6,6 +6,9 @@ entry="${data}/applications/system-manager.desktop"
 theme="${data}/icons/hicolor"
 icon="${theme}/scalable/apps/system-manager.svg"
 symbolic="${theme}/symbolic/apps/system-manager-symbolic.svg"
+# Notifications show the Arch Linux mark of the package filesystem, the menu entry
+# its own icon.
+logo=/usr/share/pixmaps/archlinux-logo.svg
 units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 service="${units}/system-manager-notify.service"
 timer="${units}/system-manager-notify.timer"
@@ -171,7 +174,7 @@ op_notify() {
     server="$(server)" || server=""
     scratch
     mkfifo "${work}/id"
-    timeout "$4" notify-send --app-name="System Manager" --icon=system-manager \
+    timeout "$4" notify-send --app-name="System Manager" --icon="$logo" \
         --hint=string:desktop-entry:system-manager --wait ${3:+"--action=open=$3"} \
         --id-fd=4 -- "$1" "$2" 4>"${work}/id" >"${work}/action" &
     waiting=$!

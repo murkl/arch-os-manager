@@ -792,6 +792,20 @@ fn a_notification_names_the_menu_entry_for_its_icon() {
     );
 }
 
+#[test]
+fn a_notification_shows_the_arch_logo_not_the_app_icon() {
+    let s = Sandbox::new("notify-logo");
+    s.stub("notify-send", "");
+    let o = s.run("desktop", &["notify", "Title", "Text", "Open", "1"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls
+            .contains(" --icon=/usr/share/pixmaps/archlinux-logo.svg "),
+        "{}",
+        o.calls
+    );
+}
+
 /// GSettings as a file of key and value, read back as it was written.
 const GSETTINGS: &str = r#"store="${HOME}/gsettings"
 case "$3" in
