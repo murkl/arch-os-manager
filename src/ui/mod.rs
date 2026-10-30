@@ -127,9 +127,21 @@ impl Key {
             )
     }
 
-    /// The bytes a terminal sends for the key, for the details view of a run.
-    pub fn bytes(self) -> Vec<u8> {
+    /// The bytes a terminal sends for the key, for the details view of a run. `application` is
+    /// the cursor key mode a program sets, as less does, which reads arrows only in it.
+    pub fn bytes(self, application: bool) -> Vec<u8> {
         match self {
+            Key::Up | Key::Down | Key::Right | Key::Left | Key::Home | Key::End if application => {
+                let last = match self {
+                    Key::Up => b'A',
+                    Key::Down => b'B',
+                    Key::Right => b'C',
+                    Key::Left => b'D',
+                    Key::Home => b'H',
+                    _ => b'F',
+                };
+                vec![0x1b, b'O', last]
+            }
             Key::Char(c) => c.to_string().into_bytes(),
             Key::Ctrl(c) => vec![(c.to_ascii_lowercase() as u8) & 0x1f],
             Key::Enter => b"\r".to_vec(),
@@ -332,6 +344,10 @@ pub trait Page {
     }
     fn run(&mut self, _event: script::Event, _ctx: &mut Ctx) -> Flow {
         Flow::Stay
+    }
+    /// Takes pasted text as a whole, else it is typed where a text box has the keys.
+    fn paste(&mut self, _text: &str, _ctx: &mut Ctx) -> bool {
+        false
     }
     fn tick(&mut self, _ctx: &mut Ctx) -> Flow {
         Flow::Stay
@@ -599,6 +615,22 @@ impl Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// less sets the application mode and takes `ESC [ B` for nothing. Checked against less 710.
+    #[test]
+    fn arrows_follow_the_cursor_key_mode_a_program_sets() {
+        assert_eq!(Key::Down.bytes(false), b"\x1b[B");
+        assert_eq!(Key::Down.bytes(true), b"\x1bOB");
+        assert_eq!(Key::Home.bytes(true), b"\x1bOH");
+        assert_eq!(Key::End.bytes(true), b"\x1bOF");
+        assert_eq!(
+            Key::CtrlLeft.bytes(true),
+            b"\x1b[1;5D",
+            "a modifier keeps its form"
+        );
+        assert_eq!(Key::PageDown.bytes(true), b"\x1b[6~");
+        assert_eq!(Key::Char('q').bytes(true), b"q");
+    }
 
     #[test]
     fn a_beat_falls_on_the_grid_whenever_it_is_asked_for() {

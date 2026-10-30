@@ -10,10 +10,14 @@ pub enum Source {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Update {
     pub source: Source,
+    /// The package, or the Flatpak's id, as `id//branch` where it is pending in two branches.
     pub name: String,
     /// Empty where the source does not say.
     pub old: String,
     pub new: String,
+    /// The name Flatpak shows, and the branch. Empty for a package.
+    pub title: String,
+    pub branch: String,
 }
 
 /// What updates.sh found, and the sources it could not ask.
@@ -34,13 +38,16 @@ pub fn parse(out: &str) -> Pending {
     for line in out.lines() {
         match line.split('\t').collect::<Vec<_>>()[..] {
             ["failed", s] => pending.failed.extend(source(s)),
-            [s, name, ref versions @ ..] => {
+            [s, name, ref rest @ ..] => {
                 if let Some(source) = source(s) {
+                    let field = |i: usize| rest.get(i).unwrap_or(&"").to_string();
                     pending.updates.push(Update {
                         source,
                         name: name.to_string(),
-                        old: versions.first().unwrap_or(&"").to_string(),
-                        new: versions.get(1).unwrap_or(&"").to_string(),
+                        old: field(0),
+                        new: field(1),
+                        title: field(2),
+                        branch: field(3),
                     });
                 }
             }
@@ -50,8 +57,9 @@ pub fn parse(out: &str) -> Pending {
     pending
 }
 
-/// checkupdates format for `system-manager check`, an AUR package as `aur/name`. An unknown version
-/// is `?`, as arch-update counts only lines with a word on each side of the arrow.
+/// checkupdates format for `system-manager check`, an AUR package as `aur/name`, a Flatpak as
+/// `flatpak/id`. An unknown version is `?`, as arch-update counts only lines with a word on each
+/// side of the arrow.
 pub fn checkupdates_format(updates: &[Update]) -> String {
     fn known(v: &str) -> &str {
         if v.is_empty() { "?" } else { v }
@@ -59,7 +67,11 @@ pub fn checkupdates_format(updates: &[Update]) -> String {
     updates
         .iter()
         .map(|u| {
-            let source = if u.source == Source::Aur { "aur/" } else { "" };
+            let source = match u.source {
+                Source::Repo => "",
+                Source::Aur => "aur/",
+                Source::Flatpak => "flatpak/",
+            };
             format!(
                 "{source}{} {} -> {}\n",
                 u.name,
@@ -77,7 +89,7 @@ mod tests {
     #[test]
     fn reads_all_sources_and_prints_an_unknown_version_as_a_question_mark() {
         let pending = parse(
-            "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\naur\tparu\t2.0.0-1\t2.1.0-1\nflatpak\tcom.x.App\t\t\n",
+            "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\naur\tparu\t2.0.0-1\t2.1.0-1\nflatpak\tcom.x.App\t\t\tApp One\tstable\n",
         );
         assert!(pending.failed.is_empty());
         let u = pending.updates;
@@ -88,13 +100,20 @@ mod tests {
                 source: Source::Repo,
                 name: "linux-zen".into(),
                 old: "7.2.8.zen1-1".into(),
-                new: "7.2.9.zen1-1".into()
+                new: "7.2.9.zen1-1".into(),
+                title: String::new(),
+                branch: String::new(),
             }
         );
-        assert_eq!((u[2].source, u[2].new.as_str()), (Source::Flatpak, ""));
+        let app = &u[2];
+        assert_eq!((app.source, app.new.as_str()), (Source::Flatpak, ""));
+        assert_eq!(
+            (app.title.as_str(), app.branch.as_str()),
+            ("App One", "stable")
+        );
         assert_eq!(
             checkupdates_format(&u),
-            "linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1\naur/paru 2.0.0-1 -> 2.1.0-1\ncom.x.App ? -> ?\n"
+            "linux-zen 7.2.8.zen1-1 -> 7.2.9.zen1-1\naur/paru 2.0.0-1 -> 2.1.0-1\nflatpak/com.x.App ? -> ?\n"
         );
     }
 

@@ -2,8 +2,8 @@
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
 # What an update would bring: repo, aur or flatpak, the name, the version now and the
-# one to come. A source that cannot be asked is a line `failed` and its name, so the
-# others still count.
+# one to come, for Flatpak then the name it shows and the branch. A source that cannot
+# be asked is a line `failed` and its name, so the others still count.
 op_list() {
     # checkupdates syncs a copy of the databases, so nothing half-synced is
     # left, and ends with 2 when nothing is pending. Two at once, as the timer
@@ -32,20 +32,22 @@ op_list() {
         done <<<"$pending"
     fi
 
-    # A version is often missing or unchanged, a commit never, and read collapses empty
-    # fields between tabs, so the version comes last. A name pending in two branches,
-    # as a runtime may be, carries its branch.
+    # A version is often missing or unchanged, a commit and a name never, and read
+    # collapses empty fields between tabs, so the version comes last. An app without a
+    # name of its own gets the end of its id from Flatpak, as Compat.i386 is i386. An
+    # id pending in two branches, as a runtime may be, carries its branch.
     if [ "$SM_FLATPAK" = on ]; then
-        local installed app arch branch commit version ref old new name
-        local -A versions commits pending_in
-        if ! installed="$(flatpak list --columns=application,arch,branch,active,version)" ||
+        local installed app arch branch commit title version ref old new name
+        local -A versions commits titles pending_in
+        if ! installed="$(flatpak list --columns=application,arch,branch,active,name,version)" ||
             ! apps="$(flatpak remote-ls --updates --columns=application,arch,branch,commit,version)"; then
             printf 'failed\tflatpak\n'
             return 0
         fi
-        while IFS=$'\t' read -r app arch branch commit version; do
+        while IFS=$'\t' read -r app arch branch commit title version; do
             versions["$app/$arch/$branch"]="$version"
             commits["$app/$arch/$branch"]="$commit"
+            titles["$app/$arch/$branch"]="$title"
         done <<<"$installed"
         while IFS=$'\t' read -r app _; do
             if [ -n "$app" ]; then pending_in["$app"]=$((${pending_in["$app"]:-0} + 1)); fi
@@ -59,7 +61,7 @@ op_list() {
             fi
             name="$app"
             if [ "${pending_in[$app]}" -gt 1 ]; then name="${app}//${branch}"; fi
-            printf 'flatpak\t%s\t%s\t%s\n' "$name" "$old" "$new"
+            printf 'flatpak\t%s\t%s\t%s\t%s\t%s\n' "$name" "$old" "$new" "${titles[$ref]-}" "$branch"
         done <<<"$apps"
     fi
 }

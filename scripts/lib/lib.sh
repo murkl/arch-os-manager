@@ -140,13 +140,15 @@ aur() {
 
 # The helper on AUR packages. With its review, on unless $SM_AUR_REVIEW is off,
 # and in verbose output, the person answers it on the terminal, which the
-# runtime shows from the line `terminal` on fd 3. Else it goes without the
-# review and the menus a run cannot answer.
+# runtime shows from the line `terminal on` on fd 3 until `terminal off`. Else
+# it goes without the review and the menus a run cannot answer.
 aur_sync() {
+    local status=0
     if asks || [ "${SM_AUR_REVIEW:-on}" != off ]; then
-        printf 'terminal\n' >&3
-        aur "$@"
-        return
+        printf 'terminal\ton\n' >&3
+        aur "$@" || status=$?
+        printf 'terminal\toff\n' >&3
+        return "$status"
     fi
     case "$SM_AUR" in
     paru) aur --skipreview "$@" ;;

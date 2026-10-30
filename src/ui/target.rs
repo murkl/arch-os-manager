@@ -30,7 +30,6 @@ pub enum Target {
     Flatpak,
     Notifications,
     Desktop,
-    Hidden,
     Features,
     About,
 }
@@ -57,7 +56,6 @@ pub const SETTINGS: &[&[Target]] = &[
         Target::Usage,
         Target::Status,
         Target::Output,
-        Target::Hidden,
     ],
     &[
         Target::AurHelper,
@@ -88,7 +86,6 @@ pub const ALL: &[Target] = &[
     Target::Usage,
     Target::Status,
     Target::Output,
-    Target::Hidden,
     Target::AurHelper,
     Target::AurReview,
     Target::Flatpak,
@@ -124,7 +121,6 @@ impl Target {
             Target::Flatpak => "flatpak",
             Target::Notifications => "notifications",
             Target::Desktop => "desktop",
-            Target::Hidden => "hidden",
             Target::Features => "features",
             Target::About => "about",
         }
@@ -158,7 +154,6 @@ impl Target {
             Target::Flatpak => t("Flatpak updates"),
             Target::Notifications => t("Update notification"),
             Target::Desktop => t("App menu entry"),
-            Target::Hidden => t("Hidden messages"),
             Target::Features => t("Optional packages"),
             Target::About => t("About"),
         }
@@ -189,7 +184,6 @@ impl Target {
             Target::Flatpak => icon::APP,
             Target::Notifications => icon::NOTIFICATION,
             Target::Desktop => icon::APP_MENU,
-            Target::Hidden => icon::HIDDEN,
             Target::Features => icon::OPTIONAL,
             Target::About => icon::ABOUT,
         }
@@ -243,7 +237,6 @@ impl Target {
             Target::Settings => Box::new(pages::settings::SettingsPage::new(None)),
             Target::Features => Box::new(pages::features::FeaturesPage::new(None)),
             Target::About => Box::new(pages::settings::AboutPage::new()),
-            Target::Hidden => Box::new(pages::log::HiddenPage::new()),
             Target::Language
             | Target::Theme
             | Target::AurHelper

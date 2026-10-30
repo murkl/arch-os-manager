@@ -5,12 +5,17 @@ use std::time::{Duration, Instant};
 
 use super::lines::Lines;
 use super::session::{Event, Session};
-use super::{Failure, Op, Progress, Prompt, sudo};
+use super::{Failure, Op, Progress, Prompt, prompt, sudo};
 use crate::i18n::t;
 
 const KEEP: usize = 300;
 /// Output can trail the exit by a moment. The result waits for it.
 const SETTLE: Duration = Duration::from_millis(250);
+/// Lines the terminal keeps above its screen.
+const HISTORY: usize = 1000;
+/// How long an unfinished line stands still before it counts as a question in unknown words.
+/// Output pauses mid-line for a moment at most, a program waits for its answer far longer.
+const QUIET: Duration = Duration::from_secs(1);
 
 pub struct Run {
     pub op: Op,
@@ -27,14 +32,19 @@ pub struct Run {
     pub prompt: Option<Prompt>,
     /// sudo refused the last password.
     pub rejected: bool,
-    /// Verbose output, or the script handed over to the person: every prompt is typed.
-    terminal: bool,
-    /// The script asked for the terminal to be shown, as an AUR helper's review needs.
+    /// Verbose output: every prompt is typed.
+    verbose: bool,
+    /// The script handed the terminal to the person, as an AUR helper's review needs, until it
+    /// takes it back. Every prompt is typed meanwhile.
     pub handed: bool,
     fail: Option<String>,
     exit: Option<(i32, Instant)>,
     /// The unfinished line last answered, so it is answered once.
     answered: Option<String>,
+    /// When output came last.
+    heard: Instant,
+    /// The unfinished line that asks in words not known here, until a line ends.
+    asked: Option<String>,
 }
 
 impl Run {
@@ -47,7 +57,7 @@ impl Run {
         crate::info!("run {op} {args:?}");
         let session = Session::start(op, args, size, sink).map_err(|e| Failure::new(op, e))?;
         let mut run = Run::with(op, session, size);
-        run.terminal = super::terminal();
+        run.verbose = super::terminal();
         Ok(run)
     }
 
@@ -78,7 +88,7 @@ impl Run {
         Run {
             op,
             session,
-            screen: vt100::Parser::new(size.0.max(1), size.1.max(1), 0),
+            screen: vt100::Parser::new(size.0.max(1), size.1.max(1), HISTORY),
             lines: Lines::default(),
             recent: VecDeque::new(),
             progress: Progress::default(),
@@ -86,22 +96,26 @@ impl Run {
             found: Vec::new(),
             prompt: None,
             rejected: false,
-            terminal: false,
+            verbose: false,
             handed: false,
             fail: None,
             exit: None,
             answered: None,
+            heard: Instant::now(),
+            asked: None,
         }
     }
 
     pub fn on_event(&mut self, event: Event) {
         match event {
             Event::Output(bytes) => {
+                self.heard = Instant::now();
                 self.screen.process(&bytes);
                 let done = self.lines.feed(&bytes);
                 // A finished line closes the question answered: the same may come again.
                 if !done.is_empty() {
                     self.answered = None;
+                    self.asked = None;
                 }
                 for line in done {
                     if line.contains(sudo::REJECTED) {
@@ -121,9 +135,8 @@ impl Run {
                 if let Some(key) = line.strip_prefix("step\t") {
                     crate::info!("{}: step {key}", self.op);
                     self.step = self.op.meta().steps.get(key).map(|s| t(s).to_string());
-                } else if line == "terminal" {
-                    self.terminal = true;
-                    self.handed = true;
+                } else if let Some(state) = line.strip_prefix("terminal\t") {
+                    self.handed = state == "on";
                 } else if let Some(item) = line.strip_prefix("found\t") {
                     self.found.push(item.to_string());
                 } else if line.starts_with("fail\t") && self.fail.is_none() {
@@ -134,21 +147,44 @@ impl Run {
                 crate::info!("{}: exit {code}", self.op);
                 self.exit = Some((code, Instant::now()));
                 self.prompt = None;
+                self.handed = false;
+                self.asked = None;
             }
         }
     }
 
-    /// Looks at the unfinished line, on every tick too, since sudo silences echo just before asking.
+    /// Looks at the unfinished line, on every tick too, since sudo silences echo just before asking
+    /// and a question in unknown words shows only by standing still.
     pub fn check_prompt(&mut self) {
+        self.check_at(Instant::now());
+    }
+
+    /// As `check_prompt` at `now`, which a test sets.
+    pub fn check_at(&mut self, now: Instant) {
         if self.exit.is_some() {
             return;
         }
         let current = self.lines.current();
+        // What the person types after it belongs to the question.
+        if self.asked.as_ref().is_some_and(|q| !current.starts_with(q)) {
+            self.asked = None;
+        }
         if self.answered.as_ref() == Some(&current) {
             return;
         }
         let recent: Vec<String> = self.recent.iter().rev().take(12).rev().cloned().collect();
         self.prompt = Prompt::detect(&current, &recent);
+        // On a terminal shown anyway the person sees every question.
+        if !self.verbose
+            && !self.handed
+            && self.prompt.is_none()
+            && self.asked.is_none()
+            && prompt::asks(&current)
+            && now.saturating_duration_since(self.heard) >= QUIET
+        {
+            crate::info!("{}: waits on {current:?}", self.op);
+            self.asked = Some(current.clone());
+        }
         match &self.prompt {
             // Asked again right after an answer, sudo refused it, also where its words for
             // that are its own. The password goes to the person, never twice unasked.
@@ -169,7 +205,7 @@ impl Run {
                     self.send(&password, current);
                 }
             }
-            Some(p) if !self.terminal => {
+            Some(p) if !self.verbose && !self.handed => {
                 if let Some(answer) = p.automatic() {
                     crate::info!("{}: answered {answer:?} to {current:?}", self.op);
                     self.send(answer, current);
@@ -203,9 +239,38 @@ impl Run {
         self.send(text, line);
     }
 
-    /// Keys typed into the details view go straight to the terminal.
-    pub fn type_bytes(&self, bytes: &[u8]) {
+    /// A question in words not known here waits on the terminal.
+    pub fn waiting(&self) -> bool {
+        self.asked.is_some()
+    }
+
+    /// Keys typed into the details view go straight to the terminal, whose view comes back from
+    /// the history.
+    pub fn type_bytes(&mut self, bytes: &[u8]) {
+        self.screen.screen_mut().set_scrollback(0);
         self.session.write(bytes);
+    }
+
+    /// Pasted text, as one.
+    pub fn paste(&mut self, text: &str) {
+        let text = pasted(text, self.screen.screen().bracketed_paste());
+        self.type_bytes(text.as_bytes());
+    }
+
+    /// Moves the view up the history by `lines`, down where negative. Clamped to what it holds.
+    pub fn scroll(&mut self, lines: isize) {
+        let screen = self.screen.screen_mut();
+        screen.set_scrollback(screen.scrollback().saturating_add_signed(lines));
+    }
+
+    /// How far up the history the view stands, and how far the history reaches.
+    pub fn history(&mut self) -> (usize, usize) {
+        let screen = self.screen.screen_mut();
+        let at = screen.scrollback();
+        screen.set_scrollback(usize::MAX);
+        let reach = screen.scrollback();
+        screen.set_scrollback(at);
+        (at, reach)
     }
 
     pub fn interrupt(&self) {
@@ -260,6 +325,21 @@ impl Run {
     }
 }
 
+/// Pasted text as a terminal hands it on: a line break as enter, no other control character,
+/// marked as pasted where the program asks for that. Without escape no text ends the mark early.
+fn pasted(text: &str, bracketed: bool) -> String {
+    let text: String = text
+        .replace("\r\n", "\r")
+        .replace('\n', "\r")
+        .chars()
+        .filter(|c| !c.is_control() || matches!(c, '\r' | '\t'))
+        .collect();
+    match bracketed {
+        true => format!("\x1b[200~{text}\x1b[201~"),
+        false => text,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,9 +363,10 @@ mod tests {
         (run, text.join("\n"))
     }
 
-    /// Once the script hands over, no question is answered for the person any more.
+    /// While the script hands over, no question is answered for the person. Once it takes the
+    /// terminal back, the confirmation given before the run answers again.
     #[test]
-    fn after_the_hand_over_the_person_answers_every_question() {
+    fn during_the_hand_over_the_person_answers_every_question() {
         let (tx, rx) = mpsc::channel();
         let mut cmd = std::process::Command::new("bash");
         cmd.arg("-c").arg(
@@ -293,7 +374,7 @@ mod tests {
         );
         let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
         let mut run = Run::with(crate::script::op::UPGRADE_RUN, session, (24, 80));
-        run.on_event(Event::Script("terminal".into()));
+        run.on_event(Event::Script("terminal\ton".into()));
         assert!(run.handed);
         let deadline = Instant::now() + Duration::from_secs(10);
         while run.result().is_none() && Instant::now() < deadline {
@@ -306,6 +387,77 @@ mod tests {
             run.recent.iter().any(|l| l == "unanswered"),
             "{:?}",
             run.recent
+        );
+        let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "aur", "");
+        run.on_event(Event::Script("terminal\ton".into()));
+        run.on_event(Event::Script("terminal\toff".into()));
+        assert!(!run.handed);
+        run.on_event(Event::Output(
+            b":: Proceed with installation? [Y/n] ".to_vec(),
+        ));
+        assert_eq!(run.prompt, None, "answered");
+        assert!(run.answered.is_some());
+    }
+
+    /// A question in words not known here shows once its line stands still: a bar that does,
+    /// typing after it, and a finished line do not.
+    #[test]
+    fn a_question_in_unknown_words_waits_once_its_line_stands_still() {
+        let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "aur", "Name of the key: ");
+        let at = run.heard;
+        run.check_at(at);
+        assert!(!run.waiting(), "not yet still");
+        run.check_at(at + QUIET);
+        assert!(run.waiting());
+        run.on_event(Event::Output(b"ab".to_vec()));
+        run.check_at(at + QUIET);
+        assert!(run.waiting(), "typed after the question");
+        run.on_event(Event::Output(b"\r\n".to_vec()));
+        run.check_at(Instant::now() + 2 * QUIET);
+        assert!(!run.waiting(), "answered");
+        for line in [
+            "( 1/2) upgrading firefox   [######------]  50%",
+            "Downloading\u{2026}  [*******     ]",
+            "Proceed? [Y/n] ",
+        ] {
+            let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "repo", line);
+            run.check_at(run.heard + 10 * QUIET);
+            assert!(!run.waiting(), "{line}");
+        }
+        let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "aur", "");
+        run.on_event(Event::Script("terminal\ton".into()));
+        run.on_event(Event::Output(b":".to_vec()));
+        run.check_at(run.heard + 10 * QUIET);
+        assert!(!run.waiting(), "handed over, the terminal shows anyway");
+    }
+
+    #[test]
+    fn the_history_keeps_what_scrolled_off_and_a_key_returns_to_the_screen() {
+        let lines: String = (0..100).map(|i| format!("line {i}\r\n")).collect();
+        let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "aur", &lines);
+        let (at, reach) = run.history();
+        assert_eq!((at, reach), (0, 77));
+        run.scroll(3);
+        assert_eq!(run.history(), (3, 77));
+        assert!(
+            run.screen().contents().starts_with("line 74"),
+            "{}",
+            run.screen().contents()
+        );
+        run.scroll(-10);
+        assert_eq!(run.history().0, 0);
+        run.scroll(3);
+        run.type_bytes(b"q");
+        assert_eq!(run.history().0, 0);
+    }
+
+    #[test]
+    fn pasted_text_breaks_lines_as_enter_and_carries_no_escape() {
+        assert_eq!(pasted("a\r\nb\nc\td", false), "a\rb\rc\td");
+        assert_eq!(
+            pasted("x\x1b[201~rm", true),
+            "\x1b[200~x[201~rm\x1b[201~",
+            "no end mark from the text"
         );
     }
 
@@ -336,7 +488,7 @@ mod tests {
         );
         let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
         let mut run = Run::with(crate::script::op::UPGRADE_RUN, session, (24, 80));
-        run.terminal = true;
+        run.verbose = true;
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut asked = false;
         while run.result().is_none() && Instant::now() < deadline {

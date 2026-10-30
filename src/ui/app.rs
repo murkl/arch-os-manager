@@ -159,13 +159,16 @@ impl App {
             Msg::Loaded(id) => self.ctx.loads.retain(|l| l.id != id),
             Msg::Usage(usage) => self.ctx.usage = Some(usage),
             Msg::Legacy(legacy) => self.legacy(legacy),
-            // Elsewhere its letters would be commands, a q among them.
-            Msg::Paste(text) if typing => {
-                for c in text.chars().filter(|c| !c.is_control()) {
-                    self.handle(Msg::Key(Key::Char(c)));
+            Msg::Paste(text) => {
+                self.ctx.page = top;
+                let (_, page) = self.pages.last_mut().expect("the start page stays");
+                // Elsewhere its letters would be commands, a q among them.
+                if !page.paste(&text, &mut self.ctx) && typing {
+                    for c in text.chars().filter(|c| !c.is_control()) {
+                        self.handle(Msg::Key(Key::Char(c)));
+                    }
                 }
             }
-            Msg::Paste(_) => {}
         }
         if self.ctx.reload && self.ctx.loads.is_empty() {
             self.ctx.reload = false;
@@ -588,6 +591,12 @@ pub mod tests {
         }
     }
 
+    /// An event of the run the page on top started.
+    pub fn tell(app: &mut App, event: crate::script::Event) {
+        let id = app.pages.last().expect("the start page stays").0;
+        app.handle(Msg::Run(id, event));
+    }
+
     #[test]
     fn typing_puts_the_terminals_cursor_after_the_text() {
         let (mut app, mut term) = app();
@@ -626,7 +635,7 @@ pub mod tests {
             ..System::default()
         });
         s.updates = Loaded::Ready(updates::parse(
-            "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\nrepo\tmesa\t1:26.2.3-1\t1:26.2.4-1\nrepo\tfirefox\t144.0-1\t144.0.1-1\nrepo\tsystemd\t258.1-1\t258.2-1\naur\tparu\t2.1.0-1\t2.1.1-1\nflatpak\tcom.github.tchx84.Flatseal\t2.4.0\t2.4.1\n",
+            "repo\tlinux-zen\t7.2.8.zen1-1\t7.2.9.zen1-1\nrepo\tmesa\t1:26.2.3-1\t1:26.2.4-1\nrepo\tfirefox\t144.0-1\t144.0.1-1\nrepo\tsystemd\t258.1-1\t258.2-1\naur\tparu\t2.1.0-1\t2.1.1-1\nflatpak\tcom.github.tchx84.Flatseal\t2.4.0\t2.4.1\tFlatseal\tstable\n",
         ));
         let item = |title: &str, date: &str, link: &str| Item {
             title: title.into(),
@@ -1020,9 +1029,16 @@ pub mod tests {
         assert!(Key::Backspace.repeats(true) && Key::Down.repeats(true));
         assert!(Key::Left.repeats(true) && Key::CtrlBackspace.repeats(true));
         assert!(!Key::Left.repeats(false), "back happens once");
-        assert!(Key::WheelUp.bytes().is_empty(), "the wheel types nothing");
-        assert_eq!(Key::CtrlBackspace.bytes(), b"\x08", "as terminals send it");
-        assert_eq!(Key::CtrlLeft.bytes(), b"\x1b[1;5D");
+        assert!(
+            Key::WheelUp.bytes(false).is_empty(),
+            "the wheel types nothing"
+        );
+        assert_eq!(
+            Key::CtrlBackspace.bytes(false),
+            b"\x08",
+            "as terminals send it"
+        );
+        assert_eq!(Key::CtrlLeft.bytes(false), b"\x1b[1;5D");
     }
 
     #[test]

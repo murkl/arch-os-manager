@@ -5,18 +5,22 @@ use ratatui::layout::Rect;
 
 use super::news::{NewsPage, unread};
 use super::run::{Job, start};
-use crate::data::updates::Source;
+use crate::data::updates::{Source, Update};
 use crate::i18n::{t, tf, tn};
 use crate::script::op;
 use crate::ui::detail::{Act, Block, Detail, done};
 use crate::ui::draw::waiting;
 use crate::ui::icon;
+use crate::ui::input::Input;
 use crate::ui::list::{Lead, changes};
-use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
+use crate::ui::{Ctx, Does, Flow, Key, Loaded, Nav, Page, Tone};
 
 pub struct UpgradePage {
     detail: Detail,
     focused: bool,
+    /// The box that narrows the updates to the names holding its text, and what it lets through,
+    /// in a view of its own without the actions, so enter starts no update.
+    filter: Option<(Input, Detail)>,
 }
 
 impl UpgradePage {
@@ -24,10 +28,26 @@ impl UpgradePage {
         UpgradePage {
             detail: Detail::default(),
             focused: false,
+            filter: None,
         }
     }
 
+    /// Whether there are updates to filter.
+    fn filterable(ctx: &Ctx) -> bool {
+        ctx.shared
+            .updates
+            .ready()
+            .is_some_and(|p| !p.updates.is_empty())
+    }
+
     fn build(&mut self, ctx: &Ctx) {
+        if let Some((input, shown)) = &mut self.filter {
+            let mut body = sections(ctx, &input.text.trim().to_lowercase());
+            if body.is_empty() {
+                body.push(Block::Text(t("No matches").into(), Tone::Muted));
+            }
+            shown.set(body, Vec::new());
+        }
         let mut body = Vec::new();
         let news = unread(ctx);
         if news > 0 {
@@ -73,40 +93,11 @@ impl UpgradePage {
                     ));
                     body.push(Block::Blank);
                 }
-                let list = &pending.updates;
-                if list.is_empty() && pending.failed.is_empty() {
+                if pending.updates.is_empty() && pending.failed.is_empty() {
                     known_current = true;
                     body.push(done(t("The system is up to date.")));
                 }
-                let pairs: Vec<_> = list.iter().map(|u| (&*u.old, &*u.new)).collect();
-                let change = changes(&pairs, ctx.style.glyphs.arrow);
-                for (source, heading, glyph) in [
-                    (Source::Repo, t("Official packages"), icon::PACKAGE),
-                    (Source::Aur, "AUR", icon::ARCH),
-                    (Source::Flatpak, "Flatpak", icon::APP),
-                ] {
-                    let part: Vec<_> = list
-                        .iter()
-                        .zip(&change)
-                        .filter(|(u, _)| u.source == source)
-                        .collect();
-                    if part.is_empty() {
-                        continue;
-                    }
-                    body.push(Block::Styled(vec![vec![
-                        (heading.to_string(), Tone::Normal, true),
-                        (format!(" ({})", part.len()), Tone::Muted, false),
-                    ]]));
-                    for (u, change) in part {
-                        let (was, becomes) = change.clone();
-                        body.push(Block::Row(
-                            Lead::Icon(glyph, Tone::Muted),
-                            vec![(u.name.clone(), Tone::Normal)],
-                            vec![(was, Tone::Muted), (becomes, Tone::Accent)],
-                        ));
-                    }
-                    body.push(Block::Blank);
-                }
+                body.extend(sections(ctx, ""));
             }
         }
         let mut acts = Vec::new();
@@ -159,14 +150,35 @@ impl Page for UpgradePage {
             return;
         }
         self.build(ctx);
-        self.detail.draw(area, buf, ctx);
+        let Some((input, shown)) = &mut self.filter else {
+            self.detail.draw(area, buf, ctx);
+            return;
+        };
+        input.draw(buf, area.x, area.y, area.width, ctx);
+        let below = Rect::new(
+            area.x,
+            area.y + 2,
+            area.width,
+            area.height.saturating_sub(2),
+        );
+        shown.draw(below, buf, ctx);
     }
 
     fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
         if self.animating(ctx) {
             return vec![("esc", Does::Back)];
         }
-        self.detail.hints()
+        if let Some((_, shown)) = &self.filter {
+            let mut h = shown.hints();
+            let esc = h.len() - 1;
+            h[esc].1 = Does::CloseFilter;
+            return h;
+        }
+        let mut h = self.detail.hints();
+        if UpgradePage::filterable(ctx) {
+            h.insert(h.len() - 1, ("f", Does::Filter));
+        }
+        h
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -174,7 +186,27 @@ impl Page for UpgradePage {
             return Flow::Ignored;
         }
         self.build(ctx);
+        if let Some((input, shown)) = &mut self.filter {
+            match key.nav(true) {
+                Some(Nav::Back) => self.filter = None,
+                Some(Nav::Open) => {}
+                Some(Nav::Quit) => return Flow::Ignored,
+                Some(_) => return shown.key(key, ctx),
+                None => {
+                    input.key(key);
+                }
+            }
+            return Flow::Stay;
+        }
+        if key.nav(false) == Some(Nav::Filter) && UpgradePage::filterable(ctx) {
+            self.filter = Some((Input::new(t("Filter")), Detail::default()));
+            return Flow::Stay;
+        }
         self.detail.key(key, ctx)
+    }
+
+    fn typing(&self) -> bool {
+        self.filter.is_some()
     }
 
     fn animating(&self, ctx: &Ctx) -> bool {
@@ -182,10 +214,86 @@ impl Page for UpgradePage {
     }
 }
 
+/// The updates by source, each under its heading with its count, those holding `query` in what
+/// the row shows or in their name only.
+fn sections(ctx: &Ctx, query: &str) -> Vec<Block> {
+    let Some(pending) = ctx.shared.updates.ready() else {
+        return Vec::new();
+    };
+    let list = &pending.updates;
+    // The arrows keep their column while the filter narrows the rows.
+    let pairs: Vec<_> = list.iter().map(|u| (&*u.old, &*u.new)).collect();
+    let change = changes(&pairs, ctx.style.glyphs.arrow);
+    let shown = labels(list);
+    let mut body = Vec::new();
+    for (source, heading, glyph) in [
+        (Source::Repo, t("Official packages"), icon::PACKAGE),
+        (Source::Aur, "AUR", icon::ARCH),
+        (Source::Flatpak, "Flatpak", icon::APP),
+    ] {
+        let part: Vec<_> = list
+            .iter()
+            .zip(&change)
+            .zip(&shown)
+            .filter(|((u, _), label)| {
+                u.source == source
+                    && [&u.name, *label]
+                        .iter()
+                        .any(|s| s.to_lowercase().contains(query))
+            })
+            .collect();
+        if part.is_empty() {
+            continue;
+        }
+        body.push(Block::Styled(vec![vec![
+            (heading.to_string(), Tone::Normal, true),
+            (format!(" ({})", part.len()), Tone::Muted, false),
+        ]]));
+        for ((_, change), label) in part {
+            let (was, becomes) = change.clone();
+            body.push(Block::Row(
+                Lead::Icon(glyph, Tone::Muted),
+                vec![(label.clone(), Tone::Normal)],
+                vec![(was, Tone::Muted), (becomes, Tone::Accent)],
+            ));
+        }
+        body.push(Block::Blank);
+    }
+    body
+}
+
+/// What each row shows: a package by its name, a Flatpak by the name Flatpak shows, with its
+/// branch where two have that name, by its id where two have that too.
+fn labels(list: &[Update]) -> Vec<String> {
+    let named = |u: &Update| u.source == Source::Flatpak && !u.title.is_empty();
+    let twice = |all: &[String], i: usize| {
+        named(&list[i]) && (0..all.len()).any(|j| j != i && named(&list[j]) && all[j] == all[i])
+    };
+    let titles: Vec<String> = list
+        .iter()
+        .map(|u| match named(u) {
+            true => u.title.clone(),
+            false => u.name.clone(),
+        })
+        .collect();
+    let branched: Vec<String> = (0..list.len())
+        .map(|i| match twice(&titles, i) && !list[i].branch.is_empty() {
+            true => format!("{} {}", list[i].title, list[i].branch),
+            false => titles[i].clone(),
+        })
+        .collect();
+    (0..list.len())
+        .map(|i| match twice(&branched, i) {
+            true => list[i].name.clone(),
+            false => branched[i].clone(),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::app::tests::{app, example, open, screen};
+    use crate::ui::app::tests::{app, example, open, press, screen};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use ratatui::style::Modifier;
@@ -205,6 +313,93 @@ mod tests {
         assert_eq!(count.symbol(), "(");
         assert_eq!(count.fg, app.ctx.style.tone(Tone::Muted).fg.unwrap());
         assert!(!count.modifier.contains(Modifier::BOLD));
+    }
+
+    /// Off until f, the filter narrows the updates by name while the actions wait, so enter
+    /// starts nothing. esc brings everything back.
+    #[test]
+    fn the_filter_narrows_the_updates_to_the_names_holding_its_text() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        example(&mut app);
+        open(&mut app, Box::new(UpgradePage::new()));
+        let footer = |shown: &str| {
+            shown
+                .lines()
+                .rfind(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .to_string()
+        };
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("Filter") && footer(&shown).contains("f filter"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Char('f')]);
+        assert!(screen(&mut app, &mut term).contains("Filter"));
+        press(&mut app, &[Key::Char('P'), Key::Char('a'), Key::Char('r')]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("paru") && shown.contains("AUR (1)"),
+            "{shown}"
+        );
+        assert!(
+            !shown.contains("firefox") && !shown.contains("Install now"),
+            "{shown}"
+        );
+        assert!(footer(&shown).contains("esc close filter"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        assert_eq!(screen(&mut app, &mut term), shown, "enter starts nothing");
+        press(&mut app, &[Key::Char('z')]);
+        assert!(screen(&mut app, &mut term).contains("No matches"));
+        press(&mut app, &[Key::Esc, Key::Char('f')]);
+        for c in "tchx84".chars() {
+            press(&mut app, &[Key::Char(c)]);
+        }
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Flatseal"), "the id finds the name: {shown}");
+        press(&mut app, &[Key::Esc]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("firefox") && shown.contains("Install now"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Down, Key::Char('f'), Key::Esc]);
+        let shown = screen(&mut app, &mut term);
+        let chosen = shown
+            .lines()
+            .find(|l| l.contains("Install now"))
+            .unwrap_or("");
+        assert!(
+            chosen.contains(app.ctx.style.glyphs.cursor),
+            "the cursor stays: {shown}"
+        );
+    }
+
+    /// Flatpak by the name it shows, the branch beside it where two share that name, the id where
+    /// two share both. Packages keep their names.
+    #[test]
+    fn a_flatpak_shows_its_name_and_only_where_that_repeats_more() {
+        let pending = crate::data::updates::parse(
+            "repo\tmesa\t1-1\t2-1\n\
+             flatpak\tcom.github.tchx84.Flatseal\t2.4.0\t2.4.1\tFlatseal\tstable\n\
+             flatpak\torg.freedesktop.Platform.GL.default//25.08\ta\tb\tMesa\t25.08\n\
+             flatpak\torg.freedesktop.Platform.GL.default//26.08\tc\td\tMesa\t26.08\n\
+             flatpak\torg.freedesktop.Platform.GL32.default\te\tf\tMesa\t26.08\n\
+             flatpak\torg.x.Old\tg\th\n",
+        );
+        assert_eq!(
+            labels(&pending.updates),
+            [
+                "mesa",
+                "Flatseal",
+                "Mesa 25.08",
+                "org.freedesktop.Platform.GL.default//26.08",
+                "org.freedesktop.Platform.GL32.default",
+                "org.x.Old",
+            ]
+        );
     }
 
     #[test]

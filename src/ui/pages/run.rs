@@ -10,7 +10,7 @@ use crate::data::cleanup::Part;
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
 use crate::ui::detail::{Act, Block, Detail, done, failure, show};
-use crate::ui::draw::{BAR, card, center, cut, cut_front, put, waiting, width, wrap};
+use crate::ui::draw::{BAR, card, center, cut, cut_front, put, scrollbar, waiting, width, wrap};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::Lead;
@@ -20,6 +20,8 @@ use crate::ui::{Ctx, Does, Flow, Key, Nav, Page, Tone};
 
 /// The pause before a result takes keys: what was typed while waiting must not dismiss it.
 const SETTLE: Duration = Duration::from_millis(618);
+/// Lines a notch of the wheel moves the terminal's history, as terminals scroll.
+const NOTCH: isize = 3;
 
 #[derive(Clone)]
 pub struct Job {
@@ -421,7 +423,13 @@ pub struct RunPage {
     job: Job,
     run: Option<Run>,
     outcome: Option<(Result<(), Failure>, Instant)>,
+    /// The terminal view: chosen with tab, or open while the run needs the person there.
     details: bool,
+    /// The run needs the person on the terminal: it handed over, or a question in unknown words
+    /// waits.
+    needed: bool,
+    /// The view chosen before that need, taken back after it.
+    before: bool,
     choices: List<String>,
     input: Input,
     /// ⏎ came at the password prompt with nothing typed.
@@ -440,6 +448,8 @@ impl RunPage {
             run: None,
             outcome: None,
             details: false,
+            needed: false,
+            before: false,
             choices: List::default(),
             input: Input::new(""),
             empty: false,
@@ -476,6 +486,21 @@ impl RunPage {
             .as_ref()
             .filter(|_| self.outcome.is_none())
             .and_then(|r| r.prompt.as_ref())
+    }
+
+    /// Opens the terminal while the run needs the person there, and returns to the view before.
+    fn follow(&mut self) {
+        let needed = self.run.as_ref().is_some_and(|r| r.handed || r.waiting());
+        if needed == self.needed {
+            return;
+        }
+        self.needed = needed;
+        if needed {
+            self.before = self.details;
+            self.details = true;
+        } else {
+            self.details = self.before;
+        }
     }
 
     /// Fills the answer list when a new question appears.
@@ -622,6 +647,7 @@ impl RunPage {
             self.size = (area.height, area.width);
             run.resize(area.height, area.width);
         }
+        let (back, reach) = run.history();
         let s = &ctx.style;
         let screen = run.screen();
         let (rows, cols) = screen.size();
@@ -654,7 +680,9 @@ impl RunPage {
                     .set_style(style);
             }
         }
-        if run.running() && !screen.hide_cursor() {
+        let rows = usize::from(rows);
+        scrollbar(buf, area, rows + reach, reach - back, ctx);
+        if run.running() && !screen.hide_cursor() && back == 0 {
             let (r, c) = screen.cursor_position();
             if r < area.height && c < area.width {
                 buf[(area.x + c, area.y + r)].set_bg(if s.accent == Color::Reset {
@@ -762,9 +790,8 @@ impl RunPage {
             }
         };
         self.result.set(body, acts);
-        // With verbose output it lies on a card over the last output, which stays readable around
-        // it.
-        let area = if ctx.settings.terminal() {
+        // Over the terminal it lies on a card, the last output readable around it.
+        let area = if self.details || ctx.settings.terminal() {
             let w = area.width.min(68);
             let h = self.result.height(w.saturating_sub(6), ctx) + 2;
             card(area, buf, w, h, ctx)
@@ -798,7 +825,7 @@ impl Page for RunPage {
         let terminal = ctx.settings.terminal();
         if (self.details || terminal) && self.run.is_some() {
             self.draw_details(area, buf, ctx);
-            if terminal && self.outcome.is_some() {
+            if self.outcome.is_some() {
                 self.draw_outcome(area, buf, ctx);
             }
         } else if self.outcome.is_some() {
@@ -916,8 +943,23 @@ impl Page for RunPage {
             return Flow::Stay;
         }
         if details {
-            if let Some(run) = &self.run {
-                run.type_bytes(&key.bytes());
+            if let Some(run) = self.run.as_mut() {
+                let mode = run.screen().application_cursor();
+                match key {
+                    // A program on the whole screen keeps no history: the wheel moves in it, as
+                    // terminals do.
+                    Key::WheelUp | Key::WheelDown if run.screen().alternate_screen() => {
+                        let arrow = if key == Key::WheelUp {
+                            Key::Up
+                        } else {
+                            Key::Down
+                        };
+                        run.type_bytes(&arrow.bytes(mode));
+                    }
+                    Key::WheelUp => run.scroll(NOTCH),
+                    Key::WheelDown => run.scroll(-NOTCH),
+                    _ => run.type_bytes(&key.bytes(mode)),
+                }
             }
             return Flow::Stay;
         }
@@ -946,15 +988,27 @@ impl Page for RunPage {
 
     fn run(&mut self, event: script::Event, _ctx: &mut Ctx) -> Flow {
         if let Some(run) = self.run.as_mut() {
-            let handed = run.handed;
             run.on_event(event);
-            // The person answers on the terminal from here, tab still leads back.
-            if run.handed && !handed {
-                self.details = true;
-            }
         }
+        self.follow();
         self.prepare();
         Flow::Stay
+    }
+
+    /// In the terminal pasted text goes to the program as a whole. Under the question to stop it
+    /// goes nowhere, as it answers neither.
+    fn paste(&mut self, text: &str, ctx: &mut Ctx) -> bool {
+        if self.cancel.is_some() {
+            return true;
+        }
+        let terminal = self.details || ctx.settings.terminal();
+        match self.run.as_mut() {
+            Some(run) if terminal && self.outcome.is_none() => {
+                run.paste(text);
+                true
+            }
+            _ => false,
+        }
     }
 
     fn tick(&mut self, ctx: &mut Ctx) -> Flow {
@@ -981,6 +1035,7 @@ impl Page for RunPage {
             self.cancel = None;
             ctx.reload();
         }
+        self.follow();
         self.prepare();
         Flow::Stay
     }
@@ -1104,7 +1159,7 @@ mod tests {
     use super::*;
     use crate::script::sudo;
     use crate::ui::Msg;
-    use crate::ui::app::tests::{app, open, press, screen};
+    use crate::ui::app::tests::{app, open, press, screen, tell};
 
     #[test]
     fn an_empty_password_starts_no_sudo_and_says_why() {
@@ -1247,15 +1302,100 @@ mod tests {
         assert!(starting.done(), "ctrl+c on the start screen");
     }
 
-    /// Handed over, as for the AUR helper's review, the run shows its terminal.
+    /// Handed over, as for the AUR helper's review, the run shows its terminal until the script
+    /// takes it back, then the view chosen before.
     #[test]
-    fn a_hand_over_shows_the_terminal() {
-        let (mut app, _) = app();
-        let run = Run::fed(op::UPGRADE_RUN, "aur", "");
+    fn a_hand_over_shows_the_terminal_while_it_lasts() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let output = "Aur (1) paru-2.2.0-1\r\n";
+        let shows = |handed: &[&str], tab: bool| {
+            let (mut app, mut term) = crate::ui::app::tests::app();
+            let run = Run::fed(op::UPGRADE_RUN, "aur", output);
+            let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+            page.details = tab;
+            for state in handed {
+                page.run(
+                    script::Event::Script(format!("terminal\t{state}")),
+                    &mut app.ctx,
+                );
+            }
+            open(&mut app, Box::new(page));
+            screen(&mut app, &mut term).contains(output.trim_end())
+        };
+        assert!(!shows(&[], false));
+        assert!(shows(&["on"], false));
+        assert!(!shows(&["on", "off"], false), "back to the compact view");
+        assert!(
+            shows(&["on", "off"], true),
+            "back to the details chosen before"
+        );
+        let run = Run::fed(op::UPGRADE_RUN, "aur", output);
         let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
-        assert!(!page.details);
-        page.run(script::Event::Script("terminal".into()), &mut app.ctx);
-        assert!(page.details);
+        page.run(script::Event::Script("terminal\ton".into()), &mut app.ctx);
+        open(&mut app, Box::new(page));
+        press(&mut app, &[Key::Tab]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains(output.trim_end()),
+            "tab still leads out: {shown}"
+        );
+    }
+
+    /// A question in words not known here opens the terminal, where it is answered, and the
+    /// run goes on in the compact view.
+    #[test]
+    fn a_question_in_unknown_words_opens_the_terminal_until_answered() {
+        let (mut app, mut term) = app();
+        let asked = "Name of the key: ";
+        let mut run = Run::fed(op::UPGRADE_RUN, "aur", asked);
+        run.check_at(Instant::now() + Duration::from_secs(5));
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.tick(&mut app.ctx);
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains(asked.trim_end()), "{shown}");
+        tell(&mut app, script::Event::Output(b"key\r\n".to_vec()));
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains(asked.trim_end()), "{shown}");
+    }
+
+    /// Ended while its terminal shows, the run lays its outcome over the output, the keys the
+    /// footer names act on what is seen.
+    #[test]
+    fn the_outcome_lies_over_the_terminal_where_it_shows() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = RunPage::finished(Job::new(op::UPGRADE_RUN, Vec::new()), Ok(()));
+        page.run = Some(Run::ended(op::UPGRADE_RUN, "upgrading firefox\r\n", 0));
+        page.details = true;
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("upgrading firefox") && shown.contains("Done") && shown.contains("Back"),
+            "{shown}"
+        );
+    }
+
+    #[test]
+    fn the_wheel_scrolls_the_terminal_back_and_a_key_returns() {
+        let (mut app, mut term) = app();
+        let lines: String = (0..100).map(|i| format!("line {i}\r\n")).collect();
+        let run = Run::fed(op::UPGRADE_RUN, "aur", &lines);
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.details = true;
+        open(&mut app, Box::new(page));
+        assert!(screen(&mut app, &mut term).contains("line 99"));
+        press(&mut app, &[Key::WheelUp; 10]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("line 99") && shown.contains("line 60"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Char('q')]);
+        assert!(screen(&mut app, &mut term).contains("line 99"));
     }
 
     /// The check names what it found, a single package too, and its reinstall asks first.
