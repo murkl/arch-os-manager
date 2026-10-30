@@ -10,8 +10,8 @@ ops:
       Keep the device connected until done.
     needs: [fwupd]
     steps:
-      refresh: Loading the firmware catalogue
+      refresh: Loading the firmware metadata
       update: Installing the firmware
 errors:
   10: |
-    Firmware catalogue not loaded
+    Firmware metadata not loaded

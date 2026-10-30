@@ -90,7 +90,7 @@ impl Page for NewsPage {
                 area.x,
                 area.y,
                 &crate::ui::draw::cut(
-                    t("Offline: from cache."),
+                    t("Offline. Showing the cache."),
                     area.width.into(),
                     ctx.style.glyphs.ellipsis,
                 ),

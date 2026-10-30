@@ -37,7 +37,7 @@ impl RepairPage {
                 op: op::REPAIR_KEYRING,
                 name: t("Recreate the keyring"),
                 icon: icon::KEYRING,
-                note: t("Creates the keyring anew from the keyring packages."),
+                note: t("Rebuilds the keyring from the keyring packages."),
             },
             Repair {
                 op: op::REPAIR_FILES,
@@ -124,10 +124,7 @@ mod tests {
             at("Removes a stale lock"),
             at("Repair the package management") + 1
         );
-        assert_eq!(
-            at("Creates the keyring anew"),
-            at("Recreate the keyring") + 1
-        );
+        assert_eq!(at("Rebuilds the keyring"), at("Recreate the keyring") + 1);
         assert_eq!(at("Finds packages"), at("Check the package files") + 1);
         press(&mut app, &[Key::Down]);
         let shown = screen(&mut app, &mut term);

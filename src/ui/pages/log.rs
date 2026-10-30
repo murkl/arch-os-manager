@@ -56,7 +56,7 @@ impl Page for LogPage {
             })
             .collect();
         if rows.is_empty() {
-            show(vec![done(t("No errors since the start."))], area, buf, ctx);
+            show(vec![done(t("No errors since boot."))], area, buf, ctx);
         }
         self.list.set(rows);
         self.list.draw(area, buf, ctx);

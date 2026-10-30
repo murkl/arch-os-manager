@@ -42,7 +42,7 @@ impl Page for MirrorsPage {
             ));
         }
         let weekly = if m.timer {
-            (t("every week by itself"), Tone::Ok)
+            (t("weekly"), Tone::Ok)
         } else {
             (t("manual only"), Tone::Muted)
         };

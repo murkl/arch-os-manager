@@ -32,8 +32,8 @@ errors:
     Package not found
     Refresh the package list.
   12: |
-    Archive unreachable
-    Cached versions only.
+    Arch Linux Archive unreachable
+    Showing cached versions.
   13: |
     System not up to date
     Update first.

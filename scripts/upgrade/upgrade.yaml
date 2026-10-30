@@ -13,7 +13,7 @@ ops:
 errors:
   10: |
     Update check failed
-    Package servers unreachable.
+    Mirrors unreachable.
   11: |
     AUR update failed
     Everything else is up to date.

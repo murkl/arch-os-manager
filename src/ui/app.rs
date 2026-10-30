@@ -249,7 +249,7 @@ impl App {
     /// of it goes, and read anew where they decide what runs.
     fn legacy(&mut self, legacy: crate::migrate::Legacy) {
         if self.ctx.settings_error.is_some() {
-            crate::warn!("migrate: settings.yaml is not used");
+            crate::warn!("migrate: settings.yaml ignored");
             return;
         }
         if !legacy.take_over(&mut self.ctx.settings) {

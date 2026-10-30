@@ -73,7 +73,7 @@ pub fn run() {
     };
     let (mut settings, error) = Settings::load();
     if let Some(e) = error {
-        crate::warn!("migrate: settings.yaml is not used: {e}");
+        crate::warn!("migrate: settings.yaml ignored: {e}");
         return;
     }
     if legacy.take_over(&mut settings)

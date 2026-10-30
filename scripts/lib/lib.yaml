@@ -55,5 +55,5 @@ hints:
   "error while loading shared libraries: libalpm":
     text: |
       AUR helper built for an older pacman
-      Reinstall it.
+      Rebuild it.
     offer: features

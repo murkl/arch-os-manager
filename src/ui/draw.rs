@@ -401,6 +401,9 @@ pub fn center(buf: &mut Buffer, area: Rect, y: u16, text: &str, style: Cell, mar
     put(buf, x, y, &text, area.width, style);
 }
 
+/// Widest bar of a waiting page.
+pub const BAR: u16 = 48;
+
 /// Something that takes a while, in the middle of the page: a spinner, the title, a step under
 /// it and a bar, which runs back and forth while the share is unknown. Returns the row under
 /// the bar.
@@ -433,7 +436,7 @@ pub fn waiting(
             s.glyphs.ellipsis,
         );
     }
-    let w = area.width.min(48);
+    let w = area.width.min(BAR);
     bar(
         buf,
         area.x + (area.width - w) / 2,

@@ -35,8 +35,8 @@ fn warning(verb: &str, unit: &str) -> Option<String> {
             t("Ends the session. Unsaved work is lost."),
         ),
         "disable" => (
-            tf("Do not start {unit} by itself?", &unit),
-            t("The next start comes without a graphical session."),
+            tf("Disable {unit}?", &unit),
+            t("The next boot has no graphical session."),
         ),
         _ => return None,
     };
@@ -179,7 +179,7 @@ impl ServicePage {
         body.push(Block::Field(t("State").into(), text, tone));
         if !s.enabled.is_empty() {
             let enabled = match s.enabled.as_str() {
-                "enabled" | "enabled-runtime" => t("starts by itself"),
+                "enabled" | "enabled-runtime" => t("enabled"),
                 "disabled" => t("starts when asked"),
                 "static" | "indirect" => t("started by others"),
                 "masked" => t("masked"),
@@ -236,8 +236,8 @@ impl ServicePage {
             verb(t("Start"), "start", icon::START);
         }
         match s.enabled.as_str() {
-            "enabled" => verb(t("Do not start by itself"), "disable", icon::DISABLE),
-            "disabled" => verb(t("Start by itself"), "enable", icon::ENABLE),
+            "enabled" => verb(t("Disable"), "disable", icon::DISABLE),
+            "disabled" => verb(t("Enable"), "enable", icon::ENABLE),
             _ => {}
         }
         self.detail.set(body, acts);
@@ -345,7 +345,7 @@ mod tests {
         assert!(no.contains(app.ctx.style.glyphs.cursor), "{asked}");
         assert_eq!(
             warning("disable", "gdm").as_deref(),
-            Some("Do not start gdm by itself?\nThe next start comes without a graphical session.")
+            Some("Disable gdm?\nThe next boot has no graphical session.")
         );
         assert_eq!(warning("start", "gdm"), None);
     }

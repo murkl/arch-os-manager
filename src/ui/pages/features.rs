@@ -186,21 +186,21 @@ impl Page for FeaturePage {
         if state == Status::Missing && AUR_HELPERS.contains(&self.package.as_str()) {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Built with makepkg, installs git and base-devel.").into(),
+                t("Built with makepkg. Installs git and base-devel.").into(),
                 Tone::Muted,
             ));
         }
         if state == Status::Missing && extension && unmet.is_none() {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("From extensions.gnome.org. GNOME Shell asks first.").into(),
+                t("From extensions.gnome.org. GNOME Shell asks for confirmation.").into(),
                 Tone::Muted,
             ));
         }
         if state == Status::Missing && self.package == "reflector" {
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Weekly by speed, country from the time zone.").into(),
+                t("Runs weekly. Country from the time zone.").into(),
                 Tone::Muted,
             ));
         }
