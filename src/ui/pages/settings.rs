@@ -6,7 +6,6 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use super::features::FeaturesPage;
-use super::log::HiddenPage;
 use crate::i18n::{self, Lang, t, tf};
 use crate::script::{self, Failure, op};
 use crate::settings::{AUR_HELPERS, NOTIFY, OUTPUT};
@@ -114,11 +113,6 @@ impl SettingsPage {
                 let (text, tone) = on_off(ctx.settings.app_menu.unwrap_or(true));
                 (text.into(), tone, false)
             }
-            Target::Hidden => (
-                ctx.settings.hidden_log.len().to_string(),
-                Tone::Muted,
-                false,
-            ),
             Target::Features => match &ctx.shared.features {
                 Loaded::Ready(f) => {
                     let ok = f.list.iter().filter(|(p, _)| f.ok(p)).count();
@@ -296,7 +290,6 @@ impl Page for SettingsPage {
                 ctx.save_settings();
                 Flow::Stay
             }
-            Target::Hidden => Flow::Push(Box::new(HiddenPage::new())),
             Target::Features => Flow::Push(Box::new(FeaturesPage::new(None))),
             Target::About => Flow::Push(Box::new(AboutPage::new())),
             _ => Flow::Stay,
@@ -817,7 +810,7 @@ mod tests {
         let (appearance, system) = (heading("Appearance"), heading("System"));
         assert!(appearance > 0 && appearance < at("Language"), "{shown}");
         assert!(
-            at("Hidden messages") < system && system < at("AUR helper"),
+            at("Output") < system && system < at("AUR helper"),
             "{shown}"
         );
         assert_eq!(lines[system - 1], "", "{shown}");

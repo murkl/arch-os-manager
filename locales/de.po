@@ -467,6 +467,9 @@ msgstr "Keine Protokolleinträge."
 msgid "No matches"
 msgstr "Keine Treffer"
 
+msgid "No other errors since boot."
+msgstr "Keine weiteren Fehler seit dem Systemstart."
+
 msgid "No other version available."
 msgstr "Keine andere Version verfügbar."
 
@@ -1163,6 +1166,9 @@ msgstr "{n} Fehler"
 
 msgid "{n} failed"
 msgstr "{n} fehlgeschlagen"
+
+msgid "{n} hidden"
+msgstr "{n} ausgeblendet"
 
 msgid "{n} open"
 msgstr "{n} offen"
