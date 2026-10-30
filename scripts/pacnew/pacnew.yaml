@@ -27,4 +27,4 @@ errors:
     The new version stays pending.
   13: |
     Merged configuration invalid
-    visudo reports an error, nothing changed.
+    visudo check failed. Nothing changed.

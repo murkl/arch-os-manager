@@ -107,7 +107,7 @@ fn describe(plan: &Plan, item: Item, nothing: bool) -> String {
             plan.aur.len(),
             &[],
         ),
-        (Part::Flatpak, _) => t("Runtimes no app uses (size unknown in advance).").into(),
+        (Part::Flatpak, _) => t("Runtimes no app uses. Size unknown.").into(),
         (_, Some(Engine::Ready { unused, .. })) => {
             let mut text = match unused.len() {
                 0 => t("All images are in use.").to_string(),
@@ -124,17 +124,15 @@ fn describe(plan: &Plan, item: Item, nothing: bool) -> String {
             }
             text
         }
-        (_, Some(Engine::Stopped)) => t("Docker inactive.").into(),
-        (_, Some(Engine::Denied)) => {
-            t("Without the group docker the size is unknown in advance.").into()
-        }
+        (_, Some(Engine::Stopped)) => t("Docker not running.").into(),
+        (_, Some(Engine::Denied)) => t("Size unknown without the docker group.").into(),
         (_, _) => {
             let engine = if part == Part::Docker {
                 "Docker"
             } else {
                 "Podman"
             };
-            tf("{engine} did not answer.", &[("engine", &engine)])
+            tf("{engine} not responding.", &[("engine", &engine)])
         }
     }
 }
@@ -293,7 +291,7 @@ mod tests {
         press(&mut app, &[Key::Up]);
         let shown = screen(&mut app, &mut term);
         assert!(shown.contains("Docker images"), "{shown}");
-        assert!(shown.contains("Docker inactive."), "{shown}");
+        assert!(shown.contains("Docker not running."), "{shown}");
     }
 
     #[test]

@@ -42,6 +42,8 @@ pub fn show(body: Vec<Block>, area: Rect, buf: &mut Buffer, ctx: &Ctx) {
 
 pub struct Act {
     pub label: String,
+    /// What it does, as the footer names it while the row has the cursor.
+    pub does: Does,
     pub icon: Option<&'static str>,
     /// What the action is about, on the right: a count, a size.
     pub note: Option<(String, Tone)>,
@@ -54,6 +56,7 @@ impl Act {
     pub fn new(label: impl Into<String>, go: impl FnMut(&mut Ctx) -> Flow + 'static) -> Act {
         Act {
             label: label.into(),
+            does: Does::Run,
             icon: None,
             note: None,
             unavailable: None,
@@ -73,6 +76,11 @@ impl Act {
 
     pub fn unless(mut self, reason: Option<String>) -> Act {
         self.unavailable = reason;
+        self
+    }
+
+    pub fn does(mut self, does: Does) -> Act {
+        self.does = does;
         self
     }
 }
@@ -182,7 +190,8 @@ impl Detail {
             }
         } else {
             h.push(("↑↓", Does::Choose));
-            h.push(("⏎", Does::Run));
+            let at = self.list.selected().and_then(|r| r.id).unwrap_or(0);
+            h.push(("⏎", self.acts[at].does));
             if self.overflow {
                 h.push(("⇞⇟", Does::Scroll));
             }

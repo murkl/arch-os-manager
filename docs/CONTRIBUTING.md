@@ -1,6 +1,6 @@
 # Contributing
 
-`main` is the only long-lived branch. Every change returns as one squashed commit, a release is one more pull request.
+`main` is the only long-lived branch. Every change returns as one squashed commit, a release is a version tag.
 
 ## Doing the Work
 
@@ -52,6 +52,7 @@ The title is the one line `main` keeps. The release notes are read from it, per 
 | `fix: keep the news while offline` | 2.0.0 → 2.0.1 | Bug Fixes |
 | `feat: rank the mirrors of a chosen country` | 2.0.0 → 2.1.0 | Features |
 | `feat!: settings move to ~/.config` | 2.0.0 → 3.0.0 | ⚠ BREAKING CHANGES |
+| `perf: start the window faster` | 2.0.0 → 2.0.1 | Performance Improvements |
 | `docs:` `refactor:` `test:` `build:` `ci:` `chore:` | none | nothing |
 
 - Written for users, as a short phrase: the release notes show it from a capital, `* Keep the news while offline`
@@ -64,7 +65,7 @@ The title is the one line `main` keeps. The release notes are read from it, per 
 | --- | --- | --- |
 | `Check` | Every pull request, Monday morning | `make check`. Pull requests read the build cache, Monday's run on `main` writes it |
 | `Release` | A version tag | Checks the tag, writes the release notes |
-| `Publish` | A release | Publishes the release page, stamps `aur/PKGBUILD` for the tag, builds it with makepkg, pushes it to the AUR, attaches the binary to the release |
+| `Publish` | After `Release` | Publishes the release page, stamps `aur/PKGBUILD` for the tag, builds it with makepkg, pushes it to the AUR, attaches the binary to the release |
 
 ## Releasing
 

@@ -10,7 +10,7 @@ use crate::data::cleanup::Part;
 use crate::i18n::{t, tf, tn};
 use crate::script::{self, Failure, Op, Phase, Prompt, Run, op};
 use crate::ui::detail::{Act, Block, Detail, done, failure, show};
-use crate::ui::draw::{card, center, cut, cut_front, put, waiting, width, wrap};
+use crate::ui::draw::{BAR, card, center, cut, cut_front, put, waiting, width, wrap};
 use crate::ui::icon;
 use crate::ui::input::Input;
 use crate::ui::list::Lead;
@@ -146,7 +146,7 @@ impl Page for ConfirmPage {
 /// Why the typed password was not taken.
 fn note(empty: bool, rejected: bool) -> Option<&'static str> {
     if empty {
-        Some(t("Password cannot be empty."))
+        Some(t("Password required."))
     } else if rejected {
         Some(t("Wrong password."))
     } else {
@@ -163,13 +163,11 @@ fn password_card(
     ctx: &Ctx,
 ) {
     let s = ctx.style;
-    let (heading, text) = (
-        Prompt::Password.friendly(),
-        t("Enter the sudo password for this action."),
-    );
+    let (heading, text) = (Prompt::Password.friendly(), t("Enter the sudo password."));
     let indent = if s.glyphs.icons { 3 } else { 0 };
     let widest = width(&heading).max(width(text)) as u16;
-    let w = (widest + indent + 6).min(area.width);
+    // Within a run the waiting bar lies behind the card, which covers it.
+    let w = (widest + indent + 6).max(BAR).min(area.width);
     let room = w.saturating_sub(6 + indent) as usize;
     let lines: Vec<(String, Cell)> = wrap(&heading, room)
         .into_iter()
@@ -677,7 +675,7 @@ impl RunPage {
         let (body, acts) = match outcome {
             // The machine goes down: nothing comes next here.
             Ok(()) if self.job.op == op::SYSTEM_REBOOT => {
-                let line = format!("{}  {}", s.spinner(), t("The system restarts."));
+                let line = format!("{}  {}", s.spinner(), t("Restarting"));
                 (
                     vec![Block::Row(
                         Lead::Icon(icon::RESTART, Tone::Accent),
@@ -723,7 +721,11 @@ impl RunPage {
                         acts.push(reinstall(altered));
                     }
                     acts.extend(next_steps(self.job.op, ctx));
-                    acts.push(Act::new(t("Back"), |_| Flow::Pop).icon(icon::BACK));
+                    acts.push(
+                        Act::new(t("Back"), |_| Flow::Pop)
+                            .icon(icon::BACK)
+                            .does(Does::Back),
+                    );
                     (body, acts)
                 }
             }
@@ -740,7 +742,8 @@ impl RunPage {
                         Act::new(target.label(), move |ctx: &mut Ctx| {
                             replace_with(target, ctx)
                         })
-                        .icon(target.icon()),
+                        .icon(target.icon())
+                        .does(Does::Open),
                     );
                 }
                 let job = self.job.clone();
@@ -750,7 +753,11 @@ impl RunPage {
                     })
                     .icon(icon::UPDATE),
                 );
-                acts.push(Act::new(t("Back"), |_| Flow::Pop).icon(icon::BACK));
+                acts.push(
+                    Act::new(t("Back"), |_| Flow::Pop)
+                        .icon(icon::BACK)
+                        .does(Does::Back),
+                );
                 (body, acts)
             }
         };
@@ -1035,7 +1042,8 @@ fn next_steps(done: Op, ctx: &Ctx) -> Vec<Act> {
                 replace_with(target, ctx)
             })
             .icon(target.icon())
-            .note(note, tone),
+            .note(note, tone)
+            .does(Does::Open),
         );
     };
     if s.system.ready().is_some_and(|x| x.reboot) {
@@ -1112,7 +1120,7 @@ mod tests {
         open(&mut app, Box::new(page));
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);
-        assert!(shown.contains("Password cannot be empty."), "{shown}");
+        assert!(shown.contains("Password required."), "{shown}");
     }
 
     #[test]
@@ -1454,7 +1462,7 @@ mod tests {
         );
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);
-        assert!(shown.contains("Password cannot be empty."), "{shown}");
+        assert!(shown.contains("Password required."), "{shown}");
     }
 
     #[test]

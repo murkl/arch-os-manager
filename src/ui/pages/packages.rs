@@ -439,7 +439,8 @@ impl PackagePage {
                     Act::new(t("Install an older version"), move |_| {
                         Flow::Push(Box::new(VersionsPage::new(&name)))
                     })
-                    .icon(icon::OLDER),
+                    .icon(icon::OLDER)
+                    .does(Does::Open),
                 );
             }
         } else if info.sync.is_some() {
@@ -475,7 +476,8 @@ impl PackagePage {
                 Act::new(t("Show the PKGBUILD"), move |_| {
                     Flow::Push(Box::new(PkgbuildPage::new(&base)))
                 })
-                .icon(icon::CODE),
+                .icon(icon::CODE)
+                .does(Does::Open),
             );
         }
         self.detail.set(body, acts);

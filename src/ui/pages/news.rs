@@ -90,7 +90,7 @@ impl Page for NewsPage {
                 area.x,
                 area.y,
                 &crate::ui::draw::cut(
-                    t("Offline: from cache."),
+                    t("Offline. Showing the cache."),
                     area.width.into(),
                     ctx.style.glyphs.ellipsis,
                 ),
@@ -199,7 +199,8 @@ impl ArticlePage {
                 mark(ctx, &link, !read);
                 Flow::Pop
             })
-            .icon(icon::NEWS),
+            .icon(icon::NEWS)
+            .does(if read { Does::Unread } else { Does::Read }),
         ];
         let mut detail = Detail::default();
         detail.set(body, acts);

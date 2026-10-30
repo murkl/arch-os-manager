@@ -998,6 +998,11 @@ fn the_menu_entry_and_the_timer_follow_on_and_off() {
     let icon = std::fs::read_to_string(data.join("icons/hicolor/scalable/apps/system-manager.svg"))
         .unwrap();
     assert!(icon.starts_with("<?xml"));
+    let symbolic = std::fs::read_to_string(
+        data.join("icons/hicolor/symbolic/apps/system-manager-symbolic.svg"),
+    )
+    .unwrap();
+    assert!(symbolic.starts_with("<?xml"));
     let service = std::fs::read_to_string(config.join("system-manager-notify.service")).unwrap();
     assert!(
         service.contains("ExecStart=\"/opt/sm with space/system-manager\" notify --new\n"),
@@ -1042,6 +1047,16 @@ fn the_menu_entry_and_the_timer_follow_on_and_off() {
         0
     );
     assert!(!data.join("applications/system-manager.desktop").exists());
+    assert!(
+        !data
+            .join("icons/hicolor/scalable/apps/system-manager.svg")
+            .exists()
+    );
+    assert!(
+        !data
+            .join("icons/hicolor/symbolic/apps/system-manager-symbolic.svg")
+            .exists()
+    );
     assert!(!config.join("system-manager-notify.timer").exists());
     assert!(std::fs::symlink_metadata(&wants).is_err());
 
@@ -1700,7 +1715,7 @@ fn firmware_with_nothing_to_update_is_no_failure_and_an_update_sends_no_report()
         o.calls
     );
     s.stub("fwupdmgr", "exit 1");
-    assert_eq!(s.run("firmware", &["update"], &[]).code, 10, "no catalogue");
+    assert_eq!(s.run("firmware", &["update"], &[]).code, 10, "no metadata");
 }
 
 #[test]

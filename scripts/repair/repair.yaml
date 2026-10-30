@@ -23,7 +23,7 @@ ops:
 errors:
   10: |
     Package manager running
-    Wait until it ends.
+    Wait until it finishes.
   11: |
     Unexpected keyring location
     GPGDir in pacman.conf does not end in gnupg.

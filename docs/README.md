@@ -19,21 +19,21 @@
 - Repository, AUR and Flatpak updates in one run
 - Arch Linux news before every update
 - Update notifications, count in the GNOME top bar
-- Next steps after every run
-- Known failures with their fix
+- Config updates compared, used or merged
+- Mirror ranking, firmware updates
+- Live CPU, RAM and disk usage
 - Install, remove and downgrade packages, AUR included
 - Foreign packages without source flagged
 - System and user services
-- Boot errors, harmless ones hidden
-- Live CPU, memory and disk usage
+- Boot errors, hideable by kind
 - [Clean-up](REFERENCE.md#clean-up), Docker and Podman included
-- Config updates compared, merged or taken over
-- Mirror ranking, firmware updates
 - Keyring renewal, package file repair
-- Terminal, Linux console or own window
+- Known failures with their fix
+- Next steps after every run
+- Terminal, console or own window
 - Compact or verbose output
-- English and German
 - [Themes](REFERENCE.md#themes): Nord, Catppuccin, Tokyo Night, Gruvbox or custom
+- English and German
 
 [Optional packages](REFERENCE.md#optional-packages) add features, installed under **Settings › Optional packages**.
 
@@ -53,6 +53,6 @@ system-manager
 
 The first start adds **System Manager** to the app menu, which opens it in a window.
 
-<p align="center"><img src="screenshots/home.png" width="100%" alt="The home page: CPU, memory and disk in use, then every task with its state"><br><sub><b>Home</b> · system state and tasks</sub></p>
+<p align="center"><img src="screenshots/home.png" width="100%" alt="The main menu: CPU, RAM and disk in use, then every task with its state"><br><sub><b>Main menu</b> · system state and tasks</sub></p>
 
 <p align="center"><img src="screenshots/update.png" width="100%" alt="The update page: the news to read first, then what the update brings"><br><sub><b>Update</b> · news, then updates with versions</sub></p>

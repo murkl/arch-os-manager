@@ -563,7 +563,7 @@ impl Page for AboutPage {
         if let Some(e) = &ctx.settings_error {
             body.push(Block::Blank);
             body.push(Block::Text(
-                tf("settings.yaml is not used: {error}", &[("error", e)]),
+                tf("settings.yaml ignored: {error}", &[("error", e)]),
                 Tone::Warn,
             ));
         }

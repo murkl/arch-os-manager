@@ -249,7 +249,7 @@ impl App {
     /// of it goes, and read anew where they decide what runs.
     fn legacy(&mut self, legacy: crate::migrate::Legacy) {
         if self.ctx.settings_error.is_some() {
-            crate::warn!("migrate: settings.yaml is not used");
+            crate::warn!("migrate: settings.yaml ignored");
             return;
         }
         if !legacy.take_over(&mut self.ctx.settings) {
@@ -1056,6 +1056,27 @@ pub mod tests {
         assert!(screen(&mut app, &mut term).contains("esc main menu"));
         press(&mut app, &[Key::Esc]);
         assert_eq!(app.pages.len(), 1);
+    }
+
+    /// The footer names what enter does on the row under the cursor.
+    #[test]
+    fn enter_is_named_after_the_row_it_is_on() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        open(&mut app, Box::new(pages::services::ServicesPage::new()));
+        open(&mut app, Box::new(pages::repair::RepairPage::new()));
+        let job = pages::run::Job::new(op::REPAIR_RUN, Vec::new());
+        let failed = Err(Failure::new(op::REPAIR_RUN, "failed"));
+        open(
+            &mut app,
+            Box::new(pages::run::RunPage::finished(job, failed)),
+        );
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("⏎ run"), "{shown}");
+        press(&mut app, &[Key::Down]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("⏎ back"), "{shown}");
     }
 
     #[test]

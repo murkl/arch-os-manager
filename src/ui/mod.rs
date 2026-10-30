@@ -436,7 +436,7 @@ pub struct Ctx {
     /// User theme files that were skipped, and why.
     pub theme_errors: Vec<String>,
     pub style: Style,
-    /// The Linux console: sixteen colours and ASCII glyphs.
+    /// The console: sixteen colours and ASCII glyphs.
     pub console: bool,
     pub shared: Shared,
     /// What the machine uses, read anew every few seconds, none before the first reading.

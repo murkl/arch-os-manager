@@ -80,7 +80,7 @@ pub static UNICODE: Glyphs = Glyphs {
     spinner: &["◐", "◓", "◑", "◒"],
 };
 
-/// The Linux console's font has none of the above.
+/// The console's font has none of the above.
 pub static ASCII: Glyphs = Glyphs {
     cursor: ">",
     dot: "*",

@@ -51,7 +51,7 @@ impl Page for FirmwarePage {
             }
             body.push(Block::Blank);
             body.push(Block::Text(
-                t("Some firmware is installed on the next reboot.").into(),
+                t("Some updates are applied on the next reboot.").into(),
                 Tone::Muted,
             ));
             acts.push(

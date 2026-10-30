@@ -19,16 +19,17 @@ Runs as the user and asks for the sudo password itself. As root only `check` wor
 |---|---|---|
 | **↑↓**, **j k** | Choose | ↑↓ choose |
 | **⇞⇟**, wheel | Scroll | the same |
-| **⏎**, **l**, **→** | Open | ⏎ open, → cursor right |
+| **⏎**, **l**, **→** | What the footer names | ⏎ the same, → cursor right |
 | **esc** | Back | Close the box |
 | **backspace**, **h**, **←** | Back | backspace delete left, ← cursor left |
-| **f**, **/** | Filter, search on the start page | typed |
+| **f**, **/** | Filter, search in the main menu | typed |
 | **g**, **G**, **home**, **end** | First, last | g G typed, home end start and end of the text |
 | **q** | Quit | typed |
 | **ctrl+c** | Quit, in a run ask to stop | the same |
-| **tab** | Run: compact view or terminal. Packages: mark | the same |
+| **tab** | Run: details or compact view. Packages: mark | the same |
 | **space** | News: read or unread | typed |
-| **r** | Start page: read again | typed |
+| **x** | System log: hide | typed |
+| **r** | Main menu: reload | typed |
 | **delete** | | Delete right |
 | **ctrl+←→** | | Cursor a word left, right |
 | **ctrl+backspace**, **ctrl+w** | | Delete the word left |
@@ -36,7 +37,7 @@ Runs as the user and asks for the sudo password itself. As root only `check` wor
 
 The footer names the keys of each page. Held keys repeat only to move or type. Pasted text goes into a text box only.
 
-## Start Page
+## Main Menu
 
 The top row shows usage in percent, read every 2 s. `usage: false` hides it.
 
@@ -50,7 +51,7 @@ The top row shows usage in percent, read every 2 s. `usage: false` hides it.
 
 ## Runs
 
-A run shows its step and pacman's progress. **tab** switches to the terminal, where every key goes to the program.
+A run shows its step and pacman's progress. **tab** switches to the details, where every key goes to the program.
 
 <img src="screenshots/run.png" width="720" alt="An update under way: its step, the progress bar and the package being upgraded">
 
@@ -63,9 +64,9 @@ A run shows its step and pacman's progress. **tab** switches to the terminal, wh
 
 Other prompts wait in the terminal. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked. With `aur-review`, the AUR step switches to the terminal and leaves every question to the person.
 
-An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. Installs and removals run in one transaction, installs first. An install waits while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them.
+An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. Installs and removals share one run, installs first. An install is refused while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them.
 
-**esc**, **q** and **ctrl+c** ask to stop, yes sends ctrl+c. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it.
+**esc**, **q** and **ctrl+c** ask to stop, in the details only **ctrl+c**. Yes sends ctrl+c. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it.
 
 | Offer after a run | When |
 |---|---|
@@ -73,6 +74,7 @@ An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does
 | Config updates | `.pacnew` or `.pacsave` files are open |
 | Services | A service failed |
 | Clean up | Marked unneeded packages or 1 GiB in marked parts, not after a clean-up |
+| Update | Updates are pending, not after an update |
 
 Back after a success also closes the page the action came from.
 
@@ -80,7 +82,7 @@ Back after a success also closes the page the action came from.
 
 ### Verbose Output
 
-`output: verbose` shows runs in the terminal only, tab does nothing. Every command is echoed as `$ sudo pacman -Syu`. No tool gets a yes flag, every prompt is typed. The password is still asked before the run.
+`output: verbose` shows runs in the terminal only, every key but **ctrl+c** goes to the program. Every command is echoed as `$ sudo pacman -Syu`. No tool gets a yes flag, every prompt is typed. The password is still asked before the run.
 
 ### Password
 
@@ -91,10 +93,12 @@ Asked once per session before the first elevated run and checked with `sudo --va
 | Action | Does |
 |---|---|
 | **Repair the package management** | Removes a database lock no process holds, updates `archlinux-keyring`, then the system |
-| **Recreate the keyring** | Builds the keyring anew from the keyring packages, beside the old one, after confirmation. Keys imported by hand are lost |
+| **Recreate the keyring** | Rebuilds the keyring from the keyring packages, beside the old one, after confirmation. Keys imported by hand are lost |
 | **Check the package files** | `pacman -Qkk` names native packages with missing or altered content, type or link, **Reinstall** reinstalls them after confirmation. Owner, mode and time are ignored, hand-edited configuration stays, AUR packages are only listed |
 
-Only a file pacdiff lists at that moment is taken over, kept or merged. Taking over or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
+### Config Updates
+
+Only a file pacdiff lists at that moment is replaced, kept or merged. Replacing or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
 
 ### Services
 
@@ -167,9 +171,9 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 - Every start and `init` set up the menu entry and the notification per `app-menu` and `notify`. An installer calls `init` from its chroot as the user
 - The timer announces 2 minutes after login, then per `notify`. A notification stays until answered or replaced, and closes once nothing is pending
 - `aur-review: true` shows the terminal for the AUR helper's review and every question of its own. `false` builds without review
-- `flatpak: false` leaves Flatpak to another app store. `all` is read as `true`, `cleanup` and `off` as `false`
+- `flatpak: false` leaves Flatpak to another app store. `all` is read as `true`, `cleanup` as `false`, `off` as `false` with Flatpak unmarked in the clean-up
 - A hidden message ignores numbers, hex values and hashes
-- The first start takes over the settings of the `arch-os` script before 2.0. `scripts/migrate/migrate.sh` says how to remove this
+- The first start and `init` take over the settings of Arch OS Manager 1.x, then remove what it left. `scripts/migrate/migrate.sh` says how to remove this
 
 ## Themes
 
@@ -197,7 +201,7 @@ colors:
 
 The built-in themes in [`themes/`](../themes) meet WCAG AA: 4.5 for `text`, 3 for `accent` and the states. A file in `~/.arch-os/themes/` with a built-in id replaces it.
 
-Icons are Nerd Font symbols, in a terminal from `ttf-nerd-fonts-symbols`. The Linux console (`TERM=linux`) gets 16 colours and ASCII.
+Icons are Nerd Font symbols, in a terminal from `ttf-nerd-fonts-symbols`. The console (`TERM=linux`) gets 16 colours and ASCII.
 
 ## Files
 
@@ -211,10 +215,11 @@ Icons are Nerd Font symbols, in a terminal from `ttf-nerd-fonts-symbols`. The Li
 | `~/.arch-os/cache/news.xml` | News feed for offline |
 | `~/.local/share/applications/system-manager.desktop` | Menu entry |
 | `~/.local/share/icons/hicolor/scalable/apps/system-manager.svg` | Icon |
+| `~/.local/share/icons/hicolor/symbolic/apps/system-manager-symbolic.svg` | Symbolic icon |
 | `~/.config/systemd/user/system-manager-notify.{service,timer}` | Update notification |
 | `~/.local/share/gnome-shell/extensions/arch-update@RaphaelRochet/` | Update indicator |
 
-`SM_HOME` moves all of it, for a throwaway run.
+`SM_HOME` moves `~/.arch-os`, `XDG_DATA_HOME` and `XDG_CONFIG_HOME` the rest, for a throwaway run.
 
 ## How It Works
 
@@ -310,6 +315,8 @@ Every text is English and translated in `locales/de.po`.
 | `aur_sync` | Helper with review and menus on the terminal, without them where `SM_AUR_REVIEW` is `off` and the output compact |
 | `asks` | Whether tools prompt in verbose output, else each tool gets its yes flag |
 | `run_lock` | Lock a run holds, for its queries to wait on |
+| `on_bus` | Runs a command on the session bus, else on a private one |
+| `arch_update_dir` | Folder of the update indicator, the user's before the system's |
 
 A function more than one script needs goes into `lib.sh`.
 
@@ -325,13 +332,13 @@ A function more than one script needs goes into `lib.sh`.
 
 | Target | Does |
 |---|---|
-| `make check` | gitleaks, format, clippy, shellcheck, yamllint, actionlint, zizmor, msgfmt, tests, release build |
+| `make check` | gitleaks, format, clippy, shellcheck, yamllint, actionlint, zizmor, msgfmt, tests, `aur-check`, release build |
 | `make fmt` | cargo fmt and shfmt |
 | `make run` | Interface against a throwaway `target/home` |
 | `make install` | `~/.local/bin/system-manager` |
 | `make aur-check` | `aur/PKGBUILD` stamped with stand-ins, read by makepkg |
 | `make screenshots VERSION=x.y.z` | `docs/screenshots/` from example data, showing that version |
-| `make banner` | `docs/banner.png` from two screenshots, with chromium, imagemagick and Fira Code |
+| `make banner` | `docs/banner.png` from two screenshots, by banner.py of murkl/workflows, with chromium, imagemagick and FiraCode Nerd Font |
 | `tools/aur.sh` | AUR package: stamp, build, push, binary on the release, key |
 | `tools/icons.sh` | Icon font cut to what `src/ui/icon.rs` names |
 | `tools/logo.sh` | Larger splash logo steps, rastered from the Arch Linux SVG |

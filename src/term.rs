@@ -104,7 +104,7 @@ fn mouse(capture: bool) {
 }
 
 /// Faster than a hand presses a key twice, slower than a keyboard repeats it: GNOME every 30 ms
-/// and the Linux console every 33 ms by default.
+/// and the console every 33 ms by default.
 const REPEAT: Duration = Duration::from_millis(80);
 
 /// Whether a key is held: a terminal sends its repeats as presses, so the same key again within
