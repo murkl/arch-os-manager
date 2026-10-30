@@ -297,6 +297,8 @@ struct Shown {
     cursor: Option<Position>,
     /// Window width and height, and the scale as bits.
     size: (u32, u32, u64),
+    /// The theme's, which also fills the margin around the grid.
+    background: Color,
 }
 
 impl Win {
@@ -377,6 +379,7 @@ impl Win {
             grid: self.terminal.backend().buffer.clone(),
             cursor,
             size: key,
+            background: self.app.ctx.style.background,
         };
         let rows = repaint(&self.shown, pixels.age(), &shown);
         paint(
@@ -677,7 +680,7 @@ fn repaint(shown: &[Option<Shown>; 2], age: u8, now: &Shown) -> Option<Vec<u16>>
     }?;
     let mut rows = Vec::new();
     for before in [buffer, shown[0].as_ref()?] {
-        if before.size != now.size {
+        if before.size != now.size || before.background != now.background {
             return None;
         }
         rows.extend(changed_rows(
@@ -1194,6 +1197,7 @@ pub mod tests {
                 grid: term.backend().buffer.clone(),
                 cursor: term.backend().cursor,
                 size: (1, 1, 0),
+                background: Color::Reset,
             }
         };
         let home = frame(&mut app);
@@ -1226,6 +1230,7 @@ pub mod tests {
             grid: Buffer::empty(area),
             cursor: None,
             size: (1, 1, 0),
+            background: Color::Reset,
         });
         let (mut front, mut back) = ((blank.clone(), 0u8), (blank.clone(), 0u8));
         let mut screen = blank;
@@ -1247,6 +1252,24 @@ pub mod tests {
             }
             shown = [Some(now.clone()), shown[0].take()];
         }
+    }
+
+    /// Another theme paints all of the window, the margin around the grid included.
+    #[test]
+    fn another_background_paints_everything() {
+        let frame = |background| Shown {
+            grid: Buffer::empty(Rect::new(0, 0, 4, 2)),
+            cursor: None,
+            size: (1, 1, 0),
+            background,
+        };
+        let nord = frame(Color::Rgb(0x2e, 0x34, 0x40));
+        let shown = [Some(nord.clone()), Some(nord.clone())];
+        assert_eq!(repaint(&shown, 1, &nord), Some(Vec::new()));
+        assert_eq!(
+            repaint(&shown, 1, &frame(Color::Rgb(0x28, 0x2a, 0x36))),
+            None
+        );
     }
 
     #[test]

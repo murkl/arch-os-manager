@@ -86,7 +86,7 @@ Back after a success also closes the page the action came from.
 
 ### Password
 
-Asked once per session before the first elevated run and checked with `sudo --validate`. Skipped with `NOPASSWD`. Never sent empty, as pam_faillock counts empty attempts. Kept in memory only and answers every sudo prompt of the session, AUR helper included.
+Asked once per session before the first elevated run and checked with `sudo --validate`. Skipped with `NOPASSWD`. Never sent empty, as pam_faillock counts empty attempts. Kept in memory only, never in a core dump, and answers every sudo prompt of the session, AUR helper included.
 
 ### Repair
 
@@ -98,7 +98,7 @@ Asked once per session before the first elevated run and checked with `sudo --va
 
 ### Config Updates
 
-Only a file pacdiff lists at that moment is replaced, kept or merged. Replacing or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
+Only a file pacdiff lists at that moment is replaced, kept or merged. `/etc/passwd`, `group`, `shadow`, `gshadow` and `sudoers` are merged, never replaced. Replacing or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
 
 ### Services
 
@@ -167,7 +167,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | `cleanup` | a part with `true` or `false` | `orphans`, `cache`, `aur`, `flatpak` |
 | `hidden-log` | hidden system log messages | none |
 
-- An unparsable file is ignored and named under **Settings › About**
+- An unparsable file is ignored, named under **Settings › About** and never written. Changes last for the session
 - Every start and `init` set up the menu entry and the notification per `app-menu` and `notify`. An installer calls `init` from its chroot as the user
 - The timer announces 2 minutes after login, then per `notify`. A notification stays until answered or replaced, and closes once nothing is pending
 - `aur-review: true` shows the terminal while the AUR helper runs, for its review and every question of its own. `false` builds without review

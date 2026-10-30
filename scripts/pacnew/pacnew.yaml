@@ -28,3 +28,5 @@ errors:
   13: |
     Merged configuration invalid
     visudo check failed. Nothing changed.
+  14: |
+    Merge required

@@ -432,6 +432,8 @@ pub struct RunPage {
     before: bool,
     choices: List<String>,
     input: Input,
+    /// The question the box holds an answer to.
+    typed_for: Option<Prompt>,
     /// ⏎ came at the password prompt with nothing typed.
     empty: bool,
     /// The question whether to stop the run, while it is asked.
@@ -452,6 +454,7 @@ impl RunPage {
             before: false,
             choices: List::default(),
             input: Input::new(""),
+            typed_for: None,
             empty: false,
             cancel: None,
             size: (0, 0),
@@ -505,6 +508,10 @@ impl RunPage {
 
     /// Fills the answer list when a new question appears.
     fn prepare(&mut self) {
+        if self.prompt() != self.typed_for.as_ref() {
+            self.input.text.clear();
+            self.typed_for = self.prompt().cloned();
+        }
         let rows = match self.prompt().cloned() {
             Some(Prompt::YesNo { yes, .. }) => {
                 let rows = vec![
@@ -806,6 +813,8 @@ impl RunPage {
             run.answer(text);
         }
         self.input.text.clear();
+        // The same rows may ask anew, from their own default.
+        self.choices = List::default();
     }
 }
 
@@ -1040,8 +1049,12 @@ impl Page for RunPage {
         Flow::Stay
     }
 
+    /// The terminal takes every key, the compact view only in the box of a question in words.
     fn typing(&self) -> bool {
         self.outcome.is_none()
+            && (self.details
+                || script::terminal()
+                || matches!(self.prompt(), Some(Prompt::Password | Prompt::Text { .. })))
     }
 
     fn animating(&self, ctx: &Ctx) -> bool {
@@ -1077,8 +1090,9 @@ fn reinstall(packages: Vec<String>) -> Act {
         ),
         t("Changes to their files are lost.")
     );
+    // Above the check, so no leads back to what it found.
     Act::new(t("Reinstall"), move |ctx: &mut Ctx| {
-        Flow::Replace(start(
+        Flow::Push(start(
             Job::new(op::REPAIR_REINSTALL, packages.clone()).confirm(text.clone()),
             ctx,
         ))
@@ -1426,6 +1440,12 @@ mod tests {
             asked.contains("Changes to their files are lost."),
             "{asked}"
         );
+        press(&mut app, &[Key::Esc]);
+        let back = screen(&mut app, &mut term);
+        assert!(
+            back.contains("1 package with altered files: bar."),
+            "no keeps what the check found: {back}"
+        );
     }
 
     #[test]
@@ -1603,6 +1623,68 @@ mod tests {
         press(&mut app, &[Key::Enter]);
         let shown = screen(&mut app, &mut term);
         assert!(shown.contains("Password required."), "{shown}");
+    }
+
+    /// Without a text box the compact view takes no pasted letter and no held one: neither
+    /// answers the question nor asks to stop.
+    #[test]
+    fn pasted_and_held_letters_command_nothing_in_the_compact_view() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let run = Run::fed(
+            op::UPGRADE_RUN,
+            "repo",
+            ":: Replace foo with extra/bar? [Y/n] ",
+        );
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.prepare();
+        open(&mut app, Box::new(page));
+        app.handle(Msg::Held(Key::Char('l')));
+        app.handle(Msg::Paste("l".into()));
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Replace foo with extra/bar?"), "{shown}");
+        app.handle(Msg::Paste("q".into()));
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Stop the operation?"), "{shown}");
+    }
+
+    /// The next question opens on its own default, also where it came with the echo of the
+    /// answer before.
+    #[test]
+    fn a_question_after_an_answer_opens_on_its_default() {
+        let (mut app, _) = app();
+        let run = Run::fed(
+            op::UPGRADE_RUN,
+            "repo",
+            ":: a and b are in conflict. Remove b? [y/N] ",
+        );
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.prepare();
+        page.key(Key::Up, &mut app.ctx);
+        page.key(Key::Enter, &mut app.ctx);
+        page.run(
+            script::Event::Output(b"y\r\n:: a and c are in conflict. Remove c? [y/N] ".to_vec()),
+            &mut app.ctx,
+        );
+        let focused = page.choices.selected().and_then(|r| r.id.clone());
+        assert_eq!(focused.as_deref(), Some("n"));
+    }
+
+    /// What was typed under the password prompt never stands in the box of the next question,
+    /// where it would show and go into the log.
+    #[test]
+    fn a_new_question_starts_with_an_empty_box() {
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        sudo::forget();
+        let (mut app, _) = app();
+        let run = Run::fed(op::UPGRADE_RUN, "aur", sudo::PROMPT);
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.prepare();
+        page.key(Key::Char('s'), &mut app.ctx);
+        page.run(script::Event::Output(b"\r\n==> ".to_vec()), &mut app.ctx);
+        assert!(matches!(page.prompt(), Some(Prompt::Text { .. })));
+        assert_eq!(page.input.text, "");
     }
 
     #[test]

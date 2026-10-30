@@ -63,9 +63,9 @@ The title is the one line `main` keeps. The release notes are read from it, per 
 
 | Job | When | Does |
 | --- | --- | --- |
-| `Check` | Every pull request, Monday morning | `make check`. Pull requests read the build cache, Monday's run on `main` writes it |
+| `Check` | Every pull request and push to `main`, Monday morning | `make check`. Only Monday's run on `main` writes the build cache, the others read it |
 | `Release` | A version tag | Checks the tag, writes the release notes |
-| `Publish` | After `Release` | Publishes the release page, stamps `aur/PKGBUILD` for the tag, builds it with makepkg, pushes it to the AUR, attaches the binary to the release |
+| `Publish` | After `Release` | Stamps `aur/PKGBUILD` for the tag, builds it with makepkg, publishes the release page, pushes the package to the AUR, attaches the binary to the release |
 
 ## Releasing
 

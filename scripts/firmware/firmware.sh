@@ -9,13 +9,14 @@ op_list() {
 }
 
 # Yes to every question but uploading a report to the LVFS, which it never asks.
+# What was updated elsewhere since the list leaves nothing to update.
 op_update() {
     local yes
     step refresh
     sudo fwupdmgr refresh --force || exit 10
     step update
     if asks; then yes=(); else yes=(--assume-yes); fi
-    sudo fwupdmgr update "${yes[@]}" --no-reboot-check --no-unreported-check
+    sudo fwupdmgr update "${yes[@]}" --no-reboot-check --no-unreported-check || allow 2
 }
 
 operation "$@"

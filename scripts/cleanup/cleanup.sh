@@ -92,10 +92,12 @@ candidates() {
 
 # Build directories of AUR helpers for packages no longer installed, one per line.
 builds() {
-    local base dir cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+    local base dir db cache="${XDG_CACHE_HOME:-$HOME/.cache}"
     local -A installed=()
     while read -r base; do installed[$base]=1; done < <(pacman -Qq)
-    while read -r base; do installed[$base]=1; done < <(awk '/^%BASE%$/ { getline; print }' "$(pacman-conf DBPath)"local/*/desc)
+    # pacman-conf prints DBPath as written, with a slash at its end or without.
+    db="$(pacman-conf DBPath)"
+    while read -r base; do installed[$base]=1; done < <(awk '/^%BASE%$/ { getline; print }' "${db%/}"/local/*/desc </dev/null)
     for dir in "$cache"/paru/clone/*/ "$cache"/yay/*/; do
         if [ -z "${installed[$(basename "$dir")]:-}" ]; then printf '%s\n' "${dir%/}"; fi
     done

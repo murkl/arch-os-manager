@@ -413,10 +413,7 @@ impl App {
             Fresh::Cleanup(r) => s.cleanup = Loaded::from(r),
             Fresh::Mirrors(r) => s.mirrors = Loaded::from(r),
             Fresh::Firmware(r) => s.firmware = Loaded::from(r),
-            Fresh::Saved(Ok(())) => {
-                self.ctx.settings_error = None;
-                self.ctx.settings_unsaved = None;
-            }
+            Fresh::Saved(Ok(())) => self.ctx.settings_unsaved = None,
             Fresh::Saved(Err(e)) => {
                 crate::error!("settings not saved: {e}");
                 self.ctx.settings_unsaved = Some(e);
@@ -521,9 +518,6 @@ pub mod tests {
     /// An app without background loads, for pressing keys and reading the screen.
     pub fn app() -> (App, Terminal<TestBackend>) {
         let (tx, _rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
-        let dir = std::env::temp_dir().join(format!("sm-test-{}", std::process::id()));
-        // SAFETY: tests that read the environment read only SM_HOME, set to the same value by all.
-        unsafe { std::env::set_var("SM_HOME", &dir) };
         let (themes, _) = crate::theme::all();
         let ctx = Ctx {
             settings: Settings::default(),
@@ -762,7 +756,6 @@ pub mod tests {
     #[ignore]
     fn preview() {
         let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
-        unsafe { std::env::set_var("SM_HOME", std::env::temp_dir().join("sm-preview")) };
         let mut app = App::new(tx, Arc::new(|| {}), false, None);
         app.start();
         press(&mut app, &[Key::Esc]);
@@ -1028,6 +1021,7 @@ pub mod tests {
         assert!(!Key::Enter.repeats(true) && !Key::Esc.repeats(true) && !Key::Tab.repeats(true));
         assert!(Key::Backspace.repeats(true) && Key::Down.repeats(true));
         assert!(Key::Left.repeats(true) && Key::CtrlBackspace.repeats(true));
+        assert!(Key::Ctrl('w').repeats(true), "as ctrl+backspace");
         assert!(!Key::Left.repeats(false), "back happens once");
         assert!(
             Key::WheelUp.bytes(false).is_empty(),
@@ -1242,6 +1236,18 @@ pub mod tests {
         press(&mut app, &[Key::Char('f')]);
         app.handle(Msg::Paste("upd\nate".into()));
         assert!(screen(&mut app, &mut term).contains("update"));
+    }
+
+    /// A settings.yaml that does not parse is never written over, so what it holds besides the
+    /// error stays. Settings names why nothing is saved.
+    #[test]
+    fn an_unparsable_settings_file_is_never_written_over() {
+        let (mut app, _) = app();
+        let error = "notify: false is not one of hourly, daily, weekly, off";
+        app.ctx.settings_error = Some(error.into());
+        app.ctx.save_settings();
+        assert!(app.ctx.loads.is_empty(), "a write begun");
+        assert_eq!(app.ctx.settings_unsaved.as_deref(), Some(error));
     }
 
     /// What ends sooner than the grace never flashes: the header and a page that waits show it

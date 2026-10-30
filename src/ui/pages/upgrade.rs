@@ -185,7 +185,6 @@ impl Page for UpgradePage {
         if self.animating(ctx) {
             return Flow::Ignored;
         }
-        self.build(ctx);
         if let Some((input, shown)) = &mut self.filter {
             match key.nav(true) {
                 Some(Nav::Back) => self.filter = None,
@@ -313,6 +312,22 @@ mod tests {
         assert_eq!(count.symbol(), "(");
         assert_eq!(count.fg, app.ctx.style.tone(Tone::Muted).fg.unwrap());
         assert!(!count.modifier.contains(Modifier::BOLD));
+    }
+
+    /// Enter takes the action drawn: a list that came in since moves no other under it.
+    #[test]
+    fn enter_takes_the_action_drawn() {
+        let (mut app, _) = app();
+        example(&mut app);
+        app.ctx.state.news_read = Some(vec!["a".into(), "b".into()]);
+        app.ctx.shared.updates = Loaded::Ready(crate::data::updates::Pending::default());
+        let mut page = UpgradePage::new();
+        let mut buf = Buffer::empty(Rect::new(0, 0, 80, 24));
+        page.draw(buf.area, &mut buf, &mut app.ctx);
+        app.ctx.shared.updates =
+            Loaded::Ready(crate::data::updates::parse("repo\tlinux\t1-1\t2-1\n"));
+        let flow = page.key(Key::Enter, &mut app.ctx);
+        assert!(matches!(flow, Flow::Stay) && app.ctx.reload, "Check again");
     }
 
     /// Off until f, the filter narrows the updates by name while the actions wait, so enter

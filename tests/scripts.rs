@@ -397,6 +397,46 @@ fn repair_leaves_a_held_lock_alone_and_updates_the_keyring_first() {
     assert_eq!(o.events, "step\tlock\nstep\tkeyring\nstep\tupgrade\n");
 }
 
+/// pacman-conf prints DBPath as written. Without a slash at its end the lock is found all the
+/// same, and the build of a package installed under another name stays.
+#[test]
+fn the_database_is_found_where_its_path_ends_without_a_slash() {
+    let s = Sandbox::new("dbpath");
+    let db = s.dir.join("db");
+    std::fs::create_dir_all(db.join("local/split-1-1")).unwrap();
+    std::fs::write(
+        db.join("local/split-1-1/desc"),
+        "%NAME%\nsplit\n\n%BASE%\nsplit-base\n",
+    )
+    .unwrap();
+    std::fs::write(db.join("db.lck"), "").unwrap();
+    std::fs::create_dir_all(s.dir.join("pkg")).unwrap();
+    std::fs::create_dir_all(s.dir.join("cache/paru/clone/split-base")).unwrap();
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in CacheDir) echo '{}/' ;; DBPath) echo '{}' ;; esac"#,
+            s.dir.join("pkg").display(),
+            db.display()
+        ),
+    );
+    s.stub(
+        "paccache",
+        "echo '==> no candidate packages found for pruning'",
+    );
+    s.stub(
+        "pacman",
+        r#"case "$1" in -Qdtq) exit 1 ;; -Qq) echo split ;; *) exit 0 ;; esac"#,
+    );
+    s.stub("find", "exit 1");
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(!o.out.contains("split-base"), "{}", o.out);
+    let o = s.run("repair", &["run"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(!db.join("db.lck").exists());
+}
+
 #[test]
 fn repair_keeps_the_old_keyring_until_the_new_one_is_complete() {
     let s = Sandbox::new("keyring");
@@ -1330,7 +1370,8 @@ fn a_release_replaces_what_the_aur_has() {
 }
 
 /// A release built as root, as in CI, gets what the package needs before makepkg, which builds
-/// nothing without it, as a helper installs it first.
+/// nothing without it, as a helper installs it first. The build runs on a copy, ends with all it
+/// started, and gives back its package alone, never a link.
 #[test]
 fn a_release_is_built_once_its_dependencies_are_there() {
     let s = Sandbox::new("aur-build");
@@ -1339,13 +1380,20 @@ fn a_release_is_built_once_its_dependencies_are_there() {
         "curl",
         r#"while [ "$1" != -o ]; do shift; done; echo tarball >"$2""#,
     );
-    for command in ["pacman", "useradd", "chown"] {
+    for command in ["pacman", "useradd", "chown", "pkill"] {
         s.stub(command, "");
     }
-    // Only the read-back runs, as the user the test has.
+    // Only the read-back runs, as the user the test has. The build leaves a package and a link.
     s.stub(
         "runuser",
-        r#"case "$*" in *--printsrcinfo*) ;; *) exit 0 ;; esac
+        r#"case "$*" in
+*--printsrcinfo*) ;;
+*)
+    echo package >arch-os-manager-2.0.0-1-x86_64.pkg.tar.zst
+    ln -s /etc/hostname arch-os-manager-2.0.0-2-x86_64.pkg.tar.zst
+    exit 0
+    ;;
+esac
 if [ "$(/usr/bin/id -u)" -eq 0 ]; then exec /usr/bin/runuser "$@"; fi
 while [ "$1" != -- ]; do shift; done
 shift
@@ -1379,6 +1427,14 @@ exec "$@""#,
         installed.is_some() && installed < calls.find("runuser -u builder"),
         "{calls}"
     );
+    assert!(calls.find("runuser -u builder") < calls.find("pkill -KILL -u builder"));
+    assert!(
+        built
+            .join("arch-os-manager-2.0.0-1-x86_64.pkg.tar.zst")
+            .is_file()
+    );
+    let link = built.join("arch-os-manager-2.0.0-2-x86_64.pkg.tar.zst");
+    assert!(link.symlink_metadata().is_err(), "a link stays behind");
 }
 
 #[test]
@@ -1592,6 +1648,49 @@ fn a_change_installs_first_and_removes_only_what_is_still_there_by_its_own_name(
     assert!(o.calls.ends_with("pacman -Qq\n"), "{}", o.calls);
 }
 
+/// An account database or sudoers is only merged, never replaced.
+#[test]
+fn an_account_file_is_never_replaced() {
+    let s = Sandbox::new("pacnew-accounts");
+    let files = [
+        "/etc/passwd.pacnew",
+        "/etc/group.pacnew",
+        "/etc/shadow.pacnew",
+        "/etc/gshadow.pacsave",
+        "/etc/sudoers.pacnew",
+    ];
+    s.stub("pacdiff", &format!("printf '%s\\n' {}", files.join(" ")));
+    for file in files {
+        let o = s.run("pacnew", &["take", file], &[]);
+        assert_eq!(o.code, 14, "{file}");
+        assert!(!o.calls.contains("mv "), "{}", o.calls);
+    }
+}
+
+/// A configuration kept as a link, as stow keeps it, becomes a file with the mode of what it
+/// pointed to, never with the 777 of the link.
+#[test]
+fn a_merge_over_a_link_keeps_the_mode_of_its_target() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = Sandbox::new("pacnew-link");
+    s.stub("snapper", "exit 0");
+    s.stub("meld", r#"echo merged >"$1""#);
+    let etc = s.dir.join("etc");
+    std::fs::create_dir_all(&etc).unwrap();
+    let real = s.dir.join("real.conf");
+    let (link, new) = (etc.join("foo.conf"), etc.join("foo.conf.pacnew"));
+    std::fs::write(&real, "a=1\n").unwrap();
+    std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    std::fs::write(&new, "a=2\n").unwrap();
+    s.stub("pacdiff", &format!("echo '{}'", new.display()));
+    let o = s.run("pacnew", &["merge", new.to_str().unwrap()], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert_eq!(std::fs::read_to_string(&link).unwrap(), "merged\n");
+    let mode = std::fs::metadata(&link).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o644);
+}
+
 #[test]
 fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
     let s = Sandbox::new("pacnew-merge");
@@ -1630,8 +1729,10 @@ fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
     assert!(!new.exists());
     assert!(o.calls.contains("meld "), "{}", o.calls);
     assert!(
-        o.calls
-            .contains(&format!("sudo stat -c %a %u %g -- {}\n", current.display())),
+        o.calls.contains(&format!(
+            "sudo stat -L -c %a %u %g -- {}\n",
+            current.display()
+        )),
         "a folder closed to the user still tells owner and mode: {}",
         o.calls
     );
@@ -1739,6 +1840,13 @@ fn firmware_with_nothing_to_update_is_no_failure_and_an_update_sends_no_report()
         "{}",
         o.calls
     );
+    // Updated elsewhere since the list, or withdrawn with the refresh.
+    s.stub(
+        "fwupdmgr",
+        r#"case "$1" in refresh) exit 0 ;; update) exit 2 ;; esac"#,
+    );
+    let o = s.run("firmware", &["update"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
     s.stub("fwupdmgr", "exit 1");
     assert_eq!(s.run("firmware", &["update"], &[]).code, 10, "no metadata");
 }

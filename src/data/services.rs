@@ -77,8 +77,11 @@ pub fn parse(out: &str, user: bool) -> Result<Vec<Service>, String> {
             session: session.contains(&u.unit.as_str()),
         })
         .collect();
-    // A template is no service until it has an instance.
-    for f in files.iter().filter(|f| !f.unit_file.ends_with("@.service")) {
+    // A template is no service until it has an instance, an alias is listed under its unit.
+    for f in files
+        .iter()
+        .filter(|f| !f.unit_file.ends_with("@.service") && f.state != "alias")
+    {
         if !all.iter().any(|s| s.unit == f.unit_file) {
             all.push(Service {
                 user,
@@ -119,6 +122,21 @@ mod tests {
         );
         assert_eq!(s[0].enabled, "static");
         assert!(s[0].running() && s[0].user);
+    }
+
+    /// As systemctl printed them on a real system: the alias names the display manager.
+    #[test]
+    fn leaves_out_an_alias() {
+        let out = concat!(
+            r#"units	[{"unit":"gdm.service","load":"loaded","active":"active","sub":"running","description":"GNOME Display Manager"}]"#,
+            "\n",
+            r#"files	[{"unit_file":"display-manager.service","state":"alias","preset":null},{"unit_file":"gdm.service","state":"enabled","preset":"disabled"}]"#,
+            "\nsession\tgdm.service\n"
+        );
+        let s = parse(out, false).unwrap();
+        let names: Vec<&str> = s.iter().map(|x| x.unit.as_str()).collect();
+        assert_eq!(names, ["gdm.service"]);
+        assert!(s[0].session);
     }
 
     #[test]

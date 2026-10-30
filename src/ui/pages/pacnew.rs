@@ -70,6 +70,15 @@ impl Page for PacnewPage {
     }
 }
 
+/// What pacnew.sh merges only and never replaces. The reason stands there.
+const MERGE_ONLY: [&str; 5] = [
+    "/etc/passwd",
+    "/etc/group",
+    "/etc/shadow",
+    "/etc/gshadow",
+    "/etc/sudoers",
+];
+
 struct FilePage {
     file: String,
     diff: Fetch<String>,
@@ -127,11 +136,13 @@ impl Page for FilePage {
             Loaded::Failed(f) => body.extend(failure(f).into_iter().take(2)),
             _ => body.push(Block::Text(t("Loading").into(), Tone::Muted)),
         }
-        let target = self
+        let (target, kind) = self
             .file
             .rsplit_once(".pac")
-            .map_or(self.file.as_str(), |(t, _)| t)
-            .to_string();
+            .unwrap_or((self.file.as_str(), "new"));
+        let target = target.to_string();
+        // A .pacsave or .pacorig is the configuration as it was, which pacman saved.
+        let saved = kind != "new";
         let apply = |verb: crate::script::Op, label: &str, question: String, file: String| {
             let glyph = if verb == op::PACNEW_TAKE {
                 crate::ui::icon::TAKE
@@ -146,20 +157,34 @@ impl Page for FilePage {
             })
             .icon(glyph)
         };
-        let mut acts = vec![
-            apply(
-                op::PACNEW_TAKE,
+        let (take, taken, kept) = match saved {
+            true => (
+                t("Restore the saved version"),
+                tf(
+                    "Restore the saved version?\nReplaces {target}.",
+                    &[("target", &target)],
+                ),
+                t("Keep the current version?\nDeletes the saved version."),
+            ),
+            false => (
                 t("Use the new version"),
                 tf(
                     "Use the new version?\nReplaces {target}.",
                     &[("target", &target)],
                 ),
-                self.file.clone(),
+                t("Keep the current version?\nDeletes the new version."),
+            ),
+        };
+        let mut acts = vec![
+            apply(op::PACNEW_TAKE, take, taken, self.file.clone()).unless(
+                MERGE_ONLY
+                    .contains(&target.as_str())
+                    .then(|| t("merge required").to_string()),
             ),
             apply(
                 op::PACNEW_KEEP,
                 t("Keep the current version"),
-                t("Keep the current version?\nDeletes the new version.").to_string(),
+                kept.to_string(),
                 self.file.clone(),
             ),
         ];
@@ -187,5 +212,72 @@ impl Page for FilePage {
     fn done(&mut self, _: &mut Ctx) -> Flow {
         self.diff.receive();
         Flow::Stay
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::app::tests::{app, open, press, screen};
+
+    /// What pacnew.sh never replaces is offered for merging only, with the reason.
+    #[test]
+    fn an_account_file_is_only_merged() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let page = FilePage {
+            file: "/etc/shadow.pacnew".into(),
+            diff: Fetch::new(|| Ok(String::new())),
+            detail: Detail::default(),
+        };
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("merge required"), "{shown}");
+        press(&mut app, &[Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Replaces /etc/shadow."), "{shown}");
+    }
+
+    /// The files are the ones pacnew.sh refuses to replace, both ways.
+    #[test]
+    fn merges_only_what_the_script_refuses_to_replace() {
+        let script = include_str!("../../../scripts/pacnew/pacnew.sh");
+        let line = script
+            .lines()
+            .find(|l| l.contains("/etc/passwd |"))
+            .unwrap();
+        let mut listed: Vec<&str> = line
+            .split(')')
+            .next()
+            .unwrap()
+            .split('|')
+            .map(str::trim)
+            .collect();
+        let mut here = MERGE_ONLY.to_vec();
+        listed.sort_unstable();
+        here.sort_unstable();
+        assert_eq!(listed, here);
+    }
+
+    /// A .pacsave is the configuration as it was: the actions say so, and keeping the current
+    /// version names what goes.
+    #[test]
+    fn a_saved_version_is_named_as_such() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let page = FilePage {
+            file: "/etc/foo.conf.pacsave".into(),
+            diff: Fetch::new(|| Ok(String::new())),
+            detail: Detail::default(),
+        };
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Restore the saved version"), "{shown}");
+        assert!(!shown.contains("new version"), "{shown}");
+        press(&mut app, &[Key::Down, Key::Enter]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Deletes the saved version."), "{shown}");
     }
 }

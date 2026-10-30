@@ -389,6 +389,13 @@ msgstr ""
 "Aktuelle Version behalten?\n"
 "Löscht die neue Version."
 
+msgid ""
+"Keep the current version?\n"
+"Deletes the saved version."
+msgstr ""
+"Aktuelle Version behalten?\n"
+"Löscht die gesicherte Version."
+
 msgid "Kernel"
 msgstr "Kernel"
 
@@ -650,6 +657,16 @@ msgstr ""
 
 msgid "Restarting"
 msgstr "Wird neu gestartet"
+
+msgid "Restore the saved version"
+msgstr "Gesicherte Version wiederherstellen"
+
+msgid ""
+"Restore the saved version?\n"
+"Replaces {target}."
+msgstr ""
+"Gesicherte Version wiederherstellen?\n"
+"Ersetzt {target}."
 
 msgid "Search packages"
 msgstr "Pakete suchen"
@@ -1011,6 +1028,9 @@ msgstr "braucht GNOME"
 msgid "needs a desktop"
 msgstr "braucht einen Desktop"
 
+msgid "merge required"
+msgstr "Zusammenführen erforderlich"
+
 msgid "needs meld"
 msgstr "braucht meld"
 
@@ -1302,6 +1322,11 @@ msgid ""
 msgstr ""
 "Zusammengeführte Konfiguration ungültig\n"
 "visudo-Prüfung fehlgeschlagen. Nichts geändert.\n"
+
+msgid ""
+"Merge required\n"
+msgstr ""
+"Zusammenführen erforderlich\n"
 
 msgid ""
 "Update the firmware?\n"
