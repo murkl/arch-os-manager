@@ -78,7 +78,7 @@ A version tag on an up-to-date `main` releases, and `Publish` attaches `system-m
 - Builds in between carry a pre-release of the patch after the last tag, such as `2.2.1-dev`
 - `AUR_SSH_KEY` of the environment `aur`, version tags only, made by `tools/aur.sh key`
 - A `Publish` that failed runs again with **Re-run failed jobs**. Tags never move, so a fix after a release is a new version
-- Pictures by hand with the change: `make screenshots VERSION=2.1.0`, then `make banner`. Needs `chromium`, `imagemagick`, `python`, `ttf-firacode-nerd`
+- Pictures by hand with a visible change: `make screenshots`, then `make banner`. They show no version, so a release needs none. Needs `chromium`, `imagemagick`, `python`, `ttf-firacode-nerd`
 
 ## The Repository
 

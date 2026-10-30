@@ -63,11 +63,11 @@ install: build
 
 # The README's pictures, by hand after a visible change: the pages out of
 # example data through the window's painter, as the ignored test `screenshots`
-# in src/ui/app.rs takes them. VERSION is what the pages show, so the next
-# release can be pictured before it exists.
+# in src/ui/app.rs takes them. A blank stands for the version, as build.rs
+# takes an empty one for none, so the pictures outlast a release.
 screenshots:
 	rm -f docs/screenshots/*.png
-	SM_VERSION="$(VERSION)" cargo test --locked --lib ui::app::tests::screenshots -- --ignored --exact
+	SM_VERSION=" " cargo test --locked --lib ui::app::tests::screenshots -- --ignored --exact
 	ls docs/screenshots
 
 # docs/banner.png out of two screenshots, so after `make screenshots`, by
