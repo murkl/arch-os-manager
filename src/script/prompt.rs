@@ -117,6 +117,13 @@ impl Prompt {
     }
 }
 
+/// Whether an unfinished line ends as a question does, for one in words not known here. A bar or
+/// a count that stands still ends otherwise, as `]`, `%` or a figure. The terminal's mode tells
+/// nothing: sudo sets it raw for any command it runs, per use_pty in sudoers(5) of sudo 1.9.17.
+pub fn asks(line: &str) -> bool {
+    line.trim_end().ends_with(['?', ':', '>'])
+}
+
 fn translate(q: &str) -> String {
     let q = q.trim();
     if let Some(rest) = q.strip_prefix("Replace ")

@@ -108,6 +108,7 @@ fn updates_lists_the_repositories_then_the_aur() {
     );
 }
 
+/// Each with the name Flatpak shows and its branch, also where a version is missing.
 #[test]
 fn flatpak_updates_name_both_versions_else_both_commits() {
     let s = Sandbox::new("flatpak");
@@ -115,11 +116,11 @@ fn flatpak_updates_name_both_versions_else_both_commits() {
     s.stub(
         "flatpak",
         r#"case "$*" in
-"list --columns=application,arch,branch,active,version")
-    printf 'com.x.App\tx86_64\tstable\t00000000000a\t1.1\n'
-    printf 'org.gnome.Platform\tx86_64\t48\t00000000000b\t\n'
-    printf 'org.gnome.Platform\tx86_64\t49\t00000000000c\t\n'
-    printf 'org.x.Rebuilt\tx86_64\tstable\t00000000000d\t2.0\n' ;;
+"list --columns=application,arch,branch,active,name,version")
+    printf 'com.x.App\tx86_64\tstable\t00000000000a\tApp One\t1.1\n'
+    printf 'org.gnome.Platform\tx86_64\t48\t00000000000b\tGNOME 48\t\n'
+    printf 'org.gnome.Platform\tx86_64\t49\t00000000000c\tGNOME 49\t\n'
+    printf 'org.x.Rebuilt\tx86_64\tstable\t00000000000d\tRebuilt\t2.0\n' ;;
 "remote-ls --updates --columns=application,arch,branch,commit,version")
     printf 'com.x.App\tx86_64\tstable\t00000000001a\t1.2\n'
     printf 'org.gnome.Platform\tx86_64\t49\t00000000001c\t\n'
@@ -131,9 +132,9 @@ esac"#,
     assert_eq!(o.code, 0, "{}", o.events);
     assert_eq!(
         o.out,
-        "flatpak\tcom.x.App\t1.1\t1.2\n\
-         flatpak\torg.gnome.Platform\t00000000000c\t00000000001c\n\
-         flatpak\torg.x.Rebuilt\t00000000000d\t00000000001d\n"
+        "flatpak\tcom.x.App\t1.1\t1.2\tApp One\tstable\n\
+         flatpak\torg.gnome.Platform\t00000000000c\t00000000001c\tGNOME 49\t49\n\
+         flatpak\torg.x.Rebuilt\t00000000000d\t00000000001d\tRebuilt\tstable\n"
     );
 }
 
@@ -185,7 +186,7 @@ fn updates_leave_out_what_pacman_ignores_and_name_a_branch_where_two_are_pending
     s.stub(
         "flatpak",
         r#"case "$1" in
-list) printf 'org.gnome.Platform\tx86_64\t49\ta1\t\norg.gnome.Platform\tx86_64\t50\tb1\t\n' ;;
+list) printf 'org.gnome.Platform\tx86_64\t49\ta1\tGNOME\t\norg.gnome.Platform\tx86_64\t50\tb1\tGNOME\t\n' ;;
 remote-ls) printf 'org.gnome.Platform\tx86_64\t49\ta2\t\norg.gnome.Platform\tx86_64\t50\tb2\t\n' ;;
 esac"#,
     );
@@ -198,8 +199,8 @@ esac"#,
     assert_eq!(
         o.out,
         "aur\tbar\t1-1\t2-1\n\
-         flatpak\torg.gnome.Platform//49\ta1\ta2\n\
-         flatpak\torg.gnome.Platform//50\tb1\tb2\n"
+         flatpak\torg.gnome.Platform//49\ta1\ta2\tGNOME\t49\n\
+         flatpak\torg.gnome.Platform//50\tb1\tb2\tGNOME\t50\n"
     );
 }
 
@@ -1496,7 +1497,8 @@ fn packages_install_remove_and_go_back_through_pacman_or_the_helper() {
 }
 
 /// With its review, as by default, the helper asks the person on the terminal, which the runtime
-/// is told to show. Switched off, it goes without the review and its menus.
+/// is told to show while it runs, also when it fails. Switched off, it goes without the review and
+/// its menus.
 #[test]
 fn the_aur_helper_reviews_on_the_terminal_unless_switched_off() {
     let s = Sandbox::new("aur-review");
@@ -1509,9 +1511,10 @@ fn the_aur_helper_reviews_on_the_terminal_unless_switched_off() {
         ),
     ] {
         s.stub(helper, "exit 0");
+        let handed = "terminal\ton\nterminal\toff\n";
         for (review, call, events) in [
-            (None, format!("{helper} -S -- aur/c\n"), "terminal\n"),
-            (Some("on"), format!("{helper} -S -- aur/c\n"), "terminal\n"),
+            (None, format!("{helper} -S -- aur/c\n"), handed),
+            (Some("on"), format!("{helper} -S -- aur/c\n"), handed),
             (Some("off"), format!("{helper} {skip} -S -- aur/c\n"), ""),
         ] {
             let mut env = vec![("SM_AUR", helper)];
@@ -1521,6 +1524,14 @@ fn the_aur_helper_reviews_on_the_terminal_unless_switched_off() {
             assert!(o.calls.ends_with(&call), "{helper} {review:?}: {}", o.calls);
             assert_eq!(o.events, events, "{helper} {review:?}");
         }
+        s.stub(helper, "exit 7");
+        let o = s.run("packages", &["install", "aur", "c"], &[("SM_AUR", helper)]);
+        assert_eq!(o.code, 1, "{helper}: {}", o.events);
+        assert!(
+            o.events.starts_with(handed) && o.events.contains("fail\t7\tpackages/packages.sh\t"),
+            "{helper}: {}",
+            o.events
+        );
     }
 }
 
