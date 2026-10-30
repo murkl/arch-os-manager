@@ -339,7 +339,7 @@ A function more than one script needs goes into `lib.sh`.
 | `make run` | Interface against a throwaway `target/home` |
 | `make install` | `~/.local/bin/system-manager` |
 | `make aur-check` | `aur/PKGBUILD` stamped with stand-ins, read by makepkg |
-| `make screenshots VERSION=x.y.z` | `docs/screenshots/` from example data, showing that version |
+| `make screenshots` | `docs/screenshots/` from example data, without the version |
 | `make banner` | `docs/banner.png` from two screenshots, by banner.py of murkl/workflows, with chromium, imagemagick and FiraCode Nerd Font |
 | `tools/aur.sh` | AUR package: stamp, build, push, binary on the release, key |
 | `tools/icons.sh` | Icon font cut to what `src/ui/icon.rs` names |
