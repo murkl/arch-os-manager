@@ -62,7 +62,8 @@ impl Sandbox {
         let events = self.dir.join("events");
         let output = Command::new("bash")
             .arg("-c")
-            .arg(r#"exec 3>"$SM_EVENTS"; exec bash --noprofile --norc "$0" "$@""#)
+            // What a run that elevates is given at fd 4 and fd 5, where a test names it.
+            .arg(r#"exec 3>"$SM_EVENTS"; if [ -n "${SM_GIVEN:-}" ]; then exec 4<"$SM_GIVEN" 5<"$SM_GIVEN"; fi; exec bash --noprofile --norc "$0" "$@""#)
             .arg(format!("{scripts}/{script}/{script}.sh"))
             .args(args)
             .env(
@@ -90,6 +91,73 @@ impl Sandbox {
             calls: std::fs::read_to_string(self.dir.join("calls")).unwrap_or_default(),
         }
     }
+}
+
+/// With the password held, a run that elevates hands it sudo from fd 4 and the program's renewal
+/// from fd 5, never through the terminal. A refusal goes to fd 3, and nothing renews.
+#[test]
+fn a_run_hands_sudo_the_password_through_its_pipes() {
+    let s = Sandbox::new("sudo-pipe");
+    s.absent("systemd-inhibit");
+    s.stub(
+        "sudo",
+        r#"case "$*" in
+"--stdin --prompt= --validate")
+    read -r pw
+    [ "$pw" = right ] || { echo 'Sorry, try again.' >&2; exit 1; }
+    touch "${0%/*}/../stamp"
+    ;;
+"--non-interactive --validate") [ -e "${0%/*}/../stamp" ] ;;
+*) exit 3 ;;
+esac"#,
+    );
+    let renewal = s.dir.join("renewal");
+    s.stub(
+        "system-manager",
+        &format!(r#"read -r pw; echo "$* $pw" >'{}'"#, renewal.display()),
+    );
+    let (program, given) = (s.dir.join("bin/system-manager"), s.dir.join("given"));
+    let env = [
+        ("SM_RUN", "Checking the password"),
+        ("SM_PASSWORD", "on"),
+        ("SM_PROGRAM", program.to_str().unwrap()),
+        ("SM_GIVEN", given.to_str().unwrap()),
+    ];
+    let renewed = || {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !renewal.exists() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        std::fs::read_to_string(&renewal).unwrap_or_default()
+    };
+
+    std::fs::write(&given, "right\n").unwrap();
+    let o = s.run("system", &["auth"], &env);
+    assert_eq!(o.code, 0, "{}{}", o.events, o.calls);
+    let line = renewed();
+    assert!(
+        line.starts_with("sudo-renew ") && line.contains(" 60 "),
+        "{line}"
+    );
+    assert!(
+        line.trim_end().ends_with("/system/system.sh right"),
+        "{line}"
+    );
+
+    std::fs::remove_file(s.dir.join("stamp")).unwrap();
+    std::fs::remove_file(&renewal).unwrap();
+    std::fs::write(&given, "wrong\n").unwrap();
+    let o = s.run("system", &["auth"], &env);
+    assert_eq!(o.code, 10, "{}{}", o.events, o.calls);
+    assert!(o.events.contains("refused\n"), "{}", o.events);
+    assert!(o.err.contains("Sorry, try again."), "{}", o.err);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(!renewal.exists(), "a refused password is renewed");
+
+    std::fs::remove_file(s.dir.join("calls")).unwrap();
+    let o = s.run("system", &["auth"], &[("SM_RUN", "Checking the password")]);
+    assert_eq!(o.code, 10);
+    assert!(!o.calls.contains("--stdin"), "{}", o.calls);
 }
 
 #[test]
@@ -1937,8 +2005,9 @@ fn the_news_the_log_and_a_restart_ask_their_tools() {
         "{}",
         o.calls
     );
+    // Without a time stamp from the password lib.sh hands sudo, the check says so.
     s.stub("sudo", "exit 1");
-    assert_eq!(s.run("system", &["auth"], &[]).code, 1);
+    assert_eq!(s.run("system", &["auth"], &[]).code, 10);
 }
 
 /// A configuration as packaged gets the last word appended: by speed, in the country of the time

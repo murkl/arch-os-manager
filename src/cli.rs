@@ -100,7 +100,15 @@ fn parse(args: impl IntoIterator<Item = String>) -> Result<Ask, String> {
 }
 
 pub fn main() -> ExitCode {
-    let (window, target, command, only_new) = match parse(std::env::args().skip(1)) {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // The renewal lib.sh starts for a run, never a person's command.
+    if let [command, shell, every, script] = args.as_slice()
+        && command == "sudo-renew"
+        && let (Ok(shell), Ok(every)) = (shell.parse(), every.parse())
+    {
+        return script::sudo::renew(shell, Duration::from_secs(every), script.as_ref());
+    }
+    let (window, target, command, only_new) = match parse(args) {
         Ok(Ask::Help) => {
             print!("{}", help());
             return ExitCode::SUCCESS;

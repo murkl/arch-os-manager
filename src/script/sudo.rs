@@ -1,8 +1,13 @@
-//! The sudo password: asked once, held in memory for the session, never written anywhere.
+//! The sudo password: asked once, held in memory for the session, never written anywhere and
+//! handed to sudo through pipes only.
 
+use std::io::{Read, Write};
+use std::path::Path;
+use std::process::{Command, ExitCode, Stdio};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
-use rustix::process::{DumpableBehavior, set_dumpable_behavior};
+use rustix::process::{DumpableBehavior, Pid, getppid, set_dumpable_behavior};
 
 /// What sudo prints when asking, through `$SUDO_PROMPT`, recognisable and readable in the details.
 pub const PROMPT: &str = "[sudo] password (system-manager): ";
@@ -35,6 +40,60 @@ pub fn forget() {
         // SAFETY: zero bytes are valid UTF-8.
         unsafe { old.as_bytes_mut().fill(0) };
     }
+}
+
+/// How often the renewal looks whether the shell that started it still lives.
+const TICK: Duration = Duration::from_secs(1);
+
+/// Keeps sudo's time stamp of a run fresh while `shell`, which started this, lives: `script
+/// renew` takes the password every `every`, read once from stdin. The first refusal ends it, as
+/// each counts towards the lock of pam_faillock.
+pub fn renew(shell: i32, every: Duration, script: &Path) -> ExitCode {
+    // No other process of the user reads the password out of this one, no core dump holds it.
+    let _ = set_dumpable_behavior(DumpableBehavior::NotDumpable);
+    let mut held = String::new();
+    if std::io::stdin().read_to_string(&mut held).is_err() {
+        return ExitCode::FAILURE;
+    }
+    if held.ends_with('\n') {
+        held.pop();
+    }
+    let (started, mut since) = (Pid::from_raw(shell), Instant::now());
+    while getppid() == started {
+        std::thread::sleep(TICK.min(every));
+        if since.elapsed() >= every {
+            since = Instant::now();
+            if !renewed(&held, script) {
+                break;
+            }
+        }
+    }
+    // SAFETY: zero bytes are valid UTF-8.
+    unsafe { held.as_bytes_mut().fill(0) };
+    ExitCode::SUCCESS
+}
+
+/// Whether `script renew` renewed sudo's time stamp, given the password on stdin.
+fn renewed(password: &str, script: &Path) -> bool {
+    let child = Command::new("bash")
+        .arg("--noprofile")
+        .arg("--norc")
+        .arg(script)
+        .arg("renew")
+        .env_remove("SM_RUN")
+        .env_remove("SM_TERMINAL")
+        .env_remove("BASH_ENV")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    let Ok(mut child) = child else {
+        return false;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = writeln!(stdin, "{password}");
+    }
+    child.wait().is_ok_and(|s| s.success())
 }
 
 #[cfg(test)]

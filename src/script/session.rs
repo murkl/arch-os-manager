@@ -11,7 +11,7 @@ use rustix::io::Errno;
 use rustix::pty::OpenptFlags;
 use rustix::termios::{LocalModes, Winsize};
 
-use super::{Op, attach_fd3, command, pipe};
+use super::{Op, attach, command, pipe};
 
 #[derive(Debug)]
 pub enum Event {
@@ -33,14 +33,27 @@ impl Session {
         size: (u16, u16),
         sink: impl Fn(Event) + Send + Sync + 'static,
     ) -> Result<Session, String> {
-        Session::spawn(run_command(op, args)?, size, sink)
+        let (cmd, given) = run_command(op, args)?;
+        Session::spawn_with(cmd, size, sink, given)
     }
 
-    /// Runs `cmd` on a new pseudo terminal, with fd 3 for lib.sh's events.
+    /// As `spawn_with`, given nothing.
+    #[cfg(test)]
     pub(super) fn spawn(
+        cmd: std::process::Command,
+        size: (u16, u16),
+        sink: impl Fn(Event) + Send + Sync + 'static,
+    ) -> Result<Session, String> {
+        Session::spawn_with(cmd, size, sink, Vec::new())
+    }
+
+    /// Runs `cmd` on a new pseudo terminal, with fd 3 for lib.sh's events and what `given` holds
+    /// at fd 4 and on.
+    fn spawn_with(
         mut cmd: std::process::Command,
         (rows, cols): (u16, u16),
         sink: impl Fn(Event) + Send + Sync + 'static,
+        given: Vec<OwnedFd>,
     ) -> Result<Session, String> {
         let master =
             rustix::pty::openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC)
@@ -62,7 +75,8 @@ impl Session {
         let (events, events_w) = pipe().map_err(|e| e.to_string())?;
         // The reader takes events between reads of the terminal without waiting for more.
         rustix::io::ioctl_fionbio(&events, true).map_err(err)?;
-        let raw = events_w.as_raw_fd();
+        let mut fds = vec![(events_w.as_raw_fd(), 3)];
+        fds.extend(given.iter().map(AsRawFd::as_raw_fd).zip(4..));
         cmd.env("TERM", "xterm-256color")
             .stdin(Stdio::from(slave.try_clone().map_err(|e| e.to_string())?))
             .stdout(Stdio::from(slave.try_clone().map_err(|e| e.to_string())?))
@@ -72,12 +86,12 @@ impl Session {
             std::os::unix::process::CommandExt::pre_exec(&mut cmd, move || {
                 rustix::process::setsid()?;
                 rustix::process::ioctl_tiocsctty(BorrowedFd::borrow_raw(0))?;
-                attach_fd3(raw)
+                attach(&fds)
             });
         }
         let mut child = cmd.spawn().map_err(|e| format!("bash: {e}"))?;
         drop(cmd);
-        drop(events_w);
+        drop((events_w, given));
 
         let sink = Arc::new(sink);
         let (terminal, out) = (session.master.clone(), sink.clone());
@@ -182,17 +196,37 @@ fn drain(events: &OwnedFd, pending: &mut Vec<u8>) -> bool {
     }
 }
 
-/// The command of a run. Only what elevates holds shutdown off: systemctl refuses a reboot while
-/// its caller's own lock blocks it.
-fn run_command(op: Op, args: &[String]) -> Result<std::process::Command, String> {
+/// The command of a run, and what it is given at fd 4 and on. Only what elevates holds shutdown
+/// off: systemctl refuses a reboot while its caller's own lock blocks it. With the password held,
+/// sudo takes it from fd 4 and this program's renewal from fd 5, never from the terminal, where
+/// any program of the run could ask for it in sudo's words.
+fn run_command(op: Op, args: &[String]) -> Result<(std::process::Command, Vec<OwnedFd>), String> {
     let mut cmd = command(op, args)?;
+    let mut given = Vec::new();
     if op.meta().root {
         cmd.env("SM_RUN", op.title());
+        if let Some(password) = super::sudo::get() {
+            cmd.env("SM_PASSWORD", "on");
+            if let Ok(program) = crate::paths::program() {
+                cmd.env("SM_PROGRAM", program);
+            }
+            given = vec![holding(&password)?, holding(&password)?];
+        }
     }
     if super::terminal() {
         cmd.env("SM_TERMINAL", "on");
     }
-    Ok(cmd)
+    Ok((cmd, given))
+}
+
+/// The end of a pipe that holds `password` for one read.
+fn holding(password: &str) -> Result<OwnedFd, String> {
+    use std::io::Write;
+    let (read, write) = pipe().map_err(|e| e.to_string())?;
+    std::fs::File::from(write)
+        .write_all(format!("{password}\n").as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(read)
 }
 
 fn err(e: rustix::io::Errno) -> String {
@@ -207,6 +241,7 @@ mod tests {
     fn holds(op: Op) -> bool {
         run_command(op, &[])
             .unwrap()
+            .0
             .get_envs()
             .any(|(k, v)| k == "SM_RUN" && v.is_some())
     }
@@ -234,5 +269,49 @@ mod tests {
     fn only_a_run_that_elevates_holds_shutdown_off() {
         assert!(holds(op::UPGRADE_RUN));
         assert!(!holds(op::SYSTEM_REBOOT));
+    }
+
+    /// What a run is given waits at fd 4 and on, beside lib.sh's events at fd 3, and lies in
+    /// none of its output unasked.
+    #[test]
+    fn a_run_reads_what_it_is_given_at_fd_4_and_on() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg("-c")
+            .arg(r#"read -r a <&4; read -r b <&5; [ "$a $b" = "one two" ] && echo given >&3"#);
+        let given = vec![holding("one").unwrap(), holding("two").unwrap()];
+        let _session =
+            Session::spawn_with(cmd, (24, 80), move |e| drop(tx.send(e)), given).unwrap();
+        // The end and the events come on threads of their own, in either order.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let (mut read, mut code) = (false, None);
+        while !(read && code.is_some()) && std::time::Instant::now() < deadline {
+            match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok(Event::Script(s)) if s == "given" => read = true,
+                Ok(Event::Exit(c)) => code = Some(c),
+                _ => {}
+            }
+        }
+        assert!(read && code == Some(0), "{read} {code:?}");
+    }
+
+    /// Only a run that elevates gets the password held, on two pipes, never one that does not.
+    #[test]
+    fn only_a_run_that_elevates_gets_the_password_held() {
+        let _held = crate::script::sudo::LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let gets = |op: Op| {
+            let (cmd, given) = run_command(op, &[]).unwrap();
+            let on = cmd
+                .get_envs()
+                .any(|(k, v)| k == "SM_PASSWORD" && v == Some("on".as_ref()));
+            (on, given.len())
+        };
+        crate::script::sudo::set("pw".into());
+        assert_eq!(gets(op::UPGRADE_RUN), (true, 2));
+        assert_eq!(gets(op::SYSTEM_REBOOT), (false, 0));
+        crate::script::sudo::forget();
+        assert_eq!(gets(op::UPGRADE_RUN), (false, 0));
     }
 }

@@ -34,9 +34,15 @@ op_nopasswd() {
     sudo --non-interactive --validate 2>/dev/null || exit 10
 }
 
-# Proves the password before a run needs it, started only with one to give.
+# Proves the password before a run needs it, started only with one to give,
+# which lib.sh hands sudo before. Without a time stamp sudo asks no one.
 op_auth() {
-    sudo --validate
+    sudo --non-interactive --validate 2>/dev/null || exit 10
+}
+
+# Renews sudo's time stamp for a run, the password on stdin where sudo needs it.
+op_renew() {
+    sudo --stdin --prompt= --validate
 }
 
 op_reboot() {

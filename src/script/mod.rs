@@ -18,7 +18,7 @@ pub use session::Event;
 
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::os::fd::{BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -260,16 +260,21 @@ fn command(op: Op, args: &[String]) -> Result<Command, String> {
     Ok(cmd)
 }
 
-/// Puts `fd` at 3 in the child, where lib.sh writes its events. Runs between fork and exec.
-fn attach_fd3(fd: RawFd) -> std::io::Result<()> {
-    // SAFETY: fd stays open in the parent until spawn returns, and 3 is ours to replace in the child.
+/// Puts each fd at its number in the child: 3 where lib.sh writes its events, 4 and 5 where it
+/// reads the password. Each goes above them all first, so none is overwritten before it moved.
+/// Runs between fork and exec, so at most three and nothing allocated.
+fn attach(fds: &[(RawFd, RawFd)]) -> std::io::Result<()> {
+    let mut moved = [(-1, -1); 3];
+    // SAFETY: the fds stay open in the parent until spawn returns, and the numbers are ours to
+    // replace in the child.
     unsafe {
-        let source = BorrowedFd::borrow_raw(fd);
-        if fd == 3 {
-            rustix::io::fcntl_setfd(source, rustix::io::FdFlags::empty())?;
-        } else {
-            let mut three = std::mem::ManuallyDrop::new(OwnedFd::from_raw_fd(3));
-            rustix::io::dup2(source, &mut three)?;
+        for (slot, &(fd, at)) in moved.iter_mut().zip(fds) {
+            let high = rustix::io::fcntl_dupfd_cloexec(BorrowedFd::borrow_raw(fd), 10)?;
+            *slot = (high.into_raw_fd(), at);
+        }
+        for &(high, at) in moved.iter().take(fds.len()) {
+            let mut target = std::mem::ManuallyDrop::new(OwnedFd::from_raw_fd(at));
+            rustix::io::dup2(BorrowedFd::borrow_raw(high), &mut target)?;
         }
     }
     Ok(())

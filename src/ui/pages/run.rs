@@ -237,6 +237,8 @@ pub struct PasswordPage {
     failed: Option<Failure>,
     /// ⏎ came with nothing typed.
     empty: bool,
+    /// sudo refused the password typed last.
+    rejected: bool,
     /// Since when sudo checks the password, and how many letters it had.
     checking: Option<(Instant, usize)>,
 }
@@ -251,6 +253,7 @@ impl PasswordPage {
             auth: None,
             failed: None,
             empty: false,
+            rejected: false,
             checking: None,
         }
     }
@@ -292,7 +295,7 @@ impl Page for PasswordPage {
             }
             return;
         }
-        let rejected = self.auth.as_ref().is_some_and(|r| r.rejected);
+        let rejected = self.rejected;
         let mut typed = Input::masked(t("Password"));
         let input = match self.checking {
             _ if self.asking() => Some(&self.input),
@@ -328,18 +331,14 @@ impl Page for PasswordPage {
             Key::Enter => {
                 let password = self.input.take();
                 self.checking = Some((Instant::now(), password.chars().count()));
-                match self.auth.as_mut() {
-                    Some(run) => run.answer(&password),
-                    None => {
-                        // Held for the prompt, which the run answers as it appears.
-                        script::sudo::set(password);
-                        match Run::start(op::SYSTEM_AUTH, &[], (24, 80), ctx.run_sink()) {
-                            Ok(run) => self.auth = Some(run),
-                            Err(f) => {
-                                script::sudo::forget();
-                                self.failed = Some(f);
-                            }
-                        }
+                self.rejected = false;
+                // Held for the run, which hands it to sudo through a pipe.
+                script::sudo::set(password);
+                match Run::start(op::SYSTEM_AUTH, &[], (24, 80), ctx.run_sink()) {
+                    Ok(run) => self.auth = Some(run),
+                    Err(f) => {
+                        script::sudo::forget();
+                        self.failed = Some(f);
                     }
                 }
                 Flow::Stay
@@ -389,9 +388,15 @@ impl Page for PasswordPage {
         let Some(run) = self.auth.as_mut() else {
             return Flow::Stay;
         };
-        run.check_prompt();
         match run.result() {
             Some(Ok(())) => self.authorized(ctx),
+            // sudo refused it, which lib.sh tells as `refused`: the person types it anew.
+            Some(Err(f)) if f.code == Some(10) => {
+                script::sudo::forget();
+                self.auth = None;
+                self.rejected = true;
+                Flow::Stay
+            }
             Some(Err(f)) => {
                 self.auth = None;
                 self.failed = Some(f);
@@ -1218,6 +1223,26 @@ mod tests {
         let run = Run::fed(op::UPGRADE_RUN, "repo", sudo::PROMPT);
         let within = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
         assert_eq!(card(Box::new(before)), card(Box::new(within)));
+    }
+
+    /// A password sudo refused, told by the check ending with 10, is forgotten, and the box asks
+    /// anew, saying why.
+    #[test]
+    fn a_refused_password_is_asked_anew() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let mut page = PasswordPage::new(Job::new(op::UPGRADE_RUN, Vec::new()));
+        page.needed = true;
+        sudo::set("wrong".into());
+        page.auth = Some(Run::ended(op::SYSTEM_AUTH, "", 10));
+        assert!(matches!(page.tick(&mut app.ctx), Flow::Stay));
+        assert!(page.rejected && page.auth.is_none() && page.failed.is_none());
+        assert_eq!(sudo::get(), None);
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Wrong password."), "{shown}");
     }
 
     /// sudo is asked whether it needs the password, and then whether it takes it: each wait shows

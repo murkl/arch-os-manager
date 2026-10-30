@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{Failure, Op, attach_fd3, command, pipe};
+use super::{Failure, Op, attach, command, pipe};
 
 const LIMIT: Duration = Duration::from_secs(120);
 
@@ -81,7 +81,7 @@ fn collect(
         cmd.pre_exec(move || {
             rustix::process::setsid()?;
             let _ = rustix::process::setpriority_process(None, NICE);
-            attach_fd3(raw)
+            attach(&[(raw, 3)])
         })
     };
     let mut child = cmd
