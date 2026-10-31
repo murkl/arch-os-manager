@@ -185,9 +185,7 @@ impl Page for SettingsPage {
         };
         let mut rows = Vec::new();
         for (heading, group) in [t("Appearance"), t("System"), ""].into_iter().zip(SETTINGS) {
-            if !heading.is_empty() {
-                rows.push(Row::heading(heading));
-            }
+            rows.push(Row::heading(heading));
             for &target in group.iter().filter(|t| shown(**t)) {
                 let (detail, tone, dim) = self.value(target, ctx);
                 rows.push(
@@ -793,7 +791,7 @@ mod tests {
     }
 
     #[test]
-    fn appearance_and_system_stand_apart_and_about_last() {
+    fn appearance_and_system_stand_apart_and_about_last_on_its_own() {
         use crate::ui::app::tests::{app, open, screen};
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(Lang::En);
@@ -817,10 +815,11 @@ mod tests {
         );
         assert_eq!(lines[system - 1], "", "{shown}");
         assert!(at("Optional packages") < at("About"), "{shown}");
+        assert_eq!(lines[at("Optional packages") + 1], "", "{shown}");
         assert_eq!(
-            at("Optional packages") + 1,
+            at("Optional packages") + 2,
             at("About"),
-            "no blank line: {shown}"
+            "one blank line: {shown}"
         );
     }
 
