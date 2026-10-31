@@ -1,0 +1,11 @@
+# GNOME's libadwaita palette, dark.
+name: Adwaita Dark
+colors:
+  background: "#242424"
+  surface: "#303030"
+  muted: "#9A9996"
+  text: "#EEEEEE"
+  accent: "#78AEED"
+  success: "#57E389"
+  warning: "#F8E45C"
+  error: "#FF7B63"

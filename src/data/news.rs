@@ -1,6 +1,6 @@
 //! The Arch Linux news feed, and its HTML as paragraphs for the terminal.
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Item {
     pub title: String,
     pub link: String,
@@ -38,6 +38,18 @@ pub fn parse(xml: &str) -> Result<Vec<Item>, String> {
         })
         .collect();
     Ok(items)
+}
+
+/// The feed and what was kept of earlier ones: the feed first, then the kept items it no longer
+/// lists, in their order.
+pub fn merge(feed: Vec<Item>, kept: Vec<Item>) -> Vec<Item> {
+    let mut all = feed;
+    for item in kept {
+        if !all.iter().any(|i| i.link == item.link) {
+            all.push(item);
+        }
+    }
+    all
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -186,6 +198,22 @@ fn decode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_feed_leads_and_what_it_dropped_stays() {
+        let item = |link: &str, title: &str| Item {
+            title: title.into(),
+            link: link.into(),
+            date: String::new(),
+            html: String::new(),
+        };
+        let all = merge(
+            vec![item("c", "new c"), item("b", "new b")],
+            vec![item("b", "old b"), item("a", "old a")],
+        );
+        let shown: Vec<_> = all.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(shown, ["new c", "new b", "old a"]);
+    }
 
     #[test]
     fn reads_the_feed() {

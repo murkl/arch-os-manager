@@ -106,9 +106,6 @@ msgstr "Dienst wird geändert"
 msgid "Check again"
 msgstr "Erneut prüfen"
 
-msgid "Checking"
-msgstr "Wird geprüft"
-
 msgid "Checking for updates"
 msgstr "Updates werden gesucht"
 
@@ -1337,6 +1334,22 @@ msgid ""
 msgstr ""
 "Firmware aktualisieren?\n"
 "Gerät bis zum Abschluss angeschlossen lassen.\n"
+
+msgid "Edit list"
+msgstr "Liste bearbeiten"
+
+msgid "Editing the mirror list"
+msgstr "Spiegelserver-Liste wird bearbeitet"
+
+msgid "Checking"
+msgstr "Wird geprüft"
+
+msgid ""
+"Mirror list not edited\n"
+"Set $EDITOR or $SUDO_EDITOR.\n"
+msgstr ""
+"Spiegelserver-Liste nicht bearbeitet\n"
+"$EDITOR oder $SUDO_EDITOR setzen.\n"
 
 msgid "Ranking the mirrors"
 msgstr "Spiegelserver werden sortiert"

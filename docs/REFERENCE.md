@@ -144,7 +144,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | Package | Beyond pacman |
 |---|---|
 | `paru`, `yay` | Built with makepkg after `git` and `base-devel`, build dependencies removed. Removal takes the owner of the command, such as `paru-bin` |
-| `reflector` | `/etc/xdg/reflector/reflector.conf` as packaged gets appended: synced within 12 h, 10 latest, by speed, country of the time zone. One changed by hand stays. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service` |
+| `reflector` | `/etc/xdg/reflector/reflector.conf` as packaged gets appended: synced within 12 h, 10 latest, by speed, country of the time zone. One changed by hand stays. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service`, **Edit list** opens the list in `sudoedit` |
 | `fwupd` | `fwupd-refresh.timer` enabled, disabled on removal |
 | `gnome-arch-update` | Arch Linux Updates Indicator from extensions.gnome.org, installed by the running GNOME Shell after its own question, active at once. Its commands run this binary. Removed with its settings |
 
@@ -212,7 +212,7 @@ Icons are Nerd Font symbols, in a terminal from `ttf-nerd-fonts-symbols`. The co
 | `~/.arch-os/state.yaml` | News read, updates announced, the open notification |
 | `~/.arch-os/state.lock` | Lock for `state.yaml` |
 | `~/.arch-os/logs/system-manager.log` | Runtime and runs, rotated at 2 MiB |
-| `~/.arch-os/cache/news.xml` | News feed for offline |
+| `~/.arch-os/news.json` | Every news item seen, never deleted, for offline |
 | `~/.local/share/applications/system-manager.desktop` | Menu entry |
 | `~/.local/share/icons/hicolor/scalable/apps/system-manager.svg` | Icon |
 | `~/.local/share/icons/hicolor/symbolic/apps/system-manager-symbolic.svg` | Symbolic icon |

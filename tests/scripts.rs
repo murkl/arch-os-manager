@@ -1892,6 +1892,28 @@ fn the_mirror_list_names_its_servers_and_a_ranking_tells_offline_from_failed() {
 }
 
 #[test]
+fn editing_the_mirror_list_hands_over_the_terminal_and_names_a_missing_editor() {
+    let s = Sandbox::new("mirrors-edit");
+    s.stub("sudo", "exit 0");
+    let o = s.run("mirrors", &["edit"], &[]);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls.ends_with("sudo -e -- /etc/pacman.d/mirrorlist\n"),
+        "{}",
+        o.calls
+    );
+    let (on, off) = (
+        o.events.find("terminal\ton"),
+        o.events.find("terminal\toff"),
+    );
+    assert!(on < off && on.is_some(), "{}", o.events);
+    s.stub("sudo", "exit 1");
+    let o = s.run("mirrors", &["edit"], &[]);
+    assert_eq!(o.code, 12);
+    assert!(o.events.contains("terminal\toff"), "{}", o.events);
+}
+
+#[test]
 fn firmware_with_nothing_to_update_is_no_failure_and_an_update_sends_no_report() {
     let s = Sandbox::new("firmware");
     s.stub(

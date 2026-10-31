@@ -437,6 +437,8 @@ pub struct Shared {
 
 /// A wait shorter than this never shows, so nothing flashes.
 pub const GRACE: Duration = Duration::from_millis(300);
+/// How long a check the person asked for shows, so a quick one is seen as well.
+pub const CHECK: Duration = Duration::from_millis(800);
 
 /// A job reading a shared value or writing settings, until its value is in.
 struct Load {
@@ -469,6 +471,9 @@ pub struct Ctx {
     /// The password was proven, or is not needed, this session.
     pub authorized: bool,
     reload: bool,
+    /// Since when a check asked for shows, and for how long at least. `CHECK`, none in tests.
+    checking: Option<Instant>,
+    check: Duration,
     /// Jobs reading shared values or writing settings, oldest first.
     loads: Vec<Load>,
     load: u64,
@@ -540,6 +545,18 @@ impl Ctx {
     /// it still happens once.
     pub fn reload(&mut self) {
         self.reload = true;
+    }
+
+    /// A reload the person asked for: the page shows that it checks, for `CHECK` at least.
+    pub fn recheck(&mut self) {
+        self.reload();
+        self.checking = Some(Instant::now());
+    }
+
+    /// Whether a check asked for is under way or just ended.
+    pub fn checking(&self) -> bool {
+        self.checking
+            .is_some_and(|since| self.busy() || since.elapsed() < self.check)
     }
 
     /// Something loads in the background.

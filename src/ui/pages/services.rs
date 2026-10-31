@@ -60,7 +60,7 @@ pub struct ServicesPage {
 impl ServicesPage {
     pub fn new() -> ServicesPage {
         ServicesPage {
-            list: List::filterable(),
+            list: List::searchable(),
         }
     }
 }
@@ -105,7 +105,12 @@ impl Page for ServicesPage {
     }
 
     fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
-        super::list_hints(self.list.typing())
+        super::search_hints(
+            self.list
+                .filter
+                .as_ref()
+                .is_some_and(|f| !f.text.is_empty()),
+        )
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
@@ -319,6 +324,47 @@ mod tests {
         assert!(lines[at("nas-sync")].contains(app.ctx.style.glyphs.cursor));
         press(&mut app, &[Key::Enter]);
         assert!(screen(&mut app, &mut term).contains("Services › nas-sync"));
+    }
+
+    /// The filter is there from the start and keeps the letters. A filtered list keeps the
+    /// heading of the scope that still has a row. esc clears the text, then goes back.
+    #[test]
+    fn the_filter_is_always_there_and_keeps_the_headings_of_what_is_left() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let service = |user, unit: &str| Service {
+            user,
+            unit: unit.into(),
+            description: String::new(),
+            active: "active".into(),
+            enabled: "enabled".into(),
+            session: false,
+        };
+        app.ctx.shared.services = Loaded::Ready(vec![
+            service(false, "sshd.service"),
+            service(true, "syncthing.service"),
+        ]);
+        open(&mut app, Box::new(ServicesPage::new()));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Filter") && !shown.contains("f filter"),
+            "{shown}"
+        );
+        press(&mut app, &[Key::Char('s'), Key::Char('y')]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains("sshd") && shown.contains("syncthing"),
+            "{shown}"
+        );
+        let has = |shown: &str, heading: &str| shown.lines().any(|l| l.trim() == heading);
+        assert!(has(&shown, "User") && !has(&shown, "System"), "{shown}");
+        assert!(shown.contains("esc clear search"), "{shown}");
+        press(&mut app, &[Key::Esc]);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("sshd") && has(&shown, "System"), "{shown}");
+        let mut page = ServicesPage::new();
+        assert!(matches!(page.key(Key::Esc, &mut app.ctx), Flow::Ignored));
     }
 
     /// What the graphical session cannot do without asks first, opening on no.

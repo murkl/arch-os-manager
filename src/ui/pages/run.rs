@@ -843,7 +843,19 @@ impl Page for RunPage {
                 self.draw_outcome(area, buf, ctx);
             }
         } else if self.outcome.is_some() {
-            self.draw_outcome(area, buf, ctx);
+            // Done stands once the system is read again, not while the spinner still turns.
+            if ctx.settling() {
+                waiting(
+                    buf,
+                    area,
+                    &self.job.title(),
+                    Some(t("Reading the system")),
+                    None,
+                    ctx,
+                );
+            } else {
+                self.draw_outcome(area, buf, ctx);
+            }
         } else if self.prompt().is_some() {
             self.draw_progress(area, buf, ctx);
             self.draw_prompt(area, buf, ctx);
@@ -891,6 +903,10 @@ impl Page for RunPage {
         }
         if self.outcome.is_some() {
             // The keys of what is offered, none while the system is read again.
+            let reading = ctx.settling() && !self.details && !terminal;
+            if reading {
+                return vec![("tab", details)];
+            }
             return if self.settled() {
                 let mut h = self.result.hints();
                 if !terminal {
@@ -1491,6 +1507,10 @@ mod tests {
         assert!(
             footer.contains("tab details") && !footer.contains("choose"),
             "{footer}"
+        );
+        assert!(
+            shown.contains("Reading the system") && !shown.contains("Done"),
+            "done stands once the system is read: {shown}"
         );
     }
 

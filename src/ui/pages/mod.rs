@@ -32,3 +32,13 @@ pub fn list_hints(filter: bool) -> Vec<(&'static str, Does)> {
         ("esc", Does::Back),
     ]
 }
+
+/// The keys of a list whose filter is always there.
+pub fn search_hints(clearing: bool) -> Vec<(&'static str, Does)> {
+    let esc = if clearing {
+        Does::ClearSearch
+    } else {
+        Does::Back
+    };
+    vec![("↑↓", Does::Choose), ("⏎", Does::Open), ("esc", esc)]
+}
