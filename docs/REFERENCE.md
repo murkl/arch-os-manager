@@ -174,7 +174,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 - The timer announces 2 minutes after login, then per `notify`. A notification stays until answered or replaced, and closes once nothing is pending
 - `aur-review: true` shows the terminal while the AUR helper runs, for its review and every question of its own. `false` builds without review
 - `flatpak: false` leaves Flatpak to another app store. `all` is read as `true`, `cleanup` as `false`, `off` as `false` with Flatpak unmarked in the clean-up
-- A hidden message ignores numbers, hex values and hashes. While any is hidden, the system log counts those of this boot below its errors, **⏎** on the count lists them to show again
+- A hidden message ignores numbers, hex values and hashes. While any is hidden, the system log counts the hidden messages below its errors, **⏎** on the count lists them to show again
 - The first start and `init` take over the settings of Arch OS Manager 1.x, then remove what it left. `scripts/migrate/migrate.sh` says how to remove this
 
 ## Themes
