@@ -59,6 +59,8 @@ impl App {
             generation: 0,
             authorized: false,
             reload: false,
+            checking: None,
+            check: super::CHECK,
             loads: Vec::new(),
             load: 0,
             cursor: Default::default(),
@@ -464,26 +466,29 @@ fn load_dropped(foreign: &[String]) -> Result<Vec<String>, Failure> {
 
 /// The feed, or the copy from the last time it was reached.
 fn load_news() -> Result<(Vec<data::news::Item>, bool), Failure> {
-    let cache = crate::paths::news_cache();
+    let archive = crate::paths::news_archive();
+    let kept: Vec<data::news::Item> = std::fs::read_to_string(&archive)
+        .ok()
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default();
     // An answer that is no feed, as a captive portal gives, counts as none.
-    let fetched = query(op::NEWS_FETCH, &[]).and_then(|xml| {
-        let items = data::news::parse(&xml).map_err(|e| Failure::new(op::NEWS_FETCH, e))?;
-        Ok((xml, items))
-    });
+    let fetched = query(op::NEWS_FETCH, &[])
+        .and_then(|xml| data::news::parse(&xml).map_err(|e| Failure::new(op::NEWS_FETCH, e)));
     match fetched {
-        Ok((xml, items)) => {
-            if let Err(e) = crate::paths::write_atomic(&cache, xml.as_bytes()) {
-                crate::warn!("news cache not written: {e}");
+        Ok(feed) => {
+            let all = data::news::merge(feed, kept);
+            match serde_json::to_vec(&all) {
+                Ok(json) => {
+                    if let Err(e) = crate::paths::write_atomic(&archive, &json) {
+                        crate::warn!("news not kept: {e}");
+                    }
+                }
+                Err(e) => crate::warn!("news not kept: {e}"),
             }
-            Ok((items, false))
+            Ok((all, false))
         }
-        Err(failure) => match std::fs::read_to_string(&cache) {
-            Ok(xml) => Ok((
-                data::news::parse(&xml).map_err(|e| Failure::new(op::NEWS_FETCH, e))?,
-                true,
-            )),
-            Err(_) => Err(failure),
-        },
+        Err(failure) if kept.is_empty() => Err(failure),
+        Err(_) => Ok((kept, true)),
     }
 }
 
@@ -540,6 +545,8 @@ pub mod tests {
             generation: 0,
             authorized: false,
             reload: false,
+            checking: None,
+            check: std::time::Duration::ZERO,
             loads: Vec::new(),
             load: 0,
             cursor: Default::default(),

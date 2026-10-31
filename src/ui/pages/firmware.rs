@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use super::run::{Job, start};
 use crate::i18n::t;
 use crate::script::op;
-use crate::ui::detail::{Act, Block, Detail, done, loaded};
+use crate::ui::detail::{Act, Block, Detail, done, loaded, recheck};
 use crate::ui::icon;
 use crate::ui::list::{Lead, changes};
 use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
@@ -36,6 +36,7 @@ impl Page for FirmwarePage {
         let mut acts = Vec::new();
         if list.is_empty() {
             body.push(done(t("The firmware is up to date.")));
+            acts.push(recheck(ctx));
         } else {
             let pairs: Vec<_> = list.iter().map(|f| (&*f.current, &*f.new)).collect();
             let change = changes(&pairs, ctx.style.glyphs.arrow);
@@ -65,15 +66,21 @@ impl Page for FirmwarePage {
         self.detail.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
+        if ctx.checking() {
+            return vec![("esc", Does::Back)];
+        }
         self.detail.hints()
     }
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
+        if self.animating(ctx) {
+            return Flow::Ignored;
+        }
         self.detail.key(key, ctx)
     }
 
     fn animating(&self, ctx: &Ctx) -> bool {
-        matches!(ctx.shared.firmware, Loaded::Loading)
+        matches!(ctx.shared.firmware, Loaded::Loading) || ctx.checking()
     }
 }

@@ -1,0 +1,11 @@
+# GNOME's libadwaita palette, light.
+name: Adwaita Light
+colors:
+  background: "#FAFAFB"
+  surface: "#EBEBED"
+  muted: "#77767B"
+  text: "#2E3436"
+  accent: "#1C71D8"
+  success: "#1F8A53"
+  warning: "#C64600"
+  error: "#C01C28"

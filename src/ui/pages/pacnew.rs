@@ -6,19 +6,22 @@ use ratatui::layout::Rect;
 use super::run::{Job, start};
 use crate::i18n::{t, tf};
 use crate::script::{op, query};
-use crate::ui::detail::{Act, Block, Detail, done, failure, loaded, show};
+use crate::ui::detail::{Act, Block, Detail, done, failure, loaded, recheck, show};
 use crate::ui::fetch::Fetch;
 use crate::ui::list::{List, Picked, Row};
 use crate::ui::{Ctx, Does, Flow, Key, Loaded, Page, Tone};
 
 pub struct PacnewPage {
     list: List<String>,
+    /// What stands instead of the list while no file is left.
+    none: Detail,
 }
 
 impl PacnewPage {
     pub fn new() -> PacnewPage {
         PacnewPage {
             list: List::filterable(),
+            none: Detail::default(),
         }
     }
 }
@@ -33,12 +36,12 @@ impl Page for PacnewPage {
             return;
         };
         if files.is_empty() {
-            show(
+            self.none.set(
                 vec![done(t("Every configuration is up to date."))],
-                area,
-                buf,
-                ctx,
+                vec![recheck(ctx)],
             );
+            self.none.draw(area, buf, ctx);
+            return;
         }
         self.list.set(
             files
@@ -49,11 +52,23 @@ impl Page for PacnewPage {
         self.list.draw(area, buf, ctx);
     }
 
-    fn hints(&self, _: &Ctx) -> Vec<(&'static str, Does)> {
+    fn hints(&self, ctx: &Ctx) -> Vec<(&'static str, Does)> {
+        if ctx.checking() {
+            return vec![("esc", Does::Back)];
+        }
+        if self.empty(ctx) {
+            return self.none.hints();
+        }
         super::list_hints(self.list.typing())
     }
 
-    fn key(&mut self, key: Key, _: &mut Ctx) -> Flow {
+    fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
+        if self.animating(ctx) {
+            return Flow::Ignored;
+        }
+        if self.empty(ctx) {
+            return self.none.key(key, ctx);
+        }
         match self.list.key(key) {
             Picked::Open(file) => Flow::Push(Box::new(FilePage::new(file))),
             Picked::Used => Flow::Stay,
@@ -66,7 +81,14 @@ impl Page for PacnewPage {
     }
 
     fn animating(&self, ctx: &Ctx) -> bool {
-        matches!(ctx.shared.pacnew, Loaded::Loading)
+        matches!(ctx.shared.pacnew, Loaded::Loading) || ctx.checking()
+    }
+}
+
+impl PacnewPage {
+    /// Whether the files are read and none is left.
+    fn empty(&self, ctx: &Ctx) -> bool {
+        ctx.shared.pacnew.ready().is_some_and(Vec::is_empty)
     }
 }
 

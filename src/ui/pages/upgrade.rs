@@ -8,7 +8,7 @@ use super::run::{Job, start};
 use crate::data::updates::{Source, Update};
 use crate::i18n::{t, tf, tn};
 use crate::script::op;
-use crate::ui::detail::{Act, Block, Detail, done};
+use crate::ui::detail::{Act, Block, Detail, done, recheck};
 use crate::ui::draw::waiting;
 use crate::ui::icon;
 use crate::ui::input::Input;
@@ -111,16 +111,7 @@ impl UpgradePage {
             );
         }
         if known_current {
-            let checking = ctx.busy().then(|| t("checking").to_string());
-            acts.push(
-                Act::new(t("Check again"), |ctx: &mut Ctx| {
-                    ctx.reload();
-                    Flow::Stay
-                })
-                .icon(icon::UPDATE)
-                .does(Does::Reload)
-                .unless(checking),
-            );
+            acts.push(recheck(ctx));
         } else {
             acts.push(
                 Act::new(t("Install now"), |ctx: &mut Ctx| {
@@ -144,7 +135,7 @@ impl Page for UpgradePage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         if self.animating(ctx) {
-            if ctx.page_waited() {
+            if ctx.checking() || ctx.page_waited() {
                 waiting(buf, area, t("Looking for updates"), None, None, ctx);
             }
             return;
@@ -209,7 +200,7 @@ impl Page for UpgradePage {
     }
 
     fn animating(&self, ctx: &Ctx) -> bool {
-        matches!(ctx.shared.updates, Loaded::Loading)
+        matches!(ctx.shared.updates, Loaded::Loading) || ctx.checking()
     }
 }
 
@@ -328,6 +319,30 @@ mod tests {
             Loaded::Ready(crate::data::updates::parse("repo\tlinux\t1-1\t2-1\n"));
         let flow = page.key(Key::Enter, &mut app.ctx);
         assert!(matches!(flow, Flow::Stay) && app.ctx.reload, "Check again");
+    }
+
+    /// Check again shows the progress in the middle and holds it for the least time.
+    #[test]
+    fn check_again_shows_the_progress_for_the_least_time() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, _) = app();
+        app.ctx.shared.updates = Loaded::Ready(crate::data::updates::Pending::default());
+        let mut page = UpgradePage::new();
+        let mut shows = |app: &mut crate::ui::app::App| {
+            let mut buf = Buffer::empty(Rect::new(0, 0, 80, 24));
+            page.draw(buf.area, &mut buf, &mut app.ctx);
+            buf.content().iter().map(|c| c.symbol()).collect::<String>()
+        };
+        assert!(shows(&mut app).contains("The system is up to date."));
+        app.ctx.check = std::time::Duration::from_secs(60);
+        app.ctx.recheck();
+        app.ctx.reload = false;
+        let shown = shows(&mut app);
+        assert!(shown.contains("Looking for updates"), "{shown}");
+        assert!(!shown.contains("The system is up to date."), "{shown}");
+        app.ctx.check = std::time::Duration::ZERO;
+        assert!(shows(&mut app).contains("The system is up to date."));
     }
 
     /// Off until f, the filter narrows the updates by name while the actions wait, so enter

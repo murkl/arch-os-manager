@@ -1,5 +1,6 @@
 //! One interactive run: its terminal, what it does, what it asks, how it ended.
 
+use rustix::process::Signal;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
@@ -272,7 +273,19 @@ impl Run {
 
     pub fn interrupt(&self) {
         crate::info!("{}: interrupted", self.op);
-        self.session.write(&[0x03]);
+        if self.handed {
+            self.session.signal(Signal::HUP);
+        } else {
+            self.session.write(&[0x03]);
+        }
+    }
+
+    /// A stop that did not take, repeated as the signals pacman takes softly: the interrupt,
+    /// then the hang-up. Not terminate, which pacman does not catch and which leaves its lock.
+    pub fn insist(&self, hang_up: bool) {
+        crate::info!("{}: stop repeated", self.op);
+        self.session
+            .signal(if hang_up { Signal::HUP } else { Signal::INT });
     }
 
     pub fn resize(&mut self, rows: u16, cols: u16) {

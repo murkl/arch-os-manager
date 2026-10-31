@@ -1892,6 +1892,43 @@ fn the_mirror_list_names_its_servers_and_a_ranking_tells_offline_from_failed() {
 }
 
 #[test]
+fn editing_the_mirror_list_hands_over_the_terminal_and_keeps_a_list_with_a_server() {
+    let s = Sandbox::new("mirrors-edit");
+    let list = s.dir.join("mirrorlist");
+    let env = [("SM_MIRRORLIST", list.to_str().unwrap())];
+    std::fs::write(&list, "Server = https://a.example/$repo\n").unwrap();
+    s.stub("sudo", "exit 0");
+    let o = s.run("mirrors", &["edit"], &env);
+    assert_eq!(o.code, 0, "{}", o.events);
+    assert!(
+        o.calls
+            .ends_with(&format!("sudo -e -- {}\n", list.display())),
+        "{}",
+        o.calls
+    );
+    let (on, off) = (
+        o.events.find("terminal\ton"),
+        o.events.find("terminal\toff"),
+    );
+    assert!(on < off && on.is_some(), "{}", o.events);
+    // An editor that leaves no server: the list before is put back.
+    s.stub(
+        "sudo",
+        r#"if [ "$1" = -e ]; then : >"$SM_MIRRORLIST"; else exec "$@"; fi"#,
+    );
+    let o = s.run("mirrors", &["edit"], &env);
+    assert_eq!(o.code, 13, "{}", o.events);
+    assert_eq!(
+        std::fs::read_to_string(&list).unwrap(),
+        "Server = https://a.example/$repo\n"
+    );
+    s.stub("sudo", "exit 1");
+    let o = s.run("mirrors", &["edit"], &env);
+    assert_eq!(o.code, 12);
+    assert!(o.events.contains("terminal\toff"), "{}", o.events);
+}
+
+#[test]
 fn firmware_with_nothing_to_update_is_no_failure_and_an_update_sends_no_report() {
     let s = Sandbox::new("firmware");
     s.stub(

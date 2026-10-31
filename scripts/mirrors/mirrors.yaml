@@ -5,6 +5,9 @@ ops:
     title: Ranking the mirrors
     root: true
     needs: [reflector]
+  edit:
+    title: Editing the mirror list
+    root: true
 errors:
   10: |
     Mirrors not ranked
@@ -12,3 +15,9 @@ errors:
   11: |
     reflector failed
     journalctl -u reflector
+  12: |
+    Mirror list not edited
+    Set $EDITOR or $SUDO_EDITOR.
+  13: |
+    Mirror list without a server
+    The list before is back.

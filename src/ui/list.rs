@@ -231,6 +231,8 @@ pub struct List<I> {
     pub markable: bool,
     /// The page names f in its keys. Elsewhere, as under a question, f is no filter.
     filterable: bool,
+    /// The filter is there from the start, and esc clears it before it goes back.
+    always: bool,
     height: usize,
 }
 
@@ -244,6 +246,7 @@ impl<I> Default for List<I> {
             marked: BTreeSet::new(),
             markable: false,
             filterable: false,
+            always: false,
             height: 0,
         }
     }
@@ -260,6 +263,15 @@ impl<I: Clone + Ord> List<I> {
     pub fn filterable() -> List<I> {
         List {
             filterable: true,
+            ..List::default()
+        }
+    }
+
+    /// A list with its filter open from the start, which keeps the letters.
+    pub fn searchable() -> List<I> {
+        List {
+            filter: Some(Input::new(t("Filter"))),
+            always: true,
             ..List::default()
         }
     }
@@ -364,6 +376,10 @@ impl<I: Clone + Ord> List<I> {
                     .map_or(Picked::Used, Picked::Open);
             }
             Some(Nav::Filter) if self.filterable => self.open_filter(),
+            Some(Nav::Back) if typing && self.always => match self.filter.as_mut() {
+                Some(f) if !f.text.is_empty() => f.text.clear(),
+                _ => return Picked::Ignored,
+            },
             Some(Nav::Back) if typing => self.filter = None,
             _ => {
                 let Some(filter) = self.filter.as_mut() else {
@@ -401,9 +417,16 @@ impl<I: Clone + Ord> List<I> {
         self.height = height;
         let shown = self.shown();
         let query_active = self.filter.as_ref().is_some_and(|f| !f.text.is_empty());
-        // Headings stay while a filter is empty. A filtered list is flat.
+        // A heading stays while a filter is empty, and while one of its rows is let through.
+        let under = |i: usize| {
+            (i + 1..self.rows.len())
+                .take_while(|&j| !self.rows[j].heading)
+                .any(|j| shown.contains(&j))
+        };
         let visible: Vec<usize> = (0..self.rows.len())
-            .filter(|&i| shown.contains(&i) || (self.rows[i].heading && !query_active))
+            .filter(|&i| {
+                shown.contains(&i) || (self.rows[i].heading && (!query_active || under(i)))
+            })
             .collect();
         if shown.is_empty() {
             if query_active {

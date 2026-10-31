@@ -62,6 +62,10 @@ impl Page for MirrorsPage {
             })
             .icon(icon::MIRRORS)
             .unless(missing),
+            Act::new(t("Edit list"), |ctx: &mut Ctx| {
+                Flow::Push(start(Job::new(op::MIRRORS_EDIT, Vec::new()), ctx))
+            })
+            .icon(icon::EDIT),
         ];
         self.detail.set(body, acts);
         self.detail.draw(area, buf, ctx);

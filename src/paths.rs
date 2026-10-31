@@ -30,8 +30,8 @@ pub fn log() -> PathBuf {
     home().join("logs").join("system-manager.log")
 }
 
-pub fn news_cache() -> PathBuf {
-    home().join("cache").join("news.xml")
+pub fn news_archive() -> PathBuf {
+    home().join("news.json")
 }
 
 static PROGRAM: OnceLock<Result<PathBuf, String>> = OnceLock::new();

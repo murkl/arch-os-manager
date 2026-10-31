@@ -396,6 +396,18 @@ pub fn failure(f: &Failure) -> Vec<Block> {
     b
 }
 
+/// The action that reads the page's values anew, off while something loads.
+pub fn recheck(ctx: &Ctx) -> Act {
+    let busy = ctx.busy().then(|| t("checking").to_string());
+    Act::new(t("Check again"), |ctx: &mut Ctx| {
+        ctx.recheck();
+        Flow::Stay
+    })
+    .icon(icon::UPDATE)
+    .does(Does::Reload)
+    .unless(busy)
+}
+
 /// Draws the waiting or the failure of a value, and returns the value once there.
 pub fn loaded<'a, T>(
     value: &'a Loaded<T>,
@@ -403,6 +415,10 @@ pub fn loaded<'a, T>(
     buf: &mut Buffer,
     ctx: &Ctx,
 ) -> Option<&'a T> {
+    if ctx.checking() {
+        waiting(buf, area, t("Checking"), None, None, ctx);
+        return None;
+    }
     match value {
         Loaded::Ready(v) => Some(v),
         Loaded::Loading => {

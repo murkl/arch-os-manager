@@ -10,6 +10,7 @@ pub const SERVICES: &str = "\u{f0493}";
 pub const LOG: &str = "\u{f09ed}";
 pub const CLEANUP: &str = "\u{f00e2}";
 pub const PACNEW: &str = "\u{f08aa}";
+pub const EDIT: &str = "\u{f03eb}";
 pub const MIRRORS: &str = "\u{f048d}";
 pub const FIRMWARE: &str = "\u{f061a}";
 pub const REPAIR: &str = "\u{f05b7}";
