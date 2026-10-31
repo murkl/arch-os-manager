@@ -18,7 +18,7 @@ fn hide(message: &str, ctx: &mut Ctx) {
     }
 }
 
-/// A row of the log: an entry by its place in the journal, or the count of the hidden ones.
+/// A row of the log: an entry by its place in the journal, or the count of the hidden messages.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Pick {
     Entry(usize),
@@ -103,14 +103,14 @@ impl Page for LogPage {
             );
         }
         let mut rows = errors;
-        // The count stays while rules exist, at 0 too, so one that hides nothing of this boot
-        // stays in reach.
+        // The count is that of the rules the page behind it lists, also those matching nothing of
+        // this boot.
         if !ctx.settings.hidden_log.is_empty() {
             // A blank line between the errors and the count.
             if !rows.is_empty() {
                 rows.push(Row::heading(""));
             }
-            let count = tf("{n} hidden", &[("n", &hidden)]);
+            let count = tf("{n} hidden", &[("n", &ctx.settings.hidden_log.len())]);
             rows.push(Row::new(Pick::Hidden, count).icon(icon::HIDDEN, Tone::Muted));
         }
         self.list.set(rows);
@@ -304,7 +304,7 @@ mod tests {
         let shown = screen(&mut app, &mut term);
         let count = shown
             .lines()
-            .position(|l| l.contains("2 hidden"))
+            .position(|l| l.contains("1 hidden"))
             .unwrap_or(0);
         let error = shown
             .lines()
@@ -321,14 +321,14 @@ mod tests {
         assert!(chosen(&shown).contains("fan stopped"), "{shown}");
         press(&mut app, &[Key::Down]);
         let shown = screen(&mut app, &mut term);
-        assert!(chosen(&shown).contains("2 hidden"), "{shown}");
+        assert!(chosen(&shown).contains("1 hidden"), "{shown}");
         assert!(
             !shown.lines().last().unwrap_or("").contains("x hide"),
             "{shown}"
         );
         press(&mut app, &[Key::Char('x')]);
         assert!(
-            screen(&mut app, &mut term).contains("2 hidden"),
+            screen(&mut app, &mut term).contains("1 hidden"),
             "x hides nothing there"
         );
         press(&mut app, &[Key::Enter]);
@@ -340,7 +340,7 @@ mod tests {
     }
 
     /// With every error hidden the log claims no more than that, without any it says none. A rule
-    /// that hides nothing of this boot keeps its count, at 0.
+    /// that hides nothing of this boot keeps its count.
     #[test]
     fn no_error_is_claimed_while_some_are_hidden() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -351,13 +351,13 @@ mod tests {
         open(&mut app, Box::new(LogPage::new()));
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("No other errors since boot.") && shown.contains("3 hidden"),
+            shown.contains("No other errors since boot.") && shown.contains("1 hidden"),
             "{shown}"
         );
         app.ctx.shared.journal = Loaded::Ready(Vec::new());
         let shown = screen(&mut app, &mut term);
         assert!(
-            shown.contains("No errors since boot.") && shown.contains("0 hidden"),
+            shown.contains("No errors since boot.") && shown.contains("1 hidden"),
             "the rule stays in reach: {shown}"
         );
         app.ctx.settings.hidden_log.clear();
