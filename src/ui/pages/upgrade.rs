@@ -323,6 +323,19 @@ mod tests {
 
     /// Check again shows the progress in the middle and holds it for the least time.
     #[test]
+    fn esc_leaves_the_page_while_it_checks() {
+        use crate::ui::app::tests::{app, example, open, press, screen};
+        let (mut app, mut term) = app();
+        example(&mut app);
+        open(&mut app, Box::new(UpgradePage::new()));
+        app.ctx.recheck();
+        assert!(screen(&mut app, &mut term).contains("Looking for updates"));
+        press(&mut app, &[Key::Esc]);
+        let shown = screen(&mut app, &mut term);
+        assert!(!shown.contains("Looking for updates"), "{shown}");
+    }
+
+    #[test]
     fn check_again_shows_the_progress_for_the_least_time() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
