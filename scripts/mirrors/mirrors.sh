@@ -1,7 +1,7 @@
 # shellcheck shell=bash source=../lib/lib.sh
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
-list=/etc/pacman.d/mirrorlist
+list="${SM_MIRRORLIST:-/etc/pacman.d/mirrorlist}"
 
 op_list() {
     local changed
@@ -19,14 +19,24 @@ op_rank() {
     if [ "$(systemctl show --property=ConditionResult --value reflector.service)" = no ]; then exit 10; fi
 }
 
-# The editor of the person, on the terminal. sudoedit edits a copy and puts it
-# back, so the editor itself runs unprivileged.
+# The editor of the person, else nano, which names its keys, on the terminal.
+# sudoedit edits a copy and puts it back, so the editor itself runs unprivileged.
+# A list without a server would stop every update, so the one before comes back.
 op_edit() {
     local status=0
+    if [ -z "${SUDO_EDITOR:-${VISUAL:-${EDITOR:-}}}" ] && command -v nano >/dev/null; then
+        export SUDO_EDITOR=nano
+    fi
+    scratch
+    cp -- "$list" "${work}/before"
     printf 'terminal\ton\n' >&3
     sudo -e -- "$list" || status=$?
     printf 'terminal\toff\n' >&3
     [ "$status" = 0 ] || exit 12
+    if ! grep -Eq '^[[:space:]]*Server[[:space:]]*=' "$list"; then
+        sudo install -m 644 -T -- "${work}/before" "$list"
+        exit 13
+    fi
 }
 
 operation "$@"

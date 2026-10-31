@@ -116,6 +116,14 @@ impl Session {
         }
     }
 
+    /// Signals what runs in the foreground of the terminal, as the terminal itself would. A
+    /// program that reads ^C as a key of its own still receives it this way.
+    pub fn signal(&self, signal: rustix::process::Signal) {
+        if let Ok(group) = rustix::termios::tcgetpgrp(&*self.master) {
+            let _ = rustix::process::kill_process_group(group, signal);
+        }
+    }
+
     pub fn resize(&self, rows: u16, cols: u16) {
         let size = Winsize {
             ws_row: rows.max(1),
@@ -269,6 +277,63 @@ mod tests {
     fn only_a_run_that_elevates_holds_shutdown_off() {
         assert!(holds(op::UPGRADE_RUN));
         assert!(!holds(op::SYSTEM_REBOOT));
+    }
+
+    /// An editor that reads ^C as a key of its own still ends: the hang-up reaches what runs in
+    /// the foreground of the terminal.
+    #[test]
+    fn a_signal_ends_what_runs_in_the_foreground() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg("-c").arg(
+            r#"trap 'exit 7' HUP; stty raw -isig; echo ready >&3; while :; do sleep 0.05; done"#,
+        );
+        let session = Session::spawn(cmd, (24, 80), move |e| {
+            let _ = tx.send(e);
+        })
+        .unwrap();
+        let timeout = std::time::Duration::from_secs(10);
+        loop {
+            if matches!(rx.recv_timeout(timeout), Ok(Event::Script(s)) if s == "ready") {
+                break;
+            }
+        }
+        session.signal(rustix::process::Signal::HUP);
+        loop {
+            if let Event::Exit(code) = rx.recv_timeout(timeout).unwrap() {
+                return assert_eq!(code, 7);
+            }
+        }
+    }
+
+    /// Closing the terminal hangs up on the foreground, and a script of lib.sh ignores that, so
+    /// leaving the window leaves its work to finish. Without lib.sh the same work ends.
+    #[test]
+    fn closing_the_terminal_leaves_the_work_of_a_script_to_finish() {
+        let work = |source: &str, name: &str| {
+            let marker = std::env::temp_dir().join(format!("sm-hup-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_file(&marker);
+            let (tx, rx) = std::sync::mpsc::channel();
+            let mut cmd = std::process::Command::new("bash");
+            cmd.arg("-c").arg(format!(
+                "{source}\nop_x() {{ echo ready >&3; sleep 1; touch '{}'; }}\noperation x",
+                marker.display()
+            ));
+            let session = Session::spawn(cmd, (24, 80), move |e| {
+                let _ = tx.send(e);
+            })
+            .unwrap();
+            let timeout = std::time::Duration::from_secs(10);
+            while !matches!(rx.recv_timeout(timeout), Ok(Event::Script(s)) if s == "ready") {}
+            // What the kernel sends the foreground when the terminal closes.
+            session.signal(rustix::process::Signal::HUP);
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+            marker.exists()
+        };
+        let lib = concat!(". '", env!("CARGO_MANIFEST_DIR"), "/scripts/lib/lib.sh'");
+        assert!(work(lib, "lib"), "the work of a script goes on");
+        let bare = "operation() { op_x; }";
+        assert!(!work(bare, "bare"), "else the hang-up ends it");
     }
 
     /// What a run is given waits at fd 4 and on, beside lib.sh's events at fd 3, and lies in

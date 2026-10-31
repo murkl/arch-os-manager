@@ -713,6 +713,15 @@ msgstr "Status"
 msgid "Stop"
 msgstr "Stoppen"
 
+msgid "Leave anyway?"
+msgstr "Trotzdem beenden?"
+
+msgid "The operation ends in the background."
+msgstr "Der Vorgang endet im Hintergrund."
+
+msgid "Stopping"
+msgstr "Wird abgebrochen"
+
 msgid "Stop the operation?"
 msgstr "Vorgang abbrechen?"
 
@@ -1350,6 +1359,13 @@ msgid ""
 msgstr ""
 "Spiegelserver-Liste nicht bearbeitet\n"
 "$EDITOR oder $SUDO_EDITOR setzen.\n"
+
+msgid ""
+"Mirror list without a server\n"
+"The list before is back.\n"
+msgstr ""
+"Spiegelserver-Liste ohne Server\n"
+"Die Liste von vorher ist wieder da.\n"
 
 msgid "Ranking the mirrors"
 msgstr "Spiegelserver werden sortiert"

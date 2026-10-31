@@ -66,7 +66,7 @@ Another prompt opens the details once its line stands still for a second and end
 
 An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. Installs and removals share one run, installs first. An install is refused while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them. It shows a Flatpak by the name Flatpak gives it, with its branch where two share that name, by its id where two share both.
 
-**esc**, **q** and **ctrl+c** ask to stop, in the details only **ctrl+c**. Yes sends ctrl+c. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it.
+**esc**, **q** and **ctrl+c** ask to stop, in the details only **ctrl+c**. Yes sends ctrl+c, repeated as an interrupt after 5 s and as a hang-up after 10 s, never as terminate or kill, which pacman does not catch. Asked again while it stops, the question is whether to leave, and the run ends in the background. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it. In a terminal handed over, as for the mirror list or an AUR review, every key goes to the program, **tab** included.
 
 | Offer after a run | When |
 |---|---|
@@ -101,6 +101,8 @@ Asked once per session before the first elevated run and checked with `sudo --va
 Only a file pacdiff lists at that moment is replaced, kept or merged. `/etc/passwd`, `group`, `shadow`, `gshadow` and `sudoers` are merged, never replaced. Replacing or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
 
 ### Services
+
+The filter is always open and keeps the headings System and User above the rows it lets through.
 
 Stopping, restarting or disabling the display manager or the system bus asks first, as the session ends with them. GNOME's own user units refuse a manual stop.
 
@@ -144,7 +146,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 | Package | Beyond pacman |
 |---|---|
 | `paru`, `yay` | Built with makepkg after `git` and `base-devel`, build dependencies removed. Removal takes the owner of the command, such as `paru-bin` |
-| `reflector` | `/etc/xdg/reflector/reflector.conf` as packaged gets appended: synced within 12 h, 10 latest, by speed, country of the time zone. One changed by hand stays. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service`, **Edit list** opens the list in `sudoedit` |
+| `reflector` | `/etc/xdg/reflector/reflector.conf` as packaged gets appended: synced within 12 h, 10 latest, by speed, country of the time zone. One changed by hand stays. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service`, **Edit list** opens the list in `sudoedit` with `$SUDO_EDITOR`, `$VISUAL`, `$EDITOR` or nano, and puts the list before back where no server is left |
 | `fwupd` | `fwupd-refresh.timer` enabled, disabled on removal |
 | `gnome-arch-update` | Arch Linux Updates Indicator from extensions.gnome.org, installed by the running GNOME Shell after its own question, active at once. Its commands run this binary. Removed with its settings |
 
@@ -295,6 +297,7 @@ Every text is English and translated in `locales/de.po`.
 | `SM_AUR` | AUR helper, empty for none |
 | `SM_AUR_REVIEW` | `off` builds without the helper's review, else with it |
 | `SM_FLATPAK` | `on` where Flatpak is installed and enabled, else `off` |
+| `SM_MIRRORLIST` | The mirror list, `/etc/pacman.d/mirrorlist` unless set, for tests |
 | `SM_PASSWORD` | `on` where a run that elevates gets the password on fd 4 and fd 5, else unset |
 | `SM_PROGRAM` | This program, which renews sudo's time stamp for the run |
 | `SM_RUN` | Title of a run that elevates, else unset |

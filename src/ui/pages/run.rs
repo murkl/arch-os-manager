@@ -22,6 +22,8 @@ use crate::ui::{Ctx, Does, Flow, Key, Nav, Page, Tone};
 const SETTLE: Duration = Duration::from_millis(618);
 /// Lines a notch of the wheel moves the terminal's history, as terminals scroll.
 const NOTCH: isize = 3;
+/// How long a stop may take before it is repeated as an interrupt, and then as terminate.
+const INSIST: [Duration; 2] = [Duration::from_secs(5), Duration::from_secs(10)];
 
 #[derive(Clone)]
 pub struct Job {
@@ -443,6 +445,8 @@ pub struct RunPage {
     empty: bool,
     /// The question whether to stop the run, while it is asked.
     cancel: Option<List<bool>>,
+    /// Since when the run was asked to stop, and how often that was repeated.
+    stopping: Option<(Instant, usize)>,
     size: (u16, u16),
     /// The outcome and what to do next.
     result: Detail,
@@ -462,6 +466,7 @@ impl RunPage {
             typed_for: None,
             empty: false,
             cancel: None,
+            stopping: None,
             size: (0, 0),
             result: Detail::default(),
         }
@@ -481,6 +486,11 @@ impl RunPage {
         let mut page = RunPage::new(job);
         page.outcome = Some((outcome, Instant::now() - SETTLE));
         page
+    }
+
+    /// The script gave the terminal to the person, who then gets every key, tab included.
+    fn handed(&self) -> bool {
+        self.outcome.is_none() && self.run.as_ref().is_some_and(|r| r.handed)
     }
 
     fn settled(&self) -> bool {
@@ -555,8 +565,10 @@ impl RunPage {
         let below = waiting(
             buf,
             area,
-            &self.job.title(),
-            run.and_then(|r| r.step.as_deref()),
+            self.job.op.title(),
+            self.stopping
+                .map(|_| t("Stopping"))
+                .or(run.and_then(|r| r.step.as_deref())),
             progress.fraction(),
             ctx,
         );
@@ -845,14 +857,7 @@ impl Page for RunPage {
         } else if self.outcome.is_some() {
             // Done stands once the system is read again, not while the spinner still turns.
             if ctx.settling() {
-                waiting(
-                    buf,
-                    area,
-                    &self.job.title(),
-                    Some(t("Reading the system")),
-                    None,
-                    ctx,
-                );
+                waiting(buf, area, t("Reading the system"), None, None, ctx);
             } else {
                 self.draw_outcome(area, buf, ctx);
             }
@@ -870,7 +875,11 @@ impl Page for RunPage {
                 buf,
                 inner.x,
                 inner.y + 1,
-                &line(t("Stop the operation?")),
+                &line(if self.stopping.is_some() {
+                    t("Leave anyway?")
+                } else {
+                    t("Stop the operation?")
+                }),
                 inner.width,
                 s.bold(Tone::Normal),
             );
@@ -878,7 +887,11 @@ impl Page for RunPage {
                 buf,
                 inner.x,
                 inner.y + 2,
-                &line(t("Sends Ctrl+C.")),
+                &line(if self.stopping.is_some() {
+                    t("The operation ends in the background.")
+                } else {
+                    t("Sends Ctrl+C.")
+                }),
                 inner.width,
                 s.tone(Tone::Muted),
             );
@@ -897,7 +910,7 @@ impl Page for RunPage {
             Does::Details
         };
         // Verbose output has no compact view to switch to.
-        let terminal = ctx.settings.terminal();
+        let terminal = ctx.settings.terminal() || self.handed();
         if self.cancel.is_some() {
             return vec![("↑↓", Does::Choose), ("⏎", Does::Answer)];
         }
@@ -936,17 +949,23 @@ impl Page for RunPage {
         if let Some(list) = self.cancel.as_mut() {
             match list.key(key) {
                 Picked::Open(yes) => {
+                    self.cancel = None;
+                    // Asked again while it stops, leaving is the answer: the run ends without
+                    // the window, as a closed terminal leaves a package manager its work.
+                    if yes && self.stopping.is_some() {
+                        return Flow::Quit;
+                    }
                     if yes && let Some(run) = &self.run {
                         run.interrupt();
+                        self.stopping = Some((Instant::now(), 0));
                     }
-                    self.cancel = None;
                 }
                 Picked::Ignored if key.nav(false) == Some(Nav::Back) => self.cancel = None,
                 _ => {}
             }
             return Flow::Stay;
         }
-        let terminal = ctx.settings.terminal();
+        let terminal = ctx.settings.terminal() || self.handed();
         if key == Key::Tab && !terminal {
             self.details = !self.details;
             return Flow::Stay;
@@ -1049,6 +1068,13 @@ impl Page for RunPage {
             return Flow::Stay;
         };
         run.check_prompt();
+        if let Some((since, sent)) = self.stopping.as_mut()
+            && let Some(after) = INSIST.get(*sent)
+            && since.elapsed() >= *after
+        {
+            run.insist(*sent == 1);
+            *sent += 1;
+        }
         if let Some(result) = run.result() {
             match &result {
                 Ok(()) => crate::info!("{}: done", self.job.op),
@@ -1357,6 +1383,48 @@ mod tests {
         assert!(starting.done(), "ctrl+c on the start screen");
     }
 
+    /// Stopping never traps the person: asked again while the run stops, the question is whether
+    /// to leave, and yes leaves.
+    #[test]
+    fn a_run_that_does_not_stop_can_be_left() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let run = Run::fed(op::UPGRADE_RUN, "repo", "");
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        let ask = |page: &mut RunPage, app: &mut crate::ui::app::App| {
+            let _ = page.key(Key::Ctrl('c'), &mut app.ctx);
+            let _ = page.key(Key::Down, &mut app.ctx);
+            page.key(Key::Enter, &mut app.ctx)
+        };
+        assert!(matches!(ask(&mut page, &mut app), Flow::Stay));
+        assert!(page.stopping.is_some(), "the stop is asked for");
+        let _ = page.key(Key::Ctrl('c'), &mut app.ctx);
+        open(&mut app, Box::new(page));
+        assert!(screen(&mut app, &mut term).contains("Leave anyway?"));
+    }
+
+    /// The person on the handed-over terminal types tab into it: it neither hides the terminal
+    /// nor shows in the keys.
+    #[test]
+    fn tab_belongs_to_the_terminal_that_was_handed_over() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let run = Run::fed(op::MIRRORS_EDIT, "edit", "GNU nano\r\n");
+        let mut page = RunPage::running(Job::new(op::MIRRORS_EDIT, Vec::new()), run);
+        page.run(script::Event::Script("terminal\ton".into()), &mut app.ctx);
+        page.tick(&mut app.ctx);
+        let _ = page.key(Key::Tab, &mut app.ctx);
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        let footer = shown.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
+        assert!(
+            shown.contains("GNU nano") && !footer.contains("tab"),
+            "{shown}"
+        );
+    }
+
     /// Handed over, as for the AUR helper's review, the run shows its terminal until the script
     /// takes it back, then the view chosen before.
     #[test]
@@ -1393,8 +1461,8 @@ mod tests {
         press(&mut app, &[Key::Tab]);
         let shown = screen(&mut app, &mut term);
         assert!(
-            !shown.contains(output.trim_end()),
-            "tab still leads out: {shown}"
+            shown.contains(output.trim_end()),
+            "tab belongs to the terminal, ctrl+c leads out: {shown}"
         );
     }
 
