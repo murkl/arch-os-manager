@@ -84,15 +84,15 @@ fn ops() -> String {
     code
 }
 
-/// The newest release tag before HEAD, `v` dropped, by the patterns of murkl/workflows.
+/// The newest release tag before HEAD, by the pattern of murkl/workflows.
 fn last_release() -> String {
     let out = Command::new("git")
-        .args(["describe", "--tags", "--abbrev=0"])
         .args([
+            "describe",
+            "--tags",
+            "--abbrev=0",
             "--match",
             "[0-9]*.[0-9]*.[0-9]*",
-            "--match",
-            "v[0-9]*.[0-9]*.[0-9]*",
         ])
         .output()
         .expect("git runs");
@@ -101,7 +101,7 @@ fn last_release() -> String {
         "no release tag in reach: fetch the tags or set SM_VERSION"
     );
     let tag = String::from_utf8(out.stdout).unwrap();
-    tag.trim().trim_start_matches('v').to_owned()
+    tag.trim().to_owned()
 }
 
 /// `1.9.1` as `1.9.2-dev`.
