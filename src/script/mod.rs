@@ -55,6 +55,9 @@ pub struct Meta {
     /// Exit codes from 10 on: headline, then the next step if any.
     #[serde(default)]
     pub errors: BTreeMap<i32, String>,
+    /// The text of an exit code where the person said no to a program holding the terminal.
+    #[serde(default)]
+    pub declined: BTreeMap<i32, String>,
     /// Output a failure is recognised by. lib.yaml's apply to every script.
     #[serde(default)]
     pub hints: BTreeMap<String, Hint>,
@@ -492,6 +495,9 @@ mod tests {
             used.dedup();
             let declared: Vec<i32> = meta(&s).errors.keys().copied().collect();
             assert_eq!(used, declared, "{s}");
+            for code in meta(&s).declined.keys() {
+                assert!(used.contains(code), "{s}: declined {code} has no exit line");
+            }
         }
     }
 

@@ -746,6 +746,20 @@ msgstr ""
 
 msgid ""
 "AUR unreachable\n"
+"Everything else is up to date.\n"
+msgstr ""
+"AUR nicht erreichbar\n"
+"Alles andere ist aktuell.\n"
+
+msgid ""
+"AUR update canceled\n"
+"Everything else is up to date.\n"
+msgstr ""
+"AUR-Update abgebrochen\n"
+"Alles andere ist aktuell.\n"
+
+msgid ""
+"AUR unreachable\n"
 msgstr ""
 "AUR nicht erreichbar\n"
 
