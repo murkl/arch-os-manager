@@ -38,6 +38,8 @@ pub struct Run {
     /// The script handed the terminal to the person, as an AUR helper's review needs, until it
     /// takes it back. Every prompt is typed meanwhile.
     pub handed: bool,
+    /// The person said no to the program holding the terminal, which then ends as if it failed.
+    declined: bool,
     fail: Option<String>,
     exit: Option<(i32, Instant)>,
     /// The unfinished line last answered, so it is answered once.
@@ -99,6 +101,7 @@ impl Run {
             rejected: false,
             verbose: false,
             handed: false,
+            declined: false,
             fail: None,
             exit: None,
             answered: None,
@@ -122,6 +125,9 @@ impl Run {
                     if line.contains(sudo::REJECTED) {
                         sudo::forget();
                         self.rejected = true;
+                    }
+                    if self.handed && prompt::declined(&line) {
+                        self.declined = true;
                     }
                     crate::log::write("OUT", &format!("{}| {line}", self.op));
                     self.progress.feed(&line);
@@ -326,12 +332,13 @@ impl Run {
         if !current.trim().is_empty() {
             tail.push(current);
         }
-        Some(Err(Failure::classify(
-            self.op,
-            Some(code),
-            self.fail.as_deref(),
-            tail,
-        )))
+        let mut failure = Failure::classify(self.op, Some(code), self.fail.as_deref(), tail);
+        if self.declined
+            && let Some(text) = super::meta(self.op.script).declined.get(&code)
+        {
+            failure.known = Some(text.as_str());
+        }
+        Some(Err(failure))
     }
 }
 
@@ -371,6 +378,36 @@ mod tests {
         }
         let text: Vec<String> = run.recent.iter().cloned().collect();
         (run, text.join("\n"))
+    }
+
+    /// A no to the handed-over helper reads as canceled. Any other end of the helper as failed.
+    #[test]
+    fn a_no_to_the_handed_over_helper_is_no_failure_of_it() {
+        let known = |handed: bool, output: &str, code: i32| {
+            let mut run = Run::fed(crate::script::op::UPGRADE_RUN, "aur", "");
+            if handed {
+                run.on_event(Event::Script("terminal\ton".into()));
+            }
+            run.on_event(Event::Output(output.as_bytes().to_vec()));
+            run.on_event(Event::Script("terminal\toff".into()));
+            run.exit = Some((code, Instant::now() - SETTLE));
+            let failure = run.result().unwrap().unwrap_err();
+            failure
+                .known
+                .unwrap_or_default()
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_string()
+        };
+        let no = ":: Proceed to review? [Y/n]: n\r\n";
+        assert_eq!(known(true, no, 11), "AUR update canceled");
+        assert_eq!(known(false, no, 11), "AUR update failed");
+        assert_eq!(
+            known(true, ":: Proceed to review? [Y/n]: y\r\n", 11),
+            "AUR update failed"
+        );
+        assert_eq!(known(true, no, 13), "AUR unreachable");
     }
 
     /// While the script hands over, no question is answered for the person. Once it takes the

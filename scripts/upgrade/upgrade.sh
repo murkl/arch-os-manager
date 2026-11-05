@@ -1,6 +1,24 @@
 # shellcheck shell=bash source=../lib/lib.sh
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
+# What the AUR would bring, or a line `failed` where it cannot be asked. The helper
+# ends with 1 both when nothing is pending and when it failed, and only a failure
+# says why. A package pacman ignores stays as it is.
+aur_list() {
+    local pending name old new rest
+    scratch
+    pending="$(aur -Qua 2>"${work}/errors")" || true
+    if [ -s "${work}/errors" ] && [ -z "$pending" ]; then
+        cat "${work}/errors" >&2
+        printf 'failed\taur\n'
+    fi
+    while read -r name old _ new rest; do
+        if [ -n "$name" ] && [[ $rest != *'[ignored]'* ]]; then
+            printf 'aur\t%s\t%s\t%s\n' "$name" "$old" "$new"
+        fi
+    done <<<"$pending"
+}
+
 # What an update would bring: repo, aur or flatpak, the name, the version now and the
 # one to come, for Flatpak then the name it shows and the branch. The AUR or Flatpak,
 # where it cannot be asked, is a line `failed` and its name, so the others still count.
@@ -9,7 +27,7 @@ op_list() {
     # checkupdates syncs a copy of the databases, so nothing half-synced is
     # left, and ends with 2 when nothing is pending. Two at once, as the timer
     # and the interface may run, share that copy.
-    local status=0 repo pending apps
+    local status=0 repo apps
     repo="$(flock --wait 100 "${TMPDIR:-/tmp}/checkup-db-${UID}.lock" checkupdates)" || status=$?
     case "$status" in
     0) while read -r name old _ new; do printf 'repo\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo" ;;
@@ -17,21 +35,7 @@ op_list() {
     *) exit 10 ;;
     esac
 
-    # The helper ends with 1 both when nothing is pending and when it failed,
-    # and only a failure says why. A package pacman ignores stays as it is.
-    if [ -n "$SM_AUR" ]; then
-        scratch
-        pending="$(aur -Qua 2>"${work}/errors")" || true
-        if [ -s "${work}/errors" ] && [ -z "$pending" ]; then
-            cat "${work}/errors" >&2
-            printf 'failed\taur\n'
-        fi
-        while read -r name old _ new rest; do
-            if [ -n "$name" ] && [[ $rest != *'[ignored]'* ]]; then
-                printf 'aur\t%s\t%s\t%s\n' "$name" "$old" "$new"
-            fi
-        done <<<"$pending"
-    fi
+    if [ -n "$SM_AUR" ]; then aur_list; fi
 
     # A version is often missing or unchanged, a commit and a name never, and read
     # collapses empty fields between tabs, so the version comes last. An app without a
@@ -82,7 +86,8 @@ op_idle() {
 }
 
 # Repositories first, then what is built on top of them. A failing AUR helper
-# leaves Flatpak still to update.
+# leaves Flatpak still to update. It also fails where nothing is left to do and
+# the AUR is out of reach, so what it left decides the end.
 op_run() {
     local aur=0 yes
     step repo
@@ -96,7 +101,13 @@ op_run() {
         if asks; then yes=(); else yes=(--assumeyes --noninteractive); fi
         flatpak update "${yes[@]}"
     fi
-    if [ "$aur" -ne 0 ]; then exit 11; fi
+    if [ "$aur" -ne 0 ]; then
+        case "$(aur_list)" in
+        '') ;;
+        failed*) exit 13 ;;
+        *) exit 11 ;;
+        esac
+    fi
 }
 
 operation "$@"

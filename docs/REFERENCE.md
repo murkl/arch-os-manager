@@ -266,6 +266,7 @@ A query may not call `sudo`, the runtime refuses one with `root: true`. It runs 
 |---|---|
 | `ops` | Each operation by name, with the keys below. build.rs makes it `script::op::<SCRIPT>_<NAME>` |
 | `errors` | Exit code from 10: headline, then the next step if any. A test holds them against the `exit` lines |
+| `declined` | Exit code: text as for `errors`, where the person said no to a question that defaults to yes while the script handed over the terminal |
 | `hints` | Output line containing the key: `text` as for `errors`, `offer` the page that fixes it. `lib.yaml` holds pacman's |
 | `probe` | `features` only: each optional package under its group, its `command`, what it `adds`, the fact it `needs`. `extension: true` comes from extensions.gnome.org |
 | `facts` | `features` only: what a package may need of the system. `fact_<name>` in the script tests it |

@@ -711,16 +711,37 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
         ]
     );
     assert_eq!(o.events, "step\trepo\nstep\taur\nstep\tflatpak\n");
-    // A failing helper leaves Flatpak still to update, then says so.
+    // A failing helper leaves Flatpak still to update, then what it left is read.
     s.stub("paru", "exit 1");
     let o = s.run("upgrade", &["run"], &all);
-    assert_eq!(o.code, 11, "{}", o.events);
     assert!(
         o.calls
-            .ends_with("flatpak update --assumeyes --noninteractive\n"),
+            .ends_with("flatpak update --assumeyes --noninteractive\nparu -Qua\n"),
         "{}",
         o.calls
     );
+}
+
+/// The helper also fails where nothing is left to do and the AUR is out of reach, so what it left
+/// decides the end.
+#[test]
+fn a_failing_helper_ends_by_what_it_left() {
+    let s = Sandbox::new("upgrade-aur-left");
+    s.stub("pacman", "exit 0");
+    let left = |qua: &str| format!(r#"case "$*" in *-Qua*) {qua} ;; esac; exit 1"#);
+    let ends = |qua: &str| {
+        s.stub("paru", &left(qua));
+        s.run(
+            "upgrade",
+            &["run"],
+            &[("SM_AUR", "paru"), ("SM_AUR_REVIEW", "off")],
+        )
+        .code
+    };
+    assert_eq!(ends("echo 'bar 1-1 -> 2-1'"), 11);
+    assert_eq!(ends("echo 'error: dns error' >&2"), 13);
+    assert_eq!(ends("echo 'bar 1-1 -> 2-1 [ignored]'"), 0);
+    assert_eq!(ends(":"), 0);
 }
 
 /// In the terminal no tool is told yes, the AUR helper keeps its review, and every program is

@@ -124,6 +124,16 @@ pub fn asks(line: &str) -> bool {
     line.trim_end().ends_with(['?', ':', '>'])
 }
 
+/// Whether a finished line is a question that defaults to yes, answered no.
+pub fn declined(line: &str) -> bool {
+    line.trim_end().strip_suffix(['n', 'N']).is_some_and(|q| {
+        matches!(
+            Prompt::detect(q, &[]),
+            Some(Prompt::YesNo { yes: true, .. })
+        )
+    })
+}
+
 fn translate(q: &str) -> String {
     let q = q.trim();
     if let Some(rest) = q.strip_prefix("Replace ")
@@ -188,6 +198,18 @@ fn numbered(line: &str) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_no_counts_only_where_yes_is_the_default() {
+        assert!(declined(":: Proceed to review? [Y/n]: n"));
+        assert!(declined(":: Replace foo with extra/bar? [Y/n] N"));
+        assert!(!declined(":: Proceed to review? [Y/n]: y"));
+        assert!(!declined(":: Proceed to review? [Y/n]: "));
+        assert!(!declined(
+            ":: Remove make dependencies after install? [y/N]: n"
+        ));
+        assert!(!declined("Building fan"));
+    }
 
     #[test]
     fn recognises_pacman_questions() {

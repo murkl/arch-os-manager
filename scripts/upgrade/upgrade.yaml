@@ -20,3 +20,10 @@ errors:
   12: |
     Update check timed out
     An update is still running.
+  13: |
+    AUR unreachable
+    Everything else is up to date.
+declined:
+  11: |
+    AUR update canceled
+    Everything else is up to date.

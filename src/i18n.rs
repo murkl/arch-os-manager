@@ -274,6 +274,7 @@ pub fn used() -> std::collections::BTreeSet<String> {
                 .for_each(|s| add(s));
         }
         m.errors.values().for_each(|s| add(s));
+        m.declined.values().for_each(|s| add(s));
         m.hints.values().for_each(|h| add(&h.text));
         m.probe
             .values()
