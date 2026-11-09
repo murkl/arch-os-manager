@@ -6,10 +6,10 @@ set -Eeuo pipefail
 shopt -s inherit_errexit nullglob
 export LC_ALL=C.UTF-8
 
-# An unexpected failure: code, file as upgrade/upgrade.sh, line, command, quiet
-# on stderr, where the terminal would echo it as a program. Nested shells report
-# from the inside out, so the runtime reads the first line.
-trap '{ sm_failed $? "$LINENO" "$BASH_COMMAND"; } 2>/dev/null' ERR
+# An unexpected failure: code, file as upgrade/upgrade.sh, line, command, with no
+# trace of its own. Nested shells report from the inside out, so the runtime
+# reads the first line.
+trap '{ sm_failed $? "$LINENO" "$BASH_COMMAND"; } 6>/dev/null' ERR
 sm_failed() {
     local frame=1 line="$2" file dir
     # Within a helper of this file, the line is the script's that called it.
@@ -34,7 +34,7 @@ operation() {
     shift
     sm_hold
     sm_sudo
-    if asks; then sm_terminal; fi
+    sm_commands
     "op_${name//-/_}" "$@"
 }
 
@@ -89,25 +89,44 @@ run_lock() {
     echo "${XDG_RUNTIME_DIR}/system-manager-${dir##*/}.lock"
 }
 
-# Verbose output shows every program before it runs, as `$ sudo pacman -Syu`,
-# through xtrace, which sm_trace turns on for a program alone. The space first,
-# as bash repeats the first character of PS4 for a subshell.
-sm_terminal() {
-    PS4=$' \e[90m$\e[0m '
+# Names each program a run starts through xtrace on fd 6, with verbose output on
+# the terminal, else on fd 3. PS4 starts with a space or a line break, as bash
+# repeats its first character per level of nesting. In a trap bash runs sm_trace
+# for the command the trap interrupted, so the traps of this file send fd 6 to
+# /dev/null.
+sm_commands() {
+    case "${SM_TERMINAL:-}" in
+    on)
+        exec 6>&2
+        PS4=$' \e[90m$\e[0m '
+        ;;
+    off)
+        exec 6>&3
+        PS4=$'\ncmd\t'
+        ;;
+    *) return 0 ;;
+    esac
+    BASH_XTRACEFD=6
+    declare -gA sm_kinds=()
     set -o functrace
-    trap '{ sm_trace; } 2>/dev/null' DEBUG
+    trap '{ sm_trace; } 6>/dev/null' DEBUG
 }
 
 # Before every command: xtrace on for a program on the PATH, off for a builtin, a
 # function or the script's own logic. A program named through one variable, as
-# the AUR helper is, is read through it.
+# the AUR helper is, is read through it. Each word is looked up once, as the
+# lookup forks.
 sm_trace() {
     local word="${BASH_COMMAND%% *}" name
     if [[ $word =~ ^\"\$([A-Za-z_][A-Za-z0-9_]*)\"$ ]]; then
         name="${BASH_REMATCH[1]}"
         word="${!name:-}"
     fi
-    if [ "$(type -t "$word" || true)" = file ]; then set -x; else set +x; fi
+    if [ -n "$word" ] && [ "${sm_kinds[$word]=$(type -t "$word" || true)}" = file ]; then
+        set -x
+    else
+        set +x
+    fi
 }
 
 # The phase a run is in. The sentence for it is in the operation's steps.
@@ -143,7 +162,7 @@ allow() {
 # A folder of the operation's own as $work, removed when it ends.
 scratch() {
     work="$(mktemp -d)"
-    trap 'rm -rf "$work"' EXIT
+    trap '{ rm -rf "$work"; } 6>/dev/null' EXIT
 }
 
 # Every request leaving the machine, bound to https, redirects included.

@@ -51,7 +51,7 @@ The top row shows usage in percent, read every 2 s. `usage: false` hides it.
 
 ## Runs
 
-A run shows its step and pacman's progress. **tab** switches to the details, where every key goes to the program. The wheel scrolls back 1000 lines there, in a full-screen program it sends arrows.
+A run shows its step and pacman's progress. **tab** switches to the details: the running command in a box headed by its step, under it the terminal, where every key goes to the program. The wheel scrolls back 1000 lines there, in a full-screen program it sends arrows. The log names each command as a `RUN` line.
 
 <img src="screenshots/run.png" width="720" alt="An update under way: its step, the progress bar and the package being upgraded">
 
@@ -82,7 +82,7 @@ Back after a success also closes the page the action came from.
 
 ### Verbose Output
 
-`output: verbose` shows runs in the terminal only, every key but **ctrl+c** goes to the program. Every command is echoed as `$ sudo pacman -Syu`. No tool gets a yes flag, every prompt is typed. The password is still asked before the run.
+`output: verbose` shows runs in the terminal only, every key but **ctrl+c** goes to the program. Every command is echoed as `$ sudo pacman -Syu`, in place of the box and the `RUN` line. No tool gets a yes flag, every prompt is typed. The password is still asked before the run.
 
 ### Password
 
@@ -243,7 +243,7 @@ One binary carries everything. Scripts are written per process to `$XDG_RUNTIME_
 flowchart LR
     R[Runtime] -->|area.sh op args| S[area.sh]
     S -->|stdout| R
-    S -->|"fd 3: step, found, terminal, fail, refused"| R
+    S -->|"fd 3: step, cmd, found, terminal, fail, refused"| R
     S -.->|pseudo terminal| T[Terminal view]
 
     style R fill:#1793d1,stroke:#1793d1,color:#fff
@@ -302,11 +302,11 @@ Every text is English and translated in `locales/de.po`.
 | `SM_PASSWORD` | `on` where a run that elevates gets the password on fd 4 and fd 5, else unset |
 | `SM_PROGRAM` | This program, which renews sudo's time stamp for the run |
 | `SM_RUN` | Title of a run that elevates, else unset |
-| `SM_TERMINAL` | `on` with verbose output, else unset |
+| `SM_TERMINAL` | `on` with verbose output, `off` in other runs, unset in a query |
 | `SUDO_PROMPT` | Fixed prompt the runtime recognises |
 | `TERM` | `xterm-256color` in a run |
 
-`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob` and ignores a hangup. A run that elevates holds off shutdown and sleep through logind and its `run_lock`.
+`lib.sh` sets `set -Eeuo pipefail`, `inherit_errexit` and `nullglob` and ignores a hangup. A run that elevates holds off shutdown and sleep through logind and its `run_lock`. A run names each program on the `PATH` before it starts, through xtrace on fd 6: as `cmd\t<command>` on fd 3, with verbose output on the terminal.
 
 | Function | Does |
 |---|---|
