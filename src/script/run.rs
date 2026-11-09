@@ -27,6 +27,8 @@ pub struct Run {
     pub progress: Progress,
     /// The sentence of the step lib.sh announced last.
     pub step: Option<String>,
+    /// The program the script started last, as xtrace names it.
+    pub command: Option<String>,
     /// What lib.sh named as found, in order.
     pub found: Vec<String>,
     /// A question waiting for the person.
@@ -96,6 +98,7 @@ impl Run {
             recent: VecDeque::new(),
             progress: Progress::default(),
             step: None,
+            command: None,
             found: Vec::new(),
             prompt: None,
             rejected: false,
@@ -142,6 +145,9 @@ impl Run {
                 if let Some(key) = line.strip_prefix("step\t") {
                     crate::info!("{}: step {key}", self.op);
                     self.step = self.op.meta().steps.get(key).map(|s| t(s).to_string());
+                } else if let Some(command) = line.strip_prefix("cmd\t") {
+                    crate::log::write("RUN", &format!("{}| {command}", self.op));
+                    self.command = Some(command.to_string());
                 } else if let Some(state) = line.strip_prefix("terminal\t") {
                     self.handed = state == "on";
                 } else if let Some(item) = line.strip_prefix("found\t") {

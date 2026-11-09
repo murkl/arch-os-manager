@@ -779,6 +779,92 @@ fn in_the_terminal_the_tools_ask_and_every_program_is_echoed() {
     assert_eq!(o.err.lines().collect::<Vec<_>>(), echoed);
 }
 
+/// The programs a run named on fd 3, in order.
+fn named(o: &Outcome) -> Vec<&str> {
+    o.events
+        .lines()
+        .filter_map(|l| l.strip_prefix("cmd\t"))
+        .collect()
+}
+
+/// Without verbose output a run names every program on fd 3 before it runs, under its step, the
+/// helper through its variable too, the script's own logic not, and the terminal shows none. A
+/// failure names nothing after the program that failed.
+#[test]
+fn a_run_names_every_program_on_fd_3() {
+    let s = Sandbox::new("commands");
+    for c in ["pacman", "paru", "flatpak"] {
+        s.stub(c, "exit 0");
+    }
+    let all = [
+        ("SM_AUR", "paru"),
+        ("SM_FLATPAK", "on"),
+        ("SM_TERMINAL", "off"),
+    ];
+    let o = s.run("upgrade", &["run"], &all);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let events: Vec<&str> = o.events.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(
+        events,
+        [
+            "step\trepo",
+            "cmd\tsudo pacman -Syu",
+            "step\taur",
+            "terminal\ton",
+            "cmd\tparu -Sua",
+            "terminal\toff",
+            "step\tflatpak",
+            "cmd\tflatpak update --assumeyes --noninteractive",
+        ]
+    );
+    assert_eq!(o.err, "");
+    s.stub("flatpak", "exit 3");
+    let o = s.run("upgrade", &["run"], &all);
+    assert_eq!(o.code, 1, "{}", o.events);
+    let events: Vec<&str> = o.events.lines().filter(|l| !l.is_empty()).collect();
+    let [.., last, fail] = events.as_slice() else {
+        panic!("{}", o.events);
+    };
+    assert_eq!(
+        *last, "cmd\tflatpak update --assumeyes --noninteractive",
+        "{}",
+        o.events
+    );
+    assert!(
+        fail.starts_with("fail\t3\tupgrade/upgrade.sh\t"),
+        "{}",
+        o.events
+    );
+}
+
+/// The clean-up of lib.sh is named nowhere, also where the program before it would turn the
+/// trace on. A value with a space is named quoted, on one line.
+#[test]
+fn a_run_names_no_clean_up() {
+    let s = Sandbox::new("commands-clean-up");
+    let list = s.dir.join("mirror list");
+    std::fs::write(&list, "Server = https://a.example/$repo\n").unwrap();
+    s.stub("sudo", "exit 0");
+    let env = [
+        ("SM_MIRRORLIST", list.to_str().unwrap()),
+        ("SM_TERMINAL", "off"),
+    ];
+    let o = s.run("mirrors", &["edit"], &env);
+    assert_eq!(o.code, 0, "{}", o.events);
+    let named = named(&o);
+    let edit = format!("sudo -e -- '{}'", list.display());
+    let check = format!(
+        "grep -Eq '^[[:space:]]*Server[[:space:]]*=' '{}'",
+        list.display()
+    );
+    assert_eq!(named.last(), Some(&check.as_str()), "{}", o.events);
+    assert!(
+        named.contains(&edit.as_str()) && !named.iter().any(|c| c.starts_with("rm ")),
+        "{}",
+        o.events
+    );
+}
+
 /// Where another app store updates Flatpak, the check and the update leave it out.
 #[test]
 fn updates_leave_flatpak_out_unless_its_updates_are_on() {

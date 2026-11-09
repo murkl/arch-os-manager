@@ -417,6 +417,23 @@ impl Page for PasswordPage {
     }
 }
 
+/// Rows the box with the running program takes above the terminal: its borders, its line and a
+/// blank row.
+const BOXED: u16 = 4;
+
+/// The details: the box with the running program, and under it the terminal, which keeps its
+/// size from program to program. The box takes half the area at most, and none with verbose
+/// output, where the terminal names every program itself.
+fn split(area: Rect, verbose: bool) -> (Option<Rect>, Rect) {
+    if verbose || area.height < 2 * BOXED || area.width < 5 {
+        return (None, area);
+    }
+    (
+        Some(Rect::new(area.x, area.y, area.width, BOXED - 1)),
+        Rect::new(area.x, area.y + BOXED, area.width, area.height - BOXED),
+    )
+}
+
 /// The outcome in a word. The header already names the job, only a recognised cause adds to it.
 fn headline(outcome: &Result<(), Failure>) -> String {
     match outcome {
@@ -665,7 +682,48 @@ impl RunPage {
         }
     }
 
+    /// The running program in a box with the step in its top border, cut at its end, since the
+    /// program and its first words say most. Until the first program the step stands alone.
+    fn draw_command(&self, area: Rect, buf: &mut Buffer, ctx: &Ctx) {
+        let Some(run) = &self.run else { return };
+        let s = &ctx.style;
+        let g = s.glyphs;
+        let w = usize::from(area.width);
+        let step = run.step.as_deref().unwrap_or_default();
+        let Some(command) = &run.command else {
+            let step = cut(step, w, g.ellipsis);
+            put(buf, area.x, area.y, &step, area.width, s.bold(Tone::Normal));
+            return;
+        };
+        let [tl, tr, bl, br, hz, vt] = g.border;
+        let muted = s.tone(Tone::Muted);
+        let line = |l: &str, r: &str| format!("{l}{}{r}", hz.repeat(w.saturating_sub(2)));
+        let title = cut(step, w.saturating_sub(6), g.ellipsis);
+        if title.is_empty() {
+            put(buf, area.x, area.y, &line(tl, tr), area.width, muted);
+        } else {
+            let head = format!("{tl}{hz} ");
+            let x = put(buf, area.x, area.y, &head, area.width, muted);
+            let room = area.right().saturating_sub(x);
+            let x = put(buf, x, area.y, &title, room, s.bold(Tone::Normal));
+            let rest = hz.repeat(w.saturating_sub(5 + width(&title)));
+            let rest = format!(" {rest}{tr}");
+            put(buf, x, area.y, &rest, area.right().saturating_sub(x), muted);
+        }
+        let y = area.y + 1;
+        let room = area.width.saturating_sub(4);
+        let command = cut(command, usize::from(room), g.ellipsis);
+        put(buf, area.x, y, vt, 1, muted);
+        put(buf, area.x + 2, y, &command, room, s.tone(Tone::Normal));
+        put(buf, area.right().saturating_sub(1), y, vt, 1, muted);
+        put(buf, area.x, y + 1, &line(bl, br), area.width, muted);
+    }
+
     fn draw_details(&mut self, area: Rect, buf: &mut Buffer, ctx: &Ctx) {
+        let (boxed, area) = split(area, ctx.settings.terminal());
+        if let Some(boxed) = boxed {
+            self.draw_command(boxed, buf, ctx);
+        }
         let Some(run) = self.run.as_mut() else { return };
         if self.size != (area.height, area.width) {
             self.size = (area.height, area.width);
@@ -842,7 +900,9 @@ impl Page for RunPage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         if self.run.is_none() && self.outcome.is_none() {
-            self.size = (area.height, area.width);
+            // The terminal starts at the size the details give it, so showing them resizes nothing.
+            let terminal = split(area, ctx.settings.terminal()).1;
+            self.size = (terminal.height, terminal.width);
             match Run::start(self.job.op, &self.job.args, self.size, ctx.run_sink()) {
                 Ok(run) => self.run = Some(run),
                 Err(f) => self.outcome = Some((Err(f), Instant::now())),
@@ -1505,11 +1565,13 @@ mod tests {
     #[test]
     fn the_wheel_scrolls_the_terminal_back_and_a_key_returns() {
         let (mut app, mut term) = app();
-        let lines: String = (0..100).map(|i| format!("line {i}\r\n")).collect();
-        let run = Run::fed(op::UPGRADE_RUN, "aur", &lines);
+        let run = Run::fed(op::UPGRADE_RUN, "aur", "");
         let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
         page.details = true;
         open(&mut app, Box::new(page));
+        screen(&mut app, &mut term);
+        let lines: String = (0..100).map(|i| format!("line {i}\r\n")).collect();
+        tell(&mut app, script::Event::Output(lines.into_bytes()));
         assert!(screen(&mut app, &mut term).contains("line 99"));
         press(&mut app, &[Key::WheelUp; 10]);
         let shown = screen(&mut app, &mut term);
@@ -1519,6 +1581,157 @@ mod tests {
         );
         press(&mut app, &[Key::Char('q')]);
         assert!(screen(&mut app, &mut term).contains("line 99"));
+    }
+
+    /// The trimmed rows of the shown page, and where the command box starts.
+    fn boxed(shown: &str) -> (Vec<&str>, usize) {
+        let rows: Vec<&str> = shown.lines().map(str::trim).collect();
+        let top = rows.iter().position(|r| r.starts_with(['╭', '+']));
+        (rows, top.unwrap_or_else(|| panic!("no box:\n{shown}")))
+    }
+
+    /// Tab shows the step alone until the first program, then the program in a box with the step
+    /// in its border, the newer one in place of the one before. The output follows after a blank
+    /// row and fills the rows down to the end.
+    #[test]
+    fn tab_boxes_the_running_program_under_its_step() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        let run = Run::fed(op::UPGRADE_RUN, "repo", "");
+        let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        open(&mut app, Box::new(page));
+        press(&mut app, &[Key::Tab]);
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains('╭') && shown.lines().any(|l| l.trim() == "Official packages"),
+            "{shown}"
+        );
+        tell(&mut app, script::Event::Script("cmd\tpacman -Qu".into()));
+        tell(
+            &mut app,
+            script::Event::Script("cmd\tsudo pacman -Syu".into()),
+        );
+        let lines: String = (0..100).map(|i| format!("line {i}\r\n")).collect();
+        tell(&mut app, script::Event::Output(lines.into_bytes()));
+        let shown = screen(&mut app, &mut term);
+        let (rows, top) = boxed(&shown);
+        assert!(
+            rows[top].starts_with("╭─ Official packages ─")
+                && rows[top].ends_with('╮')
+                && rows[top + 1].starts_with("│ sudo pacman -Syu ")
+                && rows[top + 1].ends_with('│')
+                && rows[top + 2].starts_with('╰')
+                && rows[top + 2].ends_with('╯')
+                && rows[top + 3].is_empty(),
+            "{shown}"
+        );
+        // The scrollbar stands right of the output.
+        let number = |r: &str| {
+            r.strip_prefix("line ")?
+                .split(' ')
+                .next()?
+                .parse::<usize>()
+                .ok()
+        };
+        let first = number(rows[top + 4]).unwrap_or_else(|| panic!("{shown}"));
+        let last = rows.iter().rposition(|r| r.starts_with("line "));
+        assert_eq!(last, Some(top + 4 + 99 - first), "{shown}");
+        assert_eq!(last.and_then(|at| number(rows[at])), Some(99), "{shown}");
+        assert!(
+            !shown.contains("pacman -Qu") && shown.matches("Official packages").count() == 1,
+            "{shown}"
+        );
+    }
+
+    /// At 40 columns the longest step and a long program are cut, and the box stays whole, on
+    /// the console too.
+    #[test]
+    fn the_command_box_cuts_what_does_not_fit() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::De);
+        let step = t("Removing unused Docker images and the build cache");
+        let packages: Vec<String> = (1..=30).map(|n| format!("package-{n:02}")).collect();
+        let command = format!("sudo pacman -Rns --noconfirm -- {}", packages.join(" "));
+        for console in [false, true] {
+            let (mut app, _) = app();
+            if console {
+                let colors = app.ctx.theme().colors;
+                app.ctx.style = crate::ui::Style::new(&colors, true);
+            }
+            let mark = app.ctx.style.glyphs.ellipsis;
+            let mut run = Run::fed(op::CLEANUP_RUN, "docker", "");
+            run.on_event(script::Event::Script(format!("cmd\t{command}")));
+            let page = RunPage::running(Job::new(op::CLEANUP_RUN, Vec::new()), run);
+            open(&mut app, Box::new(page));
+            press(&mut app, &[Key::Tab]);
+            let mut term =
+                ratatui::Terminal::new(ratatui::backend::TestBackend::new(40, 30)).unwrap();
+            let shown = screen(&mut app, &mut term);
+            let (rows, top) = boxed(&shown);
+            let frame = &rows[top..top + 3];
+            assert!(frame.iter().all(|r| width(r) == width(frame[0])), "{shown}");
+            let [tl, tr, _, _, hz, vt] = app.ctx.style.glyphs.border;
+            let title = frame[0]
+                .strip_prefix(&format!("{tl}{hz} "))
+                .and_then(|r| r.strip_suffix(tr))
+                .map(|r| r.trim_end_matches(hz).trim_end())
+                .and_then(|r| r.strip_suffix(mark))
+                .unwrap_or_else(|| panic!("{shown}"));
+            assert!(!title.is_empty() && step.starts_with(title), "{shown}");
+            let line = frame[1]
+                .strip_prefix(vt)
+                .and_then(|r| r.strip_suffix(vt))
+                .map(str::trim)
+                .and_then(|r| r.strip_suffix(mark))
+                .unwrap_or_else(|| panic!("{shown}"));
+            assert!(command.starts_with(line), "{shown}");
+        }
+        crate::i18n::set(crate::i18n::Lang::En);
+    }
+
+    #[test]
+    fn the_command_box_fits_any_size() {
+        let (mut app, _) = app();
+        let mut run = Run::fed(op::CLEANUP_RUN, "docker", "50%\r\n");
+        let command = format!("pacman -S {}", "package ".repeat(40));
+        run.on_event(script::Event::Script(format!("cmd\t{command}")));
+        let mut page = RunPage::running(Job::new(op::CLEANUP_RUN, Vec::new()), run);
+        page.details = true;
+        open(&mut app, Box::new(page));
+        for (w, h) in [
+            (80, 8),
+            (80, 7),
+            (80, 2),
+            (12, 30),
+            (6, 30),
+            (5, 30),
+            (4, 30),
+            (1, 1),
+        ] {
+            screen(
+                &mut app,
+                &mut ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap(),
+            );
+        }
+    }
+
+    /// With verbose output the terminal names every program itself and keeps the whole area.
+    #[test]
+    fn verbose_output_shows_no_command_box() {
+        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set(crate::i18n::Lang::En);
+        let (mut app, mut term) = app();
+        app.ctx.settings.output = Some("verbose".into());
+        let mut run = Run::fed(op::UPGRADE_RUN, "repo", "");
+        run.on_event(script::Event::Script("cmd\tsudo pacman -Syu".into()));
+        let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            !shown.contains('╭') && !shown.contains("sudo pacman"),
+            "{shown}"
+        );
     }
 
     /// The check names what it found, a single package too, and its reinstall asks first.
@@ -1696,13 +1909,16 @@ mod tests {
         crate::i18n::set(crate::i18n::Lang::En);
     }
 
-    /// The terminal ends with the outcome, so it shows that nothing more comes.
+    /// The terminal ends with the outcome, so it shows that nothing more comes. The window is tall
+    /// enough for the card of a failure to leave the first rows of the terminal free.
     #[test]
     fn the_terminal_ends_with_the_outcome() {
         let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::En);
         for (code, outcome) in [(0, "Done"), (1, "Failed")] {
-            let (mut app, mut term) = app();
+            let (mut app, _) = app();
+            let mut term =
+                ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 40)).unwrap();
             let run = Run::ended(op::UPGRADE_RUN, "Upgraded\r\n", code);
             let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
             open(&mut app, Box::new(page));

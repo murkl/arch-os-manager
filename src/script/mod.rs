@@ -202,7 +202,7 @@ pub fn set_flatpak(on: bool) {
 
 static TERMINAL: AtomicBool = AtomicBool::new(false);
 
-/// Verbose output: the runtime answers no prompt, and the script gets `$SM_TERMINAL`.
+/// Verbose output: the runtime answers no prompt, and a run gets `SM_TERMINAL=on`.
 pub fn set_terminal(on: bool) {
     TERMINAL.store(on, Ordering::Relaxed);
 }

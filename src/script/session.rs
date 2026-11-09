@@ -221,9 +221,7 @@ fn run_command(op: Op, args: &[String]) -> Result<(std::process::Command, Vec<Ow
             given = vec![holding(&password)?, holding(&password)?];
         }
     }
-    if super::terminal() {
-        cmd.env("SM_TERMINAL", "on");
-    }
+    cmd.env("SM_TERMINAL", if super::terminal() { "on" } else { "off" });
     Ok((cmd, given))
 }
 
@@ -277,6 +275,18 @@ mod tests {
     fn only_a_run_that_elevates_holds_shutdown_off() {
         assert!(holds(op::UPGRADE_RUN));
         assert!(!holds(op::SYSTEM_REBOOT));
+    }
+
+    /// Every run tells its script who answers on the terminal, so it names its programs there or
+    /// on fd 3.
+    #[test]
+    fn a_run_says_who_answers_on_the_terminal() {
+        let (cmd, _) = run_command(op::SYSTEM_REBOOT, &[]).unwrap();
+        let terminal = cmd
+            .get_envs()
+            .find(|(k, _)| *k == "SM_TERMINAL")
+            .and_then(|(_, v)| v?.to_str());
+        assert!(matches!(terminal, Some("on" | "off")), "{terminal:?}");
     }
 
     /// An editor that reads ^C as a key of its own still ends: the hang-up reaches what runs in
