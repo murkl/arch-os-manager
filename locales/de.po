@@ -571,6 +571,9 @@ msgstr "Systemzustand wird gelesen"
 msgid "Reason"
 msgstr "Grund"
 
+msgid "Rebuild"
+msgstr "Neu bauen"
+
 msgid "Remove"
 msgstr "Entfernen"
 
@@ -1330,6 +1333,9 @@ msgstr "Größe"
 
 msgid "AUR unreachable."
 msgstr "AUR nicht erreichbar."
+
+msgid "{helper} not working. Rebuild it on the Optional packages page."
+msgstr "{helper} funktioniert nicht. Auf der Seite Optionale Pakete neu bauen."
 
 msgid "Flatpak remotes unreachable."
 msgstr "Flatpak-Quellen nicht erreichbar."

@@ -1284,7 +1284,6 @@ mod tests {
 
     #[test]
     fn an_empty_password_starts_no_sudo_and_says_why() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
         page.needed = true;
@@ -1301,9 +1300,7 @@ mod tests {
 
     #[test]
     fn the_password_reads_the_same_before_a_run_and_within_it() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let card = |page: Box<dyn Page>| {
             let (mut app, mut term) = app();
             open(&mut app, page);
@@ -1331,9 +1328,7 @@ mod tests {
     /// anew, saying why.
     #[test]
     fn a_refused_password_is_asked_anew() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut page = PasswordPage::new(Job::new(op::UPGRADE_RUN, Vec::new()));
         page.needed = true;
@@ -1351,8 +1346,6 @@ mod tests {
     /// only once it lasts, the typed letters stay meanwhile.
     #[test]
     fn the_password_card_waits_without_flashing() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let long_ago = Instant::now() - Duration::from_secs(1);
         let (mut probing, mut term) = app();
         probing.ctx.grace = Duration::from_millis(300);
@@ -1380,8 +1373,6 @@ mod tests {
 
     #[test]
     fn backspace_in_the_password_box_never_leaves_it() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
         page.needed = true;
@@ -1393,8 +1384,6 @@ mod tests {
 
     #[test]
     fn the_password_box_names_what_it_takes_until_something_is_typed() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut page = PasswordPage::new(Job::new(op::SYSTEM_REBOOT, Vec::new()));
         page.needed = true;
@@ -1447,8 +1436,6 @@ mod tests {
     /// to leave, and yes leaves.
     #[test]
     fn a_run_that_does_not_stop_can_be_left() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let run = Run::fed(op::UPGRADE_RUN, "repo", "");
         let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
@@ -1468,8 +1455,6 @@ mod tests {
     /// nor shows in the keys.
     #[test]
     fn tab_belongs_to_the_terminal_that_was_handed_over() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let run = Run::fed(op::MIRRORS_EDIT, "edit", "GNU nano\r\n");
         let mut page = RunPage::running(Job::new(op::MIRRORS_EDIT, Vec::new()), run);
@@ -1489,8 +1474,6 @@ mod tests {
     /// takes it back, then the view chosen before.
     #[test]
     fn a_hand_over_shows_the_terminal_while_it_lasts() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let output = "Aur (1) paru-2.2.0-1\r\n";
         let shows = |handed: &[&str], tab: bool| {
@@ -1548,8 +1531,6 @@ mod tests {
     /// footer names act on what is seen.
     #[test]
     fn the_outcome_lies_over_the_terminal_where_it_shows() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut page = RunPage::finished(Job::new(op::UPGRADE_RUN, Vec::new()), Ok(()));
         page.run = Some(Run::ended(op::UPGRADE_RUN, "upgrading firefox\r\n", 0));
@@ -1595,8 +1576,6 @@ mod tests {
     /// row and fills the rows down to the end.
     #[test]
     fn tab_boxes_the_running_program_under_its_step() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let run = Run::fed(op::UPGRADE_RUN, "repo", "");
         let page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
@@ -1648,7 +1627,6 @@ mod tests {
     /// the console too.
     #[test]
     fn the_command_box_cuts_what_does_not_fit() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::De);
         let step = t("Removing unused Docker images and the build cache");
         let packages: Vec<String> = (1..=30).map(|n| format!("package-{n:02}")).collect();
@@ -1687,7 +1665,6 @@ mod tests {
                 .unwrap_or_else(|| panic!("{shown}"));
             assert!(command.starts_with(line), "{shown}");
         }
-        crate::i18n::set(crate::i18n::Lang::En);
     }
 
     #[test]
@@ -1719,8 +1696,6 @@ mod tests {
     /// With verbose output the terminal names every program itself and keeps the whole area.
     #[test]
     fn verbose_output_shows_no_command_box() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         app.ctx.settings.output = Some("verbose".into());
         let mut run = Run::fed(op::UPGRADE_RUN, "repo", "");
@@ -1737,8 +1712,6 @@ mod tests {
     /// The check names what it found, a single package too, and its reinstall asks first.
     #[test]
     fn a_check_offers_to_reinstall_what_it_found() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut page = RunPage::finished(Job::new(op::REPAIR_FILES, Vec::new()), Ok(()));
         let mut run = Run::ended(
@@ -1772,8 +1745,6 @@ mod tests {
 
     #[test]
     fn while_the_system_is_read_again_the_keys_offer_nothing_to_choose() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let _ = app.ctx.begin(None, false);
         open(
@@ -1799,8 +1770,6 @@ mod tests {
     /// chosen, tab changes nothing, and the outcome lies on a card over the last output.
     #[test]
     fn in_the_terminal_the_run_shows_as_it_is_and_the_outcome_lies_over_it() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         app.ctx.settings.output = Some("verbose".into());
         let asked = ":: Proceed with installation? [Y/n] ";
@@ -1848,8 +1817,6 @@ mod tests {
 
     #[test]
     fn many_answers_scroll_inside_the_card() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, _) = app();
         let providers: String = (1..=14).map(|n| format!("{n}) provider-{n}  ")).collect();
         let asked = format!(
@@ -1870,7 +1837,6 @@ mod tests {
 
     #[test]
     fn the_count_under_the_bar_says_how_many_are_through() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for (lang, total, through) in [
             (
                 crate::i18n::Lang::En,
@@ -1906,15 +1872,12 @@ mod tests {
             shown.contains("…e werden geprüft · 45 von 45 fertig"),
             "{shown}"
         );
-        crate::i18n::set(crate::i18n::Lang::En);
     }
 
     /// The terminal ends with the outcome, so it shows that nothing more comes. The window is tall
     /// enough for the card of a failure to leave the first rows of the terminal free.
     #[test]
     fn the_terminal_ends_with_the_outcome() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         for (code, outcome) in [(0, "Done"), (1, "Failed")] {
             let (mut app, _) = app();
             let mut term =
@@ -1934,7 +1897,6 @@ mod tests {
 
     #[test]
     fn a_run_asking_for_the_password_takes_no_empty_one() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         sudo::forget();
         let (mut app, mut term) = app();
@@ -1958,8 +1920,6 @@ mod tests {
     /// answers the question nor asks to stop.
     #[test]
     fn pasted_and_held_letters_command_nothing_in_the_compact_view() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let run = Run::fed(
             op::UPGRADE_RUN,
@@ -2018,8 +1978,6 @@ mod tests {
 
     #[test]
     fn a_menu_of_the_helper_names_what_enter_keeps() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let run = Run::fed(op::UPGRADE_RUN, "aur", "==> ");
         assert!(matches!(run.prompt, Some(Prompt::Text { .. })));

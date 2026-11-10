@@ -245,8 +245,6 @@ mod tests {
     /// What pacnew.sh never replaces is offered for merging only, with the reason.
     #[test]
     fn an_account_file_is_only_merged() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let page = FilePage {
             file: "/etc/shadow.pacnew".into(),
@@ -286,8 +284,6 @@ mod tests {
     /// version names what goes.
     #[test]
     fn a_saved_version_is_named_as_such() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let page = FilePage {
             file: "/etc/foo.conf.pacsave".into(),

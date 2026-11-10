@@ -93,7 +93,6 @@ mod tests {
     #[test]
     fn a_run_is_named_after_the_action_chosen() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         open(&mut app, Box::new(RepairPage::new()));
         screen(&mut app, &mut term);
@@ -108,8 +107,6 @@ mod tests {
     #[test]
     fn each_repair_says_under_it_when_it_helps_and_the_cursor_steps_to_the_next() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         open(&mut app, Box::new(RepairPage::new()));
         let shown = screen(&mut app, &mut term);

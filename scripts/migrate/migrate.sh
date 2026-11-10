@@ -1,10 +1,10 @@
 # shellcheck shell=bash source=../lib/lib.sh
 . "${BASH_SOURCE[0]%/*}/../lib/lib.sh" || exit 1
 
-# The Arch OS Manager 1.x, taken over once. When no 1.x is left to take over,
-# remove this folder, src/migrate.rs with its line in src/lib.rs and its calls
-# in src/cli.rs and src/ui/app.rs, and aur/arch-os-manager.install with the
-# line install= in aur/PKGBUILD.
+# The Arch OS Manager 1.x, taken over once, and the news cache of 2.3 and
+# earlier. When neither is left to take over, remove this folder, src/migrate.rs
+# with its line in src/lib.rs and its calls in src/cli.rs and src/ui/app.rs, and
+# aur/arch-os-manager.install with the line install= in aur/PKGBUILD.
 
 autostart="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/arch-os.desktop"
 
@@ -13,13 +13,13 @@ ours() {
     [ -f "$autostart" ] && grep -qF 'arch-os notify' "$autostart"
 }
 
-# What the old manager left in its home, the first argument, and in the
-# autostart, each as `left` and its path, then its settings that have a
-# counterpart, as key and value.
+# What the old manager and the news cache left in its home, the first argument,
+# and in the autostart, each as `left` and its path, then its settings that have
+# a counterpart, as key and value.
 op_read() {
     local home="$1" path key value aur_support="" aur_repo=""
     for path in "${home}/bin" "${home}/config/settings.conf" "${home}/config/blacklist.conf" \
-        "${home}/config/kitty.conf" "${home}/database"; do
+        "${home}/config/kitty.conf" "${home}/database" "${home}/cache/news.xml"; do
         if [ -e "$path" ]; then printf 'left\t%s\n' "$path"; fi
     done
     if ours; then printf 'left\t%s\n' "$autostart"; fi
@@ -41,13 +41,16 @@ op_read() {
     fi
 }
 
-# Removes what the old manager left in its home, the first argument, and puts
-# the System Manager in its place in the GNOME dock.
+# Removes what the old manager and the news cache left in its home, the first
+# argument, with the copies an end cut short, and puts the System Manager in its
+# place in the GNOME dock.
 op_clean() {
     local home="$1"
     rm -rf -- "${home:?}/bin" "${home:?}/database"
     rm -f -- "${home:?}/config/settings.conf" "${home:?}/config/blacklist.conf" "${home:?}/config/kitty.conf"
     if [ -d "${home}/config" ]; then rmdir --ignore-fail-on-non-empty -- "${home}/config"; fi
+    rm -f -- "${home:?}/cache/news.xml" "${home:?}"/cache/news.*.new
+    if [ -d "${home}/cache" ]; then rmdir --ignore-fail-on-non-empty -- "${home}/cache"; fi
     if ours; then rm -f -- "$autostart"; fi
     dock
 }

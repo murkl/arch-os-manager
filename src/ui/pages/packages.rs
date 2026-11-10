@@ -860,8 +860,6 @@ mod tests {
     #[test]
     fn a_foreign_package_without_source_says_so() {
         use crate::ui::app::tests::{app, open, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         app.ctx.shared.installed = Loaded::Ready(parse_installed(
             "pkg	paru	2-1
@@ -899,8 +897,6 @@ foreign	gone
     #[test]
     fn a_search_lists_the_installed_then_the_repositories_then_the_aur() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         app.ctx.shared.installed = Loaded::Ready(parse_installed(
             "pkg\tfirefox\t1-1\npkg\tbash\t5-1\nexplicit\tfirefox\n",
@@ -953,8 +949,6 @@ foreign	gone
     #[test]
     fn what_is_marked_to_install_and_to_remove_goes_in_one_run_after_one_question() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let marked = BTreeSet::from([
             Pick::Local("pulseaudio".into()),

@@ -358,6 +358,7 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
         ),
         _ => {
             let installed = |h: &str| ctx.features().is_some_and(|f| f.ok(h));
+            let broken = |h: &str| ctx.features().is_some_and(|f| f.broken(h));
             let mut rows = vec![
                 Row::new("auto".to_string(), t("Automatic"))
                     .detail(t("paru, else yay"), Tone::Muted),
@@ -365,6 +366,8 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
             rows.extend(AUR_HELPERS.iter().map(|h| {
                 let (text, tone) = if installed(h) {
                     (t("installed"), Tone::Ok)
+                } else if broken(h) {
+                    (t("not working"), Tone::Error)
                 } else {
                     (t("not installed"), Tone::Muted)
                 };
@@ -586,7 +589,6 @@ mod tests {
     /// The optional packages show the spinner until they are probed, and the page draws meanwhile.
     #[test]
     fn the_optional_packages_show_the_spinner_until_they_are_probed() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = crate::ui::app::tests::app();
         let page = SettingsPage::new(None);
         let frames = app.ctx.style.glyphs.spinner;
@@ -608,7 +610,6 @@ mod tests {
 
     #[test]
     fn only_the_app_menu_entry_waits_while_it_is_put_in_place() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (app, _) = crate::ui::app::tests::app();
         let mut page = SettingsPage::new(None);
         page.applying = Some((Instant::now(), Task::pending()));
@@ -624,8 +625,6 @@ mod tests {
     #[test]
     fn the_aur_review_is_on_until_switched_off() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(Lang::En);
         let (mut app, mut term) = app();
         script::set_aur(Some("paru"));
         for page in Target::AurReview.open(&mut app.ctx) {
@@ -642,13 +641,30 @@ mod tests {
         script::set_aur_review(true);
     }
 
+    /// A helper that no longer starts says so where the helper is chosen.
+    #[test]
+    fn a_helper_that_no_longer_starts_says_so_in_the_choice() {
+        use crate::ui::app::tests::{app, open, screen};
+        let (mut app, mut term) = app();
+        app.ctx.shared.features = Loaded::Ready(crate::data::features::Features::parse(
+            "paru\tbroken\nyay\tmissing\n",
+        ));
+        let page = choice(Target::AurHelper, &mut app.ctx);
+        open(&mut app, page);
+        let shown = screen(&mut app, &mut term);
+        let row = |name: &str| {
+            let row = shown.lines().find(|l| l.trim_start().starts_with(name));
+            row.unwrap_or_default()
+        };
+        assert!(row("paru").ends_with("not working"), "{shown}");
+        assert!(row("yay").ends_with("not installed"), "{shown}");
+    }
+
     /// Flatpak's row shows only where Flatpak is there. Its switch is stored and the updates read
     /// anew.
     #[test]
     fn flatpak_updates_switch_only_where_it_is_there() {
         use crate::ui::app::tests::{app, example, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(Lang::En);
         let (mut app, mut term) = app();
         for page in Target::Settings.open(&mut app.ctx) {
             open(&mut app, page);
@@ -680,7 +696,6 @@ mod tests {
     #[test]
     fn the_notification_is_chosen_from_a_list_and_hourly_is_the_default() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         for page in Target::Notifications.open(&mut app.ctx) {
             open(&mut app, page);
@@ -708,8 +723,6 @@ mod tests {
     #[test]
     fn the_output_is_chosen_from_a_list_and_compact_is_the_default() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(Lang::En);
         let (mut app, mut term) = app();
         for page in Target::Output.open(&mut app.ctx) {
             open(&mut app, page);
@@ -758,7 +771,6 @@ mod tests {
     #[test]
     fn the_usage_switch_takes_the_row_off_the_start_page_and_back() {
         use crate::ui::app::tests::{app, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         app.ctx.usage = Some(crate::data::usage::Usage {
             cpu: Some(0.2),
@@ -793,8 +805,6 @@ mod tests {
     #[test]
     fn appearance_and_system_stand_apart_and_about_last_on_its_own() {
         use crate::ui::app::tests::{app, open, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(Lang::En);
         let (mut app, _) = app();
         open(&mut app, Box::new(SettingsPage::new(None)));
         let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 30)).unwrap();
@@ -826,8 +836,6 @@ mod tests {
     #[test]
     fn the_status_switch_clears_the_right_of_the_start_page_and_back() {
         use crate::ui::app::tests::{app, example, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         let update = |shown: &str| {
@@ -863,8 +871,6 @@ mod tests {
     fn a_setting_not_written_says_so_until_a_write_succeeds() {
         use crate::ui::app::tests::{app, open, screen};
         use crate::ui::{Fresh, Msg};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let (tx, rx) = std::sync::mpsc::sync_channel(crate::ui::QUEUE);
         app.ctx.tx = tx;

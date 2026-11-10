@@ -19,10 +19,11 @@ defaults:
   run:
     shell: bash
 
-# A new push replaces a pull request's run.
+# A new push replaces a pull request's run. One on main runs to its end, as
+# Monday's alone writes the cache.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # `make check` on Arch, as the machines it runs on.
@@ -35,11 +36,15 @@ jobs:
     permissions:
       contents: read
     steps:
+      # The pinned image's keyring ages, so it is renewed before the packages it
+      # verifies, else one of a packager it does not know yet fails.
+      - run: |
+          pacman -Sy --noconfirm --needed archlinux-keyring
+          pacman -Su --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
+
       # git refuses root a checkout owned by the runner's user. The build reads
       # the last release tag, so the history comes along.
-      - run: |
-          pacman -Syu --noconfirm --needed rust shellcheck shfmt yamllint actionlint zizmor gettext gitleaks pacman-contrib git
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

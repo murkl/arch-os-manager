@@ -712,11 +712,11 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
     );
     assert_eq!(o.events, "step\trepo\nstep\taur\nstep\tflatpak\n");
     // A failing helper leaves Flatpak still to update, then what it left is read.
-    s.stub("paru", "exit 1");
+    s.stub("paru", r#"case "$*" in --version) exit 0 ;; esac; exit 1"#);
     let o = s.run("upgrade", &["run"], &all);
     assert!(
         o.calls
-            .ends_with("flatpak update --assumeyes --noninteractive\nparu -Qua\n"),
+            .ends_with("flatpak update --assumeyes --noninteractive\nparu --version\nparu -Qua\n"),
         "{}",
         o.calls
     );
@@ -728,7 +728,8 @@ fn upgrade_takes_the_repositories_first_then_the_aur_then_flatpak() {
 fn a_failing_helper_ends_by_what_it_left() {
     let s = Sandbox::new("upgrade-aur-left");
     s.stub("pacman", "exit 0");
-    let left = |qua: &str| format!(r#"case "$*" in *-Qua*) {qua} ;; esac; exit 1"#);
+    let left =
+        |qua: &str| format!(r#"case "$*" in *-Qua*) {qua} ;; --version) exit 0 ;; esac; exit 1"#);
     let ends = |qua: &str| {
         s.stub("paru", &left(qua));
         s.run(
@@ -742,6 +743,27 @@ fn a_failing_helper_ends_by_what_it_left() {
     assert_eq!(ends("echo 'error: dns error' >&2"), 13);
     assert_eq!(ends("echo 'bar 1-1 -> 2-1 [ignored]'"), 0);
     assert_eq!(ends(":"), 0);
+}
+
+/// A helper that no longer starts, as after a pacman update until it is rebuilt, ends the run
+/// with its own error, which names the cause and the page that fixes it.
+#[test]
+fn a_helper_that_no_longer_starts_ends_the_run_with_its_own_error() {
+    let s = Sandbox::new("upgrade-aur-broken");
+    s.stub("pacman", "exit 0");
+    s.stub(
+        "paru",
+        "echo 'paru: error while loading shared libraries: libalpm.so.16: cannot open shared object file: No such file or directory' >&2; exit 127",
+    );
+    let o = s.run(
+        "upgrade",
+        &["run"],
+        &[("SM_AUR", "paru"), ("SM_AUR_REVIEW", "off")],
+    );
+    assert_eq!(o.code, 127, "{}", o.events);
+    let tail = o.err.lines().map(str::to_string).collect();
+    let failure = system_manager::script::Failure::classify(op::UPGRADE_RUN, Some(127), None, tail);
+    assert_eq!(failure.offer, Some("features"), "{failure:?}");
 }
 
 /// In the terminal no tool is told yes, the AUR helper keeps its review, and every program is
@@ -1498,6 +1520,33 @@ case "$1" in get) cat "$store" ;; set) echo "$4" >"$store" ;; esac"#,
         r#"[ "$1" = get ] && echo "['arch-os.desktop']"; exit 0"#,
     );
     assert_eq!(s.run("migrate", &["clean", h], &[]).code, 10);
+}
+
+/// The news cache of 2.3 and earlier goes once, with the copies an end cut short, and its folder
+/// only where nothing else lies in it.
+#[test]
+fn the_news_cache_of_earlier_versions_is_cleared_away() {
+    let s = Sandbox::new("migrate-cache");
+    s.absent("gsettings");
+    let home = s.dir.join("arch-os");
+    let cache = home.join("cache");
+    std::fs::create_dir_all(&cache).unwrap();
+    for file in ["news.xml", "news.4711.new"] {
+        std::fs::write(cache.join(file), "<rss/>").unwrap();
+    }
+    std::fs::write(home.join("news.json"), "[]").unwrap();
+    let h = home.to_str().unwrap();
+    let o = s.run("migrate", &["read", h], &[]);
+    assert_eq!(o.out, format!("left\t{h}/cache/news.xml\n"), "{}", o.err);
+    assert_eq!(s.run("migrate", &["clean", h], &[]).code, 0);
+    assert!(!cache.exists() && home.join("news.json").exists());
+    assert_eq!(s.run("migrate", &["read", h], &[]).out, "");
+
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::write(cache.join("news.xml"), "<rss/>").unwrap();
+    std::fs::write(cache.join("own"), "").unwrap();
+    assert_eq!(s.run("migrate", &["clean", h], &[]).code, 0);
+    assert!(!cache.join("news.xml").exists() && cache.join("own").exists());
 }
 
 /// A release's push to the AUR, against a repository standing in for it that holds a file the

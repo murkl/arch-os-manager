@@ -1,5 +1,6 @@
 //! The Arch OS Manager 1.x, taken over once: its settings into settings.yaml, then what it left
-//! removed. scripts/migrate/migrate.sh says how to remove this.
+//! removed, with the news cache of 2.3 and earlier. scripts/migrate/migrate.sh says how to remove
+//! this.
 
 use crate::script::{op, query};
 use crate::settings::Settings;

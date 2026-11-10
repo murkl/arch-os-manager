@@ -235,7 +235,6 @@ mod tests {
     #[test]
     fn reading_changes_nothing_while_the_article_action_and_space_mark_an_item() {
         use crate::ui::app::tests::{app, example, open, press, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         example(&mut app);
         open(&mut app, Box::new(NewsPage::new()));

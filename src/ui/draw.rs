@@ -486,7 +486,6 @@ mod tests {
     #[test]
     fn a_narrow_header_and_footer_keep_whole_parts() {
         use crate::ui::app::tests::{app, open, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = app();
         let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(40, 20)).unwrap();
         let home = screen(&mut app, &mut term);
@@ -509,7 +508,6 @@ mod tests {
     #[test]
     fn the_console_names_the_keys_in_words() {
         use crate::ui::app::tests::{app, screen};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         let colors = app.ctx.theme().colors;
         app.ctx.style = crate::ui::Style::new(&colors, true);

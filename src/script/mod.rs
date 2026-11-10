@@ -562,7 +562,6 @@ mod tests {
 
     #[test]
     fn classify_prefers_the_declared_error_then_hints_then_the_trap() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let declared = Failure::classify(op::UPGRADE_LIST, Some(10), None, vec![]);
         assert!(declared.known.is_some());
         let hinted = Failure::classify(

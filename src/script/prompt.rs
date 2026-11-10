@@ -283,7 +283,6 @@ mod tests {
 
     #[test]
     fn words_known_questions_plainly_and_keeps_the_rest() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let ask = |q: &str| {
             Prompt::YesNo {
                 question: q.into(),
@@ -308,8 +307,6 @@ mod tests {
 
     #[test]
     fn an_empty_answer_box_names_what_it_takes() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         for (line, shows) in [
             (format!("x{}", sudo::PROMPT), "Password"),
             ("==> ".into(), "Empty for default"),
