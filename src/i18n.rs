@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU8, Ordering};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lang {
@@ -48,21 +47,50 @@ impl Lang {
     }
 }
 
-static CURRENT: AtomicU8 = AtomicU8::new(0);
+/// The language in force, for every thread of the program.
+#[cfg(not(test))]
+mod slot {
+    use std::sync::atomic::{AtomicU8, Ordering};
 
-/// Held by tests that switch the language or read English text, which share one process.
+    static CURRENT: AtomicU8 = AtomicU8::new(0);
+
+    pub fn get() -> u8 {
+        CURRENT.load(Ordering::Relaxed)
+    }
+
+    pub fn set(lang: u8) {
+        CURRENT.store(lang, Ordering::Relaxed);
+    }
+}
+
+/// Each test runs on a thread of its own, so the language one sets reaches no other.
 #[cfg(test)]
-pub static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+mod slot {
+    use std::cell::Cell;
+
+    thread_local! {
+        static CURRENT: Cell<u8> = const { Cell::new(0) };
+    }
+
+    pub fn get() -> u8 {
+        CURRENT.get()
+    }
+
+    pub fn set(lang: u8) {
+        CURRENT.set(lang);
+    }
+}
+
 static DE: OnceLock<HashMap<String, &'static str>> = OnceLock::new();
 
 pub const DE_PO: &str = include_str!("../locales/de.po");
 
 pub fn set(lang: Lang) {
-    CURRENT.store(lang as u8, Ordering::Relaxed);
+    slot::set(lang as u8);
 }
 
 pub fn current() -> Lang {
-    if CURRENT.load(Ordering::Relaxed) == Lang::De as u8 {
+    if slot::get() == Lang::De as u8 {
         Lang::De
     } else {
         Lang::En

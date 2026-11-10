@@ -102,6 +102,9 @@ op_run() {
         flatpak update "${yes[@]}"
     fi
     if [ "$aur" -ne 0 ]; then
+        # A helper that no longer starts, as after a pacman update until it is rebuilt, ends
+        # with its own status, so its error names the cause.
+        if ! aur --version >/dev/null 2>&1; then exit "$aur"; fi
         case "$(aur_list)" in
         '') ;;
         failed*) exit 13 ;;

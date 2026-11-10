@@ -461,7 +461,6 @@ mod tests {
 
     #[test]
     fn facts_longer_than_their_room_scroll_by_wheel_and_page_while_the_actions_stay() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = crate::ui::app::tests::app();
         let mut d = Detail::default();
         let body = (0..50)

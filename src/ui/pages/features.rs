@@ -155,6 +155,9 @@ impl Page for FeaturePage {
         let package = self.package.clone();
         let install_args = args.clone();
         let unmet = features.unmet(&self.package);
+        let helper = AUR_HELPERS.contains(&self.package.as_str());
+        // A helper that no longer starts, as after a pacman update, is built anew in its place.
+        let rebuild = state == Status::Broken && helper;
         let acts = if let (Status::Missing, Some(why)) = (&state, unmet) {
             body.push(Block::Blank);
             body.push(Block::Text(
@@ -170,7 +173,16 @@ impl Page for FeaturePage {
                 .icon(icon::PACKAGE),
             ]
         } else {
-            vec![
+            let mut acts = Vec::new();
+            if rebuild {
+                acts.push(
+                    Act::new(t("Rebuild"), move |ctx: &mut Ctx| {
+                        Flow::Push(start(Job::new(install, install_args.clone()), ctx))
+                    })
+                    .icon(icon::PACKAGE),
+                );
+            }
+            acts.push(
                 Act::new(t("Remove"), move |ctx: &mut Ctx| {
                     let name: [(&str, &dyn std::fmt::Display); 1] = [("name", &package)];
                     let text = if extension {
@@ -181,9 +193,10 @@ impl Page for FeaturePage {
                     Flow::Push(start(Job::new(remove, args.clone()).confirm(text), ctx))
                 })
                 .icon(icon::CLEANUP),
-            ]
+            );
+            acts
         };
-        if state == Status::Missing && AUR_HELPERS.contains(&self.package.as_str()) {
+        if (state == Status::Missing || rebuild) && helper {
             body.push(Block::Blank);
             body.push(Block::Text(
                 t("Built with makepkg. Installs git and base-devel.").into(),
@@ -227,7 +240,6 @@ mod tests {
 
     #[test]
     fn lists_each_package_under_its_group() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = app();
         app.ctx.shared.features = Loaded::Ready(Features::parse(
             "paru\tok\t2.1.0-1\ngnome-arch-update\tmissing\n@gnome\tok\n",
@@ -250,8 +262,6 @@ mod tests {
     #[test]
     fn removing_says_what_is_lost() {
         use crate::ui::app::tests::{open, press};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         for (package, effect) in [
             ("gnome-arch-update", "Resets its settings."),
             ("meld", "Removes with pacman -Rns."),
@@ -271,5 +281,21 @@ mod tests {
             assert!(asked.contains(&format!("Remove {package}?")), "{asked}");
             assert!(asked.contains(effect), "{package}: {asked}");
         }
+    }
+
+    /// A helper that no longer starts, as after a pacman update, is rebuilt from its page first.
+    #[test]
+    fn a_helper_that_no_longer_starts_is_rebuilt() {
+        let (mut app, mut term) = app();
+        app.ctx.shared.features = Loaded::Ready(Features::parse("paru\tbroken\n"));
+        let page = FeaturePage {
+            package: "paru".into(),
+            detail: Detail::default(),
+        };
+        crate::ui::app::tests::open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        let at = |act: &str| shown.find(act).unwrap_or_else(|| panic!("{act}: {shown}"));
+        assert!(at("Rebuild") < at("Remove"), "{shown}");
+        assert!(shown.contains("not working") && shown.contains("Built with makepkg."));
     }
 }

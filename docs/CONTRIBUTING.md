@@ -9,7 +9,6 @@ make check      # the whole gate, as CI runs it
 make fmt        # cargo fmt and shfmt
 make run        # interface against a throwaway target/home
 make build      # release binary
-make install    # ~/.local/bin/system-manager
 ```
 
 ```

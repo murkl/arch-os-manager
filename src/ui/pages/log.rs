@@ -276,8 +276,6 @@ mod tests {
     /// another kind. The count opens the hidden messages, and x hides nothing there.
     #[test]
     fn the_hidden_ones_are_counted_below_and_open_from_there() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         app.ctx.shared.journal = Loaded::Ready(vec![
@@ -343,8 +341,6 @@ mod tests {
     /// that hides nothing of this boot keeps its count.
     #[test]
     fn no_error_is_claimed_while_some_are_hidden() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         app.ctx.settings.hidden_log = vec!["example 0".into()];

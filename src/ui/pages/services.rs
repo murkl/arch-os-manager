@@ -283,8 +283,6 @@ mod tests {
 
     #[test]
     fn what_failed_stands_on_top_with_what_it_is_and_the_cursor_on_it() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let service = |user, unit: &str, active: &str, description: &str| Service {
             user,
@@ -330,8 +328,6 @@ mod tests {
     /// heading of the scope that still has a row. esc clears the text, then goes back.
     #[test]
     fn the_filter_is_always_there_and_keeps_the_headings_of_what_is_left() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let service = |user, unit: &str| Service {
             user,
@@ -370,8 +366,6 @@ mod tests {
     /// What the graphical session cannot do without asks first, opening on no.
     #[test]
     fn a_unit_the_session_needs_asks_before_it_stops() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let gdm = Service {
             user: false,

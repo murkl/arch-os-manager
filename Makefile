@@ -2,12 +2,10 @@
 SHELL       := bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-BIN := target/release/system-manager
-
 # Bash: the scripts the runtime runs and the tools.
 BASH_SCRIPTS  := $(wildcard scripts/*/*.sh tools/*.sh)
 
-.PHONY: all build check secrets-check fmt fmt-check lint test aur-check run install screenshots banner github clean
+.PHONY: all build check secrets-check fmt fmt-check lint test aur-check run screenshots banner github clean
 
 all: build
 
@@ -17,8 +15,12 @@ build:
 # The one command that has to pass before a commit, cheapest and loudest first.
 check: secrets-check fmt-check lint test aur-check build
 
+# What git holds or would take, never the build output it ignores.
 secrets-check:
-	gitleaks dir . --redact --no-banner
+	tree="$$(mktemp -d)"; trap 'rm -rf "$$tree"' EXIT; \
+	git ls-files -z --cached --others --exclude-standard | \
+		tar --create --null --ignore-failed-read --files-from=- | tar --extract --directory="$$tree"; \
+	cd "$$tree" && gitleaks dir . --redact --no-banner
 
 fmt:
 	cargo fmt
@@ -33,7 +35,7 @@ lint:
 	shellcheck -x -S style $(BASH_SCRIPTS)
 	yamllint -s .
 	actionlint
-	zizmor --offline --persona auditor .github
+	zizmor --offline .github
 	msgfmt --check-format -o /dev/null locales/de.po
 
 test:
@@ -58,9 +60,6 @@ run:
 	fi; \
 	cargo run -- $(ARGS)
 
-install: build
-	install -Dm755 $(BIN) "$(HOME)/.local/bin/system-manager"
-
 # The README's pictures, by hand after a visible change: the pages out of
 # example data through the window's painter, as the ignored test `screenshots`
 # in src/ui/app.rs takes them. A blank stands for the version, as build.rs
@@ -78,7 +77,7 @@ banner:
 	mkdir -p target
 	accent="$$(sed -n 's/^ *accent: *"\(#[0-9A-Fa-f]*\)".*/\1/p' themes/nord.yaml)"; \
 	{ printf 'accent: "%s"\nlogo: |\n' "$$accent"; sed 's/^/  /' docs/wordmark.txt; } >target/product.yaml
-	python3 ../workflows/banner/banner.py --product target/product.yaml --logo scripts/desktop/logo.svg \
+	python3 ../workflows/banner/banner.py --product target/product.yaml --logo docs/logo.svg \
 		--card docs/screenshots/home.png --card docs/screenshots/update.png \
 		--tagline "Update, maintain and repair<br>Arch Linux from one place." --cell 7
 

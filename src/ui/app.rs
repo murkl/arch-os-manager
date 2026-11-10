@@ -477,18 +477,23 @@ fn load_news() -> Result<(Vec<data::news::Item>, bool), Failure> {
     match fetched {
         Ok(feed) => {
             let all = data::news::merge(feed, kept);
-            match serde_json::to_vec(&all) {
-                Ok(json) => {
-                    if let Err(e) = crate::paths::write_atomic(&archive, &json) {
-                        crate::warn!("news not kept: {e}");
-                    }
-                }
-                Err(e) => crate::warn!("news not kept: {e}"),
-            }
+            keep_news(archive, &all);
             Ok((all, false))
         }
         Err(failure) if kept.is_empty() => Err(failure),
         Err(_) => Ok((kept, true)),
+    }
+}
+
+/// Every item seen, for offline, written on the thread the end waits for.
+fn keep_news(archive: std::path::PathBuf, all: &[data::news::Item]) {
+    match serde_json::to_vec(all) {
+        Ok(json) => super::fetch::serial(move || {
+            if let Err(e) = crate::paths::write_atomic(&archive, &json) {
+                crate::warn!("news not kept: {e}");
+            }
+        }),
+        Err(e) => crate::warn!("news not kept: {e}"),
     }
 }
 
@@ -616,6 +621,21 @@ pub mod tests {
         );
     }
 
+    /// The news are kept on the thread the end waits for, behind what it was handed before, so
+    /// quitting never cuts the write short.
+    #[test]
+    fn the_news_are_kept_where_the_end_waits_for_them() {
+        use std::time::Duration;
+        let dir = std::env::temp_dir().join(format!("sm-news-{}", std::process::id()));
+        let archive = dir.join("news.json");
+        super::super::fetch::serial(|| std::thread::sleep(Duration::from_millis(300)));
+        keep_news(archive.clone(), &[]);
+        assert!(!archive.exists(), "written behind what came before");
+        assert!(super::super::fetch::settle(Duration::from_secs(5)));
+        assert_eq!(std::fs::read_to_string(&archive).unwrap(), "[]");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// Example data in every shared value, as the screenshots show it.
     pub fn example(app: &mut App) {
         use crate::data::{
@@ -699,7 +719,6 @@ pub mod tests {
 
     #[test]
     fn every_page_fits_forty_columns_in_german() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         crate::i18n::set(crate::i18n::Lang::De);
         let (mut app, _) = app();
         example(&mut app);
@@ -721,7 +740,6 @@ pub mod tests {
             );
             assert!(shown.lines().count() <= 16, "{target:?}");
         }
-        crate::i18n::set(crate::i18n::Lang::En);
     }
 
     /// Not a check: the screenshots in docs/, from example data through the window's painter,
@@ -802,7 +820,6 @@ pub mod tests {
     #[test]
     fn every_page_keeps_to_its_column_and_names_whole_keys_at_any_size() {
         use crate::ui::target::{ALL, Target};
-        let _lang = i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let many: String = (0..300)
             .map(|i| format!("repo\tpackage-{i}\t1.0.{i}-1\t1.0.{}-1\n", i + 1))
             .collect();
@@ -855,8 +872,6 @@ pub mod tests {
 
     #[test]
     fn the_update_page_waits_in_the_middle_until_the_list_is_there() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         let ready = std::mem::replace(&mut app.ctx.shared.updates, Loaded::Loading);
@@ -932,7 +947,6 @@ pub mod tests {
     /// The console's font has letters, but none of the glyphs. Every page draws it those only.
     #[test]
     fn every_page_is_ascii_on_the_console() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         example(&mut app);
         let colors = app.ctx.theme().colors;
@@ -1054,8 +1068,6 @@ pub mod tests {
 
     #[test]
     fn esc_names_the_main_menu_right_above_it_and_back_deeper() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         for page in Target::Settings.open(&mut app.ctx) {
@@ -1078,8 +1090,6 @@ pub mod tests {
     /// The footer names what enter does on the row under the cursor.
     #[test]
     fn enter_is_named_after_the_row_it_is_on() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         open(&mut app, Box::new(pages::services::ServicesPage::new()));
         open(&mut app, Box::new(pages::repair::RepairPage::new()));
@@ -1098,8 +1108,6 @@ pub mod tests {
 
     #[test]
     fn back_after_a_success_leads_past_the_page_the_action_was_chosen_on() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let run = |outcome| {
             let job = pages::run::Job::new(op::REPAIR_RUN, Vec::new());
@@ -1125,8 +1133,6 @@ pub mod tests {
 
     #[test]
     fn a_step_offered_after_a_success_takes_the_place_of_the_page_the_action_was_chosen_on() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         open(&mut app, Box::new(pages::upgrade::UpgradePage::new()));
@@ -1145,8 +1151,6 @@ pub mod tests {
 
     #[test]
     fn esc_in_a_search_names_what_it_closes_or_clears() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         press(&mut app, &[Key::Char('f')]);
@@ -1164,8 +1168,6 @@ pub mod tests {
 
     #[test]
     fn a_source_not_asked_is_named_and_up_to_date_is_not_claimed() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         app.ctx.shared.updates = Loaded::Ready(data::updates::parse("failed\taur\n"));
@@ -1261,8 +1263,6 @@ pub mod tests {
     /// only once it lasts.
     #[test]
     fn a_wait_shows_only_once_it_lasts() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         app.ctx.grace = std::time::Duration::from_millis(300);
         let long_ago = std::time::Instant::now() - std::time::Duration::from_secs(1);

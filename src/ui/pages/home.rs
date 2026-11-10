@@ -254,7 +254,6 @@ mod tests {
     /// A row still reading shows the spinner, and the page keeps drawing while anything reads.
     #[test]
     fn a_row_still_reading_shows_the_spinner_until_it_is_in() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = crate::ui::app::tests::app();
         let frames = app.ctx.style.glyphs.spinner;
         app.ctx.shared.services = Loaded::Loading;
@@ -276,7 +275,6 @@ mod tests {
 
     #[test]
     fn services_count_until_one_fails_and_no_configuration_update_is_up_to_date() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = crate::ui::app::tests::app();
         let service = |active: &str| crate::data::services::Service {
             user: false,
@@ -308,7 +306,6 @@ mod tests {
         use crate::data::usage::Usage;
         use crate::ui::app::tests::screen;
         use crate::ui::icon;
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = crate::ui::app::tests::app();
         app.ctx.usage = Some(Usage {
             cpu: Some(0.23),
@@ -412,8 +409,6 @@ mod tests {
     #[test]
     fn the_cursor_is_put_behind_the_splash_and_never_moves_by_itself() {
         use crate::ui::app::tests::{app, example};
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, _) = app();
         example(&mut app);
         let cursor = |page: &mut HomePage, ctx: &mut Ctx| {

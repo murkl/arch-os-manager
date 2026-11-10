@@ -82,15 +82,20 @@ impl UpgradePage {
                 body.push(Block::Text(f.explanation(), Tone::Muted));
             }
             Loaded::Ready(pending) => {
+                let broken = ctx.features().and_then(|f| {
+                    let helper = f.aur_helper(ctx.settings.aur_helper.as_deref());
+                    helper.filter(|h| f.broken(h))
+                });
                 for source in &pending.failed {
-                    body.push(Block::Text(
-                        match source {
-                            Source::Aur => t("AUR unreachable."),
-                            _ => t("Flatpak remotes unreachable."),
-                        }
-                        .to_string(),
-                        Tone::Warn,
-                    ));
+                    let text = match (source, &broken) {
+                        (Source::Aur, Some(helper)) => tf(
+                            "{helper} not working. Rebuild it on the Optional packages page.",
+                            &[("helper", helper)],
+                        ),
+                        (Source::Aur, None) => t("AUR unreachable.").to_string(),
+                        _ => t("Flatpak remotes unreachable.").to_string(),
+                    };
+                    body.push(Block::Text(text, Tone::Warn));
                     body.push(Block::Blank);
                 }
                 if pending.updates.is_empty() && pending.failed.is_empty() {
@@ -290,7 +295,6 @@ mod tests {
 
     #[test]
     fn a_heading_counts_its_updates_in_a_quiet_tone() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, mut term) = app();
         example(&mut app);
         open(&mut app, Box::new(UpgradePage::new()));
@@ -337,8 +341,6 @@ mod tests {
 
     #[test]
     fn check_again_shows_the_progress_for_the_least_time() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, _) = app();
         app.ctx.shared.updates = Loaded::Ready(crate::data::updates::Pending::default());
         let mut page = UpgradePage::new();
@@ -362,8 +364,6 @@ mod tests {
     /// starts nothing. esc brings everything back.
     #[test]
     fn the_filter_narrows_the_updates_to_the_names_holding_its_text() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         open(&mut app, Box::new(UpgradePage::new()));
@@ -445,10 +445,26 @@ mod tests {
         );
     }
 
+    /// A helper that no longer starts is named with its fix, and the AUR never counts as current.
+    #[test]
+    fn a_helper_that_no_longer_starts_is_named_with_its_fix() {
+        let (mut app, mut term) = app();
+        example(&mut app);
+        app.ctx.shared.features = Loaded::Ready(crate::data::features::Features::parse(
+            "paru\tbroken\nyay\tmissing\n",
+        ));
+        app.ctx.shared.updates = Loaded::Ready(crate::data::updates::parse("failed\taur\n"));
+        open(&mut app, Box::new(UpgradePage::new()));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("paru not working. Rebuild it on the Optional packages page."),
+            "{shown}"
+        );
+        assert!(!shown.contains("unreachable") && !shown.contains("up to date"));
+    }
+
     #[test]
     fn foreign_packages_without_source_are_named() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         open(&mut app, Box::new(UpgradePage::new()));
@@ -464,7 +480,6 @@ mod tests {
     /// The old version gives way first, at its front, and padding gives way without a mark.
     #[test]
     fn forty_columns_keep_every_new_version_whole() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut app, _) = app();
         example(&mut app);
         open(&mut app, Box::new(UpgradePage::new()));

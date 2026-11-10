@@ -64,7 +64,7 @@ A run shows its step and pacman's progress. **tab** switches to the details: the
 
 Another prompt opens the details once its line stands still for a second and ends in `?`, `:` or `>`, and closes them with the answer. pacman's `Proceed with installation?`, `Proceed with download?` and `Do you want to remove these packages?` are confirmed before the run. Conflicts, replacements and keys are always asked. With `aur-review`, the details show while the AUR helper runs and every question goes to the person.
 
-An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. Installs and removals share one run, installs first. An install is refused while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them. It shows a Flatpak by the name Flatpak gives it, with its branch where two share that name, by its id where two share both.
+An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. One that no longer starts, as after a pacman update, fails the AUR until it is rebuilt. Installs and removals share one run, installs first. An install is refused while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them. It shows a Flatpak by the name Flatpak gives it, with its branch where two share that name, by its id where two share both.
 
 **esc**, **q** and **ctrl+c** ask to stop, in the details only **ctrl+c**. Yes sends ctrl+c, repeated as an interrupt after 5 s and as a hang-up after 10 s, never as terminate or kill, which pacman does not catch. Asked again while it stops, the question is whether to leave, and the run ends in the background. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it. In a terminal handed over, as for the mirror list or an AUR review, every key goes to the program, **tab** included.
 
@@ -145,7 +145,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 
 | Package | Beyond pacman |
 |---|---|
-| `paru`, `yay` | Built with makepkg after `git` and `base-devel`, build dependencies removed. Removal takes the owner of the command, such as `paru-bin` |
+| `paru`, `yay` | Built with makepkg after `git` and `base-devel`, build dependencies removed. **Rebuild** builds one that no longer starts. Removal takes the owner of the command, such as `paru-bin` |
 | `reflector` | `/etc/xdg/reflector/reflector.conf` as packaged gets appended: synced within 12 h, 10 latest, by speed, country of the time zone. One changed by hand stays. `reflector.timer` enabled, disabled on removal. **Refresh now** starts `reflector.service`, **Edit list** opens the list in `sudoedit` with `$SUDO_EDITOR`, `$VISUAL`, `$EDITOR` or nano, and puts the list before back where no server is left |
 | `fwupd` | `fwupd-refresh.timer` enabled, disabled on removal |
 | `gnome-arch-update` | Arch Linux Updates Indicator from extensions.gnome.org, installed by the running GNOME Shell after its own question, active at once. Its commands run this binary. Removed with its settings |
@@ -175,7 +175,7 @@ A package counts when its `command` in `scripts/features/features.yaml` works. O
 - `aur-review: true` shows the terminal while the AUR helper runs, for its review and every question of its own. `false` builds without review
 - `flatpak: false` leaves Flatpak to another app store. `all` is read as `true`, `cleanup` as `false`, `off` as `false` with Flatpak unmarked in the clean-up
 - A hidden message ignores numbers, hex values and hashes. While any is hidden, the system log counts the hidden messages below its errors, **⏎** on the count lists them to show again
-- The first start and `init` take over the settings of Arch OS Manager 1.x, then remove what it left. `scripts/migrate/migrate.sh` says how to remove this
+- The first start and `init` take over the settings of Arch OS Manager 1.x, then remove what it left and the news cache of 2.3 and earlier. `scripts/migrate/migrate.sh` says how to remove this
 
 ## Themes
 
@@ -341,7 +341,6 @@ A function more than one script needs goes into `lib.sh`.
 | `make check` | gitleaks, format, clippy, shellcheck, yamllint, actionlint, zizmor, msgfmt, tests, `aur-check`, release build |
 | `make fmt` | cargo fmt and shfmt |
 | `make run` | Interface against a throwaway `target/home` |
-| `make install` | `~/.local/bin/system-manager` |
 | `make aur-check` | `aur/PKGBUILD` stamped with stand-ins, read by makepkg |
 | `make screenshots` | `docs/screenshots/` from example data, without the version |
 | `make banner` | `docs/banner.png` from two screenshots, by banner.py of murkl/workflows, with chromium, imagemagick and FiraCode Nerd Font |

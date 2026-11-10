@@ -90,12 +90,25 @@ impl Features {
             .any(|(p, s)| p == package && matches!(s, Status::Ok(_)))
     }
 
-    /// The helper scripts get: the chosen one if it works, else the first that does.
+    /// Whether a package is installed but did not answer.
+    pub fn broken(&self, package: &str) -> bool {
+        self.list
+            .iter()
+            .any(|(p, s)| p == package && *s == Status::Broken)
+    }
+
+    /// The helper scripts get: the chosen one where installed, else the first that works, else
+    /// the first installed. One that no longer starts, as after a pacman update until it is
+    /// rebuilt, still counts, so the AUR fails with its error instead of being left out.
     pub fn aur_helper(&self, chosen: Option<&str>) -> Option<&'static str> {
+        let installed = |h: &&str| self.ok(h) || self.broken(h);
         match chosen {
             Some("none") => None,
-            Some(h) => AUR_HELPERS.into_iter().find(|x| *x == h && self.ok(x)),
-            None => AUR_HELPERS.into_iter().find(|x| self.ok(x)),
+            Some(h) => AUR_HELPERS.into_iter().filter(installed).find(|x| *x == h),
+            None => AUR_HELPERS
+                .into_iter()
+                .find(|x| self.ok(x))
+                .or_else(|| AUR_HELPERS.into_iter().find(installed)),
         }
     }
 
@@ -187,5 +200,20 @@ mod tests {
         let flatpak = Features::parse("flatpak\tok\t1:1.18.4-1\n");
         assert!(flatpak.flatpak(true) && !flatpak.flatpak(false));
         assert!(!f.flatpak(true), "without flatpak nothing is updated");
+    }
+
+    /// A helper that no longer starts, as after a pacman update until it is rebuilt, is still
+    /// given, so the AUR fails with its error instead of being left out.
+    #[test]
+    fn a_helper_that_no_longer_starts_is_still_given() {
+        let broken = Features::parse("paru\tbroken\nyay\tmissing\n");
+        assert!(broken.broken("paru") && !broken.broken("yay"));
+        assert_eq!(broken.aur_helper(None), Some("paru"));
+        assert_eq!(broken.aur_helper(Some("paru")), Some("paru"));
+        assert_eq!(broken.aur_helper(Some("yay")), None);
+        assert_eq!(broken.aur_helper(Some("none")), None);
+        let both = Features::parse("paru\tbroken\nyay\tok\t12.5.0-1\n");
+        assert_eq!(both.aur_helper(None), Some("yay"), "a working one first");
+        assert_eq!(both.aur_helper(Some("paru")), Some("paru"));
     }
 }

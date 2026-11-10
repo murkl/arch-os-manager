@@ -225,8 +225,6 @@ mod tests {
     #[test]
     fn under_the_spinner_stands_the_oldest_job_of_the_machine_and_at_the_bottom_how_to_go_on() {
         use crate::script::op;
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let mut page = SplashPage::after(END + FADE, &app.ctx);
         app.ctx.generation += 1;
@@ -260,8 +258,6 @@ mod tests {
     /// Pasted text is no key press: the splash stays, and nothing of it reaches the pages below.
     #[test]
     fn pasted_text_presses_no_key() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         let page = SplashPage::after(END + FADE, &app.ctx);
         open(&mut app, Box::new(page));

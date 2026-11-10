@@ -278,8 +278,6 @@ mod tests {
 
     #[test]
     fn an_inactive_docker_is_listed_and_left_alone() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         let plan = Plan::parse("docker\tstopped\n");
@@ -296,8 +294,6 @@ mod tests {
 
     #[test]
     fn every_part_there_is_listed_marked_by_default_with_the_action_and_its_sum() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         app.ctx.shared.cleanup = Loaded::Ready(engines());
@@ -340,8 +336,6 @@ mod tests {
 
     #[test]
     fn enter_marks_a_part_in_the_settings_and_the_action_takes_the_marked() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         app.ctx.shared.cleanup = Loaded::Ready(engines());
@@ -366,8 +360,6 @@ mod tests {
 
     #[test]
     fn with_nothing_marked_the_action_waits() {
-        let _lang = crate::i18n::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        crate::i18n::set(crate::i18n::Lang::En);
         let (mut app, mut term) = app();
         example(&mut app);
         for part in Part::ALL {
