@@ -5,9 +5,10 @@ op_run() {
     local lock holder
     # libalpm holds its lock open while it works, whichever front end runs it, so
     # only a lock nobody holds is a leftover. find ends with 1 when a process went
-    # away during the walk, and what it printed still holds.
+    # away during the walk, and what it printed still holds. A process names what
+    # it holds by its resolved path, so the lock is looked for under that one.
     lock="$(pacman-conf DBPath)"
-    lock="${lock%/}/db.lck"
+    lock="$(realpath -- "${lock%/}/db.lck")"
     if [ -e "$lock" ]; then
         holder="$(sudo find /proc/[0-9]*/fd -maxdepth 1 -lname "$lock" -print -quit 2>/dev/null)" || true
         if [ -n "$holder" ]; then exit 10; fi

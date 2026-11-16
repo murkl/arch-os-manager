@@ -21,7 +21,8 @@ op_state() {
     fi
     if [ -n "${XDG_SESSION_TYPE:-}" ]; then printf 'session\t%s\n' "$XDG_SESSION_TYPE"; fi
     # An updated kernel removes the running one's modules: nothing new loads until a restart.
-    if [ -d "/usr/lib/modules/$(uname -r)" ]; then
+    # Where no kernel is installed, as in a container, the running one is not this system's.
+    if [ -d "/usr/lib/modules/$(uname -r)" ] || ! compgen -G '/usr/lib/modules/*/pkgbase' >/dev/null; then
         printf 'reboot\tno\n'
     else
         printf 'reboot\tyes\n'

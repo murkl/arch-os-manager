@@ -10,6 +10,8 @@ use super::{Failure, Op, Progress, Prompt, prompt, sudo};
 use crate::i18n::t;
 
 const KEEP: usize = 300;
+/// How a line of verbose output names the next program, after its indent: PS4 of lib.sh.
+const TRACED: &str = "$ ";
 /// Output can trail the exit by a moment. The result waits for it.
 const SETTLE: Duration = Duration::from_millis(250);
 /// Lines the terminal keeps above its screen.
@@ -35,6 +37,8 @@ pub struct Run {
     pub prompt: Option<Prompt>,
     /// sudo refused the last password.
     pub rejected: bool,
+    /// The person's password went to the sudo that still runs. The next program ends that.
+    tried: bool,
     /// Verbose output: every prompt is typed.
     verbose: bool,
     /// The script handed the terminal to the person, as an AUR helper's review needs, until it
@@ -102,6 +106,7 @@ impl Run {
             found: Vec::new(),
             prompt: None,
             rejected: false,
+            tried: false,
             verbose: false,
             handed: false,
             declined: false,
@@ -125,6 +130,9 @@ impl Run {
                     self.asked = None;
                 }
                 for line in done {
+                    if self.verbose && line.trim_start().starts_with(TRACED) {
+                        self.tried = false;
+                    }
                     if line.contains(sudo::REJECTED) {
                         sudo::forget();
                         self.rejected = true;
@@ -148,6 +156,7 @@ impl Run {
                 } else if let Some(command) = line.strip_prefix("cmd\t") {
                     crate::log::write("RUN", &format!("{}| {command}", self.op));
                     self.command = Some(command.to_string());
+                    self.tried = false;
                 } else if let Some(state) = line.strip_prefix("terminal\t") {
                     self.handed = state == "on";
                 } else if let Some(item) = line.strip_prefix("found\t") {
@@ -188,8 +197,10 @@ impl Run {
         if self.answered.as_ref() == Some(&current) {
             return;
         }
-        let recent: Vec<String> = self.recent.iter().rev().take(12).rev().cloned().collect();
-        self.prompt = Prompt::detect(&current, &recent);
+        // The last lines where they lie, not a copy at every chunk of output.
+        let all = self.recent.make_contiguous();
+        let recent = &all[all.len().saturating_sub(12)..];
+        self.prompt = Prompt::detect(&current, recent);
         // On a terminal shown anyway the person sees every question.
         if !self.verbose
             && !self.handed
@@ -204,13 +215,15 @@ impl Run {
         match &self.prompt {
             // Asked again right after an answer, sudo refused it, also where its words for
             // that are its own. The held password reaches sudo through a pipe only, see
-            // session.rs, so the person answers the question.
+            // session.rs, so the person answers the question. The next program asking, as
+            // with `timestamp_timeout=0`, refused nothing.
             Some(Prompt::Password)
-                if recent
-                    .iter()
-                    .rev()
-                    .take(3)
-                    .any(|l| l.ends_with(sudo::PROMPT)) =>
+                if self.tried
+                    && recent
+                        .iter()
+                        .rev()
+                        .take(3)
+                        .any(|l| l.ends_with(sudo::PROMPT)) =>
             {
                 sudo::forget();
                 self.rejected = true;
@@ -243,6 +256,7 @@ impl Run {
             }
             sudo::set(text.to_string());
             self.rejected = false;
+            self.tried = true;
         } else {
             crate::info!("{}: answered {text:?} to {line:?}", self.op);
         }
@@ -285,7 +299,10 @@ impl Run {
 
     pub fn interrupt(&self) {
         crate::info!("{}: interrupted", self.op);
+        // The interrupt for what the script's ignored hang-up never reaches, as makepkg, the
+        // hang-up for an editor that reads the interrupt as a key.
         if self.handed {
+            self.session.signal(Signal::INT);
             self.session.signal(Signal::HUP);
         } else {
             self.session.write(&[0x03]);
@@ -611,6 +628,41 @@ mod tests {
                 run.recent
             );
         }
+    }
+
+    /// With `timestamp_timeout=0` sudo asks at every command. The question of the next command
+    /// is no refusal of the answer to the one before, however little was printed between.
+    #[test]
+    fn the_next_command_asking_is_no_refusal() {
+        let _held = sudo::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        sudo::forget();
+        let (tx, rx) = mpsc::channel();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg("-c")
+            .arg(r#"for i in 1 2; do printf 'cmd	sudo true
+' >&3; sleep 0.2; stty -echo; printf '%s' "$SUDO_PROMPT"; read -r -t 4 pw || exit 3; stty echo; echo; done; echo "both asked""#)
+            .env("SUDO_PROMPT", sudo::PROMPT);
+        let session = Session::spawn(cmd, (24, 80), move |e| drop(tx.send(e))).unwrap();
+        let mut run = Run::with(crate::script::op::SYSTEM_AUTH, session, (24, 80));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut answers = 0;
+        while run.result().is_none() && Instant::now() < deadline {
+            if let Ok(e) = rx.recv_timeout(Duration::from_millis(20)) {
+                run.on_event(e);
+            }
+            run.check_prompt();
+            if run.prompt == Some(Prompt::Password) {
+                assert!(!run.rejected, "asked {answers} times: {:?}", run.recent);
+                answers += 1;
+                run.answer("right");
+            }
+        }
+        sudo::forget();
+        assert!(
+            run.recent.iter().any(|l| l == "both asked"),
+            "{:?}",
+            run.recent
+        );
     }
 
     /// The held password goes to sudo through a pipe only: any program of the run can print

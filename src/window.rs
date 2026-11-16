@@ -63,14 +63,11 @@ pub fn run(start: Option<Target>) -> io::Result<()> {
         .map_err(|e| io::Error::other(format!("no display: {e}")))?;
     let proxy = Mutex::new(event_loop.create_proxy());
     let (tx, rx) = mpsc::sync_channel(crate::ui::QUEUE);
-    let app = App::new(
-        tx,
-        Arc::new(move || {
-            let _ = proxy.lock().unwrap().send_event(());
-        }),
-        false,
-        start,
-    );
+    let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let _ = proxy.lock().unwrap().send_event(());
+    });
+    crate::ui::end_on_signals(tx.clone(), wake.clone());
+    let app = App::new(tx, wake, false, start);
     let mut win = Win::new(app, rx, faces);
     event_loop.run_app(&mut win).map_err(io::Error::other)?;
     win.error.map_or(Ok(()), Err)
@@ -288,6 +285,8 @@ struct Win {
     wheel: f64,
     /// A message arrived since the grid was last composed.
     dirty: bool,
+    /// The cells of a frame that dropped out of `shown`, kept for the next one.
+    spare: Option<Buffer>,
 }
 
 /// A frame as painted, with what decides its pixels besides the cells.
@@ -325,6 +324,7 @@ impl Win {
             shown: [None, None],
             wheel: 0.0,
             dirty: true,
+            spare: None,
         }
     }
 
@@ -356,8 +356,21 @@ impl Win {
         Ok(self.terminal.backend().changed)
     }
 
+    /// Whether the grid has the size the window gives it now.
+    fn fits(&self) -> bool {
+        self.window.as_ref().is_none_or(|window| {
+            let size = window.inner_size();
+            let (_, _, area) = layout(size.width, size.height, &self.fonts, window.scale_factor());
+            self.terminal.backend().buffer.area == area
+        })
+    }
+
     fn redraw(&mut self) -> Result<(), String> {
-        self.compose()?;
+        // Composed already unless a message or another size came since.
+        if self.dirty || !self.fits() {
+            self.dirty = false;
+            self.compose()?;
+        }
         let (Some(window), Some(surface)) = (&self.window, self.surface.as_mut()) else {
             return Ok(());
         };
@@ -375,8 +388,12 @@ impl Win {
         self.blinked = cursor.is_some();
         let scale = window.scale_factor();
         let key = (size.width, size.height, scale.to_bits());
+        let mut grid = self.spare.take().unwrap_or_default();
+        let composed = &self.terminal.backend().buffer;
+        grid.area = composed.area;
+        grid.content.clone_from(&composed.content);
         let shown = Shown {
-            grid: self.terminal.backend().buffer.clone(),
+            grid,
             cursor,
             size: key,
             background: self.app.ctx.style.background,
@@ -396,7 +413,10 @@ impl Win {
             let (_, oy, _) = layout(size.width, size.height, &self.fonts, scale);
             damage(rows, oy, self.fonts.cell.1, size.width)
         });
-        self.shown = [Some(shown), self.shown[0].take()];
+        // The frame no buffer shows any more gives its cells to the next one.
+        let [last, oldest] = std::mem::take(&mut self.shown);
+        self.spare = oldest.map(|old| old.grid);
+        self.shown = [Some(shown), last];
         self.terminal.backend_mut().changed = false;
         // Lets winit hold the next redraw for the compositor's frame on Wayland.
         window.pre_present_notify();

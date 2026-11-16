@@ -226,6 +226,26 @@ pub enum Msg {
     Legacy(crate::migrate::Legacy),
     /// Text pasted into the terminal as one, typed where a text box has the keys.
     Paste(String),
+    /// The process is asked to end, or its terminal is gone.
+    Quit,
+}
+
+/// Ends the interface the way a key does once the process is asked to end or its terminal is
+/// gone, so the terminal is restored and what waits for the disk is written.
+pub fn end_on_signals(tx: SyncSender<Msg>, wake: Arc<dyn Fn() + Send + Sync>) {
+    use signal_hook::consts::{SIGHUP, SIGTERM};
+    match signal_hook::iterator::Signals::new([SIGTERM, SIGHUP]) {
+        Ok(mut signals) => {
+            std::thread::spawn(move || {
+                if let Some(signal) = signals.forever().next() {
+                    crate::info!("signal {signal}");
+                    let _ = tx.send(Msg::Quit);
+                    wake();
+                }
+            });
+        }
+        Err(e) => crate::warn!("signals: {e}"),
+    }
 }
 
 /// A shared value read anew.
@@ -591,9 +611,9 @@ impl Ctx {
     }
 
     /// What a row says while its value is still being read: the spinner, in the accent colour,
-    /// and not dimmed, once the page waited long enough.
+    /// and not dimmed, once the page or a load waited long enough.
     pub fn loading(&self) -> (String, Tone, bool) {
-        let spinner = if self.page_waited() {
+        let spinner = if self.page_waited() || self.busy_shown() {
             self.style.spinner()
         } else {
             ""

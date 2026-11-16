@@ -510,6 +510,14 @@ impl RunPage {
         self.outcome.is_none() && self.run.as_ref().is_some_and(|r| r.handed)
     }
 
+    /// The outcome in a word: a run the person stopped did not fail.
+    fn headline(&self, outcome: &Result<(), Failure>) -> String {
+        match outcome {
+            Err(_) if self.stopping.is_some() => t("Stopped").into(),
+            outcome => headline(outcome),
+        }
+    }
+
     fn settled(&self) -> bool {
         self.outcome
             .as_ref()
@@ -796,7 +804,7 @@ impl RunPage {
                 )
             }
             Ok(()) => {
-                let mut body = vec![done(headline(outcome))];
+                let mut body = vec![done(self.headline(outcome))];
                 // The check found what the person may reinstall.
                 let altered = self
                     .run
@@ -840,14 +848,21 @@ impl RunPage {
                 }
             }
             Err(f) => {
+                let stopped = self.stopping.is_some();
+                let lead = match stopped {
+                    true => Lead::Icon(icon::STOP, Tone::Muted),
+                    false => Lead::Icon(icon::FAILED, Tone::Error),
+                };
                 let mut body = vec![Block::Row(
-                    Lead::Icon(icon::FAILED, Tone::Error),
-                    vec![(headline(outcome), Tone::Normal)],
+                    lead,
+                    vec![(self.headline(outcome), Tone::Normal)],
                     Vec::new(),
                 )];
-                body.extend(failure(f).into_iter().skip(1));
+                if !stopped {
+                    body.extend(failure(f).into_iter().skip(1));
+                }
                 let mut acts = Vec::new();
-                if let Some(target) = f.offer.and_then(Target::from_id) {
+                if let Some(target) = f.offer.and_then(Target::from_id).filter(|_| !stopped) {
                     acts.push(
                         Act::new(target.label(), move |ctx: &mut Ctx| {
                             replace_with(target, ctx)
@@ -1000,7 +1015,12 @@ impl Page for RunPage {
             Some(Prompt::Password | Prompt::Text { .. }) => {
                 vec![("⏎", Does::Answer), ("tab", details), ("esc", Does::Stop)]
             }
-            Some(_) => vec![("↑↓", Does::Choose), ("⏎", Does::Answer), ("tab", details)],
+            Some(_) => vec![
+                ("↑↓", Does::Choose),
+                ("⏎", Does::Answer),
+                ("tab", details),
+                ("esc", Does::Stop),
+            ],
             None => vec![("tab", details), ("esc", Does::Stop)],
         }
     }
@@ -1031,6 +1051,13 @@ impl Page for RunPage {
             return Flow::Stay;
         }
         if self.outcome.is_some() {
+            // The terminal keeps its history after the end, under the card of the outcome.
+            if let (true, Key::WheelUp | Key::WheelDown, Some(run)) =
+                (self.details || terminal, key, self.run.as_mut())
+            {
+                run.scroll(if key == Key::WheelUp { NOTCH } else { -NOTCH });
+                return Flow::Stay;
+            }
             if !self.settled() {
                 return Flow::Stay;
             }
@@ -1136,17 +1163,24 @@ impl Page for RunPage {
             *sent += 1;
         }
         if let Some(result) = run.result() {
+            let stopped = self.stopping.is_some();
             match &result {
                 Ok(()) => crate::info!("{}: done", self.job.op),
+                Err(_) if stopped => crate::info!("{}: stopped", self.job.op),
                 Err(f) => crate::error!("{}: {}\n{}", self.job.op, f.headline(), f.detail),
             }
             // Under tab the terminal tells as well that the run ended.
             let lead = match (ctx.style.glyphs.icons, &result) {
                 (false, _) => String::new(),
                 (true, Ok(())) => format!("{}  ", icon::DONE),
+                (true, Err(_)) if stopped => format!("{}  ", icon::STOP),
                 (true, Err(_)) => format!("{}  ", icon::FAILED),
             };
-            run.conclude(&format!("{lead}{}", headline(&result)), result.is_ok());
+            let headline = match &result {
+                Err(_) if stopped => t("Stopped").into(),
+                result => headline(result),
+            };
+            run.conclude(&format!("{lead}{headline}"), result.is_ok());
             self.outcome = Some((result, Instant::now()));
             self.cancel = None;
             ctx.reload();
@@ -1449,6 +1483,29 @@ mod tests {
         let _ = page.key(Key::Ctrl('c'), &mut app.ctx);
         open(&mut app, Box::new(page));
         assert!(screen(&mut app, &mut term).contains("Leave anyway?"));
+    }
+
+    /// A run the person stopped says so: no failure, nothing of its output as a cause, and the
+    /// terminal still scrolls under the outcome.
+    #[test]
+    fn a_stopped_run_is_no_failure_and_its_terminal_still_scrolls() {
+        let (mut app, mut term) = app();
+        let output = "line\r\n".repeat(60);
+        let run = Run::ended(op::UPGRADE_RUN, &output, 130);
+        let mut page = RunPage::running(Job::new(op::UPGRADE_RUN, Vec::new()), run);
+        page.stopping = Some((Instant::now(), 0));
+        let _ = page.tick(&mut app.ctx);
+        app.ctx.reload = false;
+        let _ = page.key(Key::Tab, &mut app.ctx);
+        let _ = page.key(Key::WheelUp, &mut app.ctx);
+        assert!(page.run.as_mut().unwrap().history().0 > 0, "scrolled back");
+        let _ = page.key(Key::Tab, &mut app.ctx);
+        open(&mut app, Box::new(page));
+        let shown = screen(&mut app, &mut term);
+        assert!(
+            shown.contains("Stopped") && !shown.contains("Failed") && !shown.contains("exit 130"),
+            "{shown}"
+        );
     }
 
     /// The person on the handed-over terminal types tab into it: it neither hides the terminal

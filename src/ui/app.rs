@@ -33,7 +33,7 @@ impl App {
         if let Some(e) = &settings_error {
             crate::warn!("settings.yaml not used: {e}");
         }
-        script::set_terminal(settings.terminal());
+        script::configure(&settings, None);
         i18n::set(
             settings
                 .language
@@ -132,6 +132,10 @@ impl App {
             Msg::Held(_) => return,
             msg => msg,
         };
+        // A check that ended is over: a later load is none the person asked for.
+        if !self.ctx.checking() {
+            self.ctx.checking = None;
+        }
         match msg {
             Msg::Key(key) => {
                 self.ctx.page = top;
@@ -160,6 +164,7 @@ impl App {
             Msg::Fresh(fresh) => self.fresh(fresh),
             Msg::Loaded(id) => self.ctx.loads.retain(|l| l.id != id),
             Msg::Usage(usage) => self.ctx.usage = Some(usage),
+            Msg::Quit => self.quit = true,
             Msg::Legacy(legacy) => self.legacy(legacy),
             Msg::Paste(text) => {
                 self.ctx.page = top;
@@ -298,9 +303,7 @@ impl App {
 
     /// The rest waits for the optional packages: which are there decides what runs.
     fn after_features(&mut self, features: &Features) {
-        script::set_aur(features.aur_helper(self.ctx.settings.aur_helper.as_deref()));
-        script::set_aur_review(self.ctx.settings.aur_review.unwrap_or(true));
-        script::set_flatpak(features.flatpak(self.ctx.settings.flatpak.unwrap_or(true)));
+        script::configure(&self.ctx.settings, Some(features));
         let ctx = &mut self.ctx;
         let missing = |op| script::missing(op, features).map(str::to_string);
         macro_rules! gated {
@@ -983,6 +986,27 @@ pub mod tests {
     }
 
     #[test]
+    fn a_check_that_ended_shows_at_no_later_load() {
+        let (mut app, _) = app();
+        app.ctx.recheck();
+        assert!(app.ctx.checking());
+        app.ctx.reload = false;
+        app.handle(Msg::Resize);
+        app.ctx.save_settings();
+        assert!(app.ctx.busy() && !app.ctx.checking());
+    }
+
+    #[test]
+    fn a_row_spins_at_once_where_its_load_already_lasts() {
+        let (mut app, _) = app();
+        app.ctx.grace = std::time::Duration::from_millis(300);
+        app.ctx.save_settings();
+        assert!(app.ctx.loading().0.is_empty(), "a load just begun");
+        app.ctx.loads[0].started -= std::time::Duration::from_secs(1);
+        assert!(!app.ctx.loading().0.is_empty());
+    }
+
+    #[test]
     fn the_header_spinner_turns_on_the_beat_while_something_loads() {
         let (mut app, _) = app();
         example(&mut app);
@@ -1327,6 +1351,9 @@ pub mod tests {
 
     #[test]
     fn ctrl_c_quits_from_anywhere_and_esc_on_the_start_page_does_not() {
+        let (mut ended, _) = app();
+        ended.handle(Msg::Quit);
+        assert!(ended.done(), "asked to end by a signal");
         let (mut app, _) = app();
         press(&mut app, &[Key::Esc, Key::Backspace, Key::Char('h')]);
         assert!(!app.done());

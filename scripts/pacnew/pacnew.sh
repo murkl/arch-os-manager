@@ -6,10 +6,12 @@ op_list() {
     pacdiff --output
 }
 
-# diff ends with 1 when the files differ, 2 when one cannot be read.
+# diff ends with 1 when the files differ, 2 when one cannot be read. A .pacsave
+# whose configuration is gone compares to nothing.
 op_diff() {
     local status=0
-    diff --unified -- "${1%.pac*}" "$1" || status=$?
+    if [ ! -e "$1" ]; then exit 10; fi
+    diff --unified --new-file -- "${1%.pac*}" "$1" || status=$?
     case "$status" in
     0 | 1) ;;
     *) exit 10 ;;
@@ -43,10 +45,7 @@ op_merge() {
     local file="$1" target meta mode owner group
     update "$file"
     target="${file%.pac*}"
-    if snapshots; then
-        step snapshot
-        sudo snapper -c root create --cleanup-algorithm number --description "system-manager: $target"
-    fi
+    if ! sudo test -e "$target"; then exit 10; fi
     scratch
     sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" -- "$target" "${work}/current"
     sudo install -m 0600 -o "$(id -u)" -g "$(id -g)" -- "$file" "${work}/new"
@@ -59,7 +58,12 @@ op_merge() {
     esac
     # Written beside it with its owner and mode, then renamed over it, so nothing
     # reads half a configuration. Its folder may be closed to the user. A link
-    # gives the owner and mode of its target, its own mode is 777.
+    # gives the owner and mode of its target, its own mode is 777. The snapshot
+    # comes only now, where something changes.
+    if snapshots; then
+        step snapshot
+        sudo snapper -c root create --cleanup-algorithm number --description "system-manager: $target"
+    fi
     meta="$(sudo stat -L -c '%a %u %g' -- "$target")"
     read -r mode owner group <<<"$meta"
     sudo install -m "$mode" -o "$owner" -g "$group" -- "${work}/current" "${target}.sm-new"

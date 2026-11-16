@@ -55,12 +55,12 @@ sm_hold() {
     if lock="$(run_lock)"; then
         exec {held}>>"$lock"
         flock --shared "$held"
-        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
+        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- 4<&- 5<&- &
         exec {held}>&-
     fi
     if ! systemd-inhibit --list >/dev/null 2>&1; then return 0; fi
     systemd-inhibit --what=shutdown:sleep --mode=block --who="System Manager" --why="$SM_RUN" \
-        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- &
+        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 3>&- 4<&- 5<&- &
 }
 
 # A run that elevates with the password held gets it on fd 4 and fd 5, never on

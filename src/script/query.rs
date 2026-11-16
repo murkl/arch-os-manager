@@ -96,7 +96,8 @@ fn collect(
     let (done, wait) = std::sync::mpsc::channel::<()>();
     let flag = timed_out.clone();
     std::thread::spawn(move || {
-        if wait.recv_timeout(limit).is_err() {
+        // Only the limit: a channel gone means the query ended another way.
+        if wait.recv_timeout(limit) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
             flag.store(true, Ordering::SeqCst);
             if let Some(group) = rustix::process::Pid::from_raw(pid) {
                 let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
@@ -116,11 +117,12 @@ fn collect(
         }
     }
     let status = child.wait().map_err(|e| Failure::new(op, e.to_string()))?;
-    let _ = done.send(());
+    // The limit covers these too: what a query left running may hold either open.
     let stderr = stderr
         .map(|h| h.join().unwrap_or_default())
         .unwrap_or_default();
     let events = events.join().unwrap_or_default();
+    let _ = done.send(());
 
     if timed_out.load(Ordering::SeqCst) {
         let mut f = Failure::new(op, format!("{op}: no answer within {} s", limit.as_secs()));
@@ -163,6 +165,18 @@ mod tests {
     fn stops_a_script_at_the_limit() {
         let failure = run(op::SYSTEM_STATE, &[], Duration::ZERO, &mut |_| {}).unwrap_err();
         assert!(failure.detail.contains("no answer"), "{failure:?}");
+    }
+
+    /// What a query leaves running holds its error output open. The limit ends that too.
+    #[test]
+    fn the_limit_covers_what_a_script_left_running() {
+        let started = Instant::now();
+        let mut cmd = Command::new("bash");
+        cmd.args(["-c", "sleep 30 >/dev/null & echo out"]);
+        let limit = Duration::from_millis(300);
+        let failure = collect(op::SYSTEM_STATE, cmd, limit, &mut |_| {}).unwrap_err();
+        assert!(failure.detail.contains("no answer"), "{failure:?}");
+        assert!(started.elapsed() < Duration::from_secs(10));
     }
 
     #[test]

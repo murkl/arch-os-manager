@@ -51,7 +51,7 @@ The top row shows usage in percent, read every 2 s. `usage: false` hides it.
 
 ## Runs
 
-A run shows its step and pacman's progress. **tab** switches to the details: the running command in a box headed by its step, under it the terminal, where every key goes to the program. The wheel scrolls back 1000 lines there, in a full-screen program it sends arrows. The log names each command as a `RUN` line.
+A run shows its step and pacman's progress. **tab** switches to the details: the running command in a box headed by its step, under it the terminal, where every key goes to the program. The wheel scrolls back 1000 lines there, after the run too, in a full-screen program it sends arrows. The log names each command as a `RUN` line.
 
 <img src="screenshots/run.png" width="720" alt="An update under way: its step, the progress bar and the package being upgraded">
 
@@ -66,7 +66,7 @@ Another prompt opens the details once its line stands still for a second and end
 
 An update runs the repositories, the AUR, then Flatpak. A failed AUR helper does not stop Flatpak. One that no longer starts, as after a pacman update, fails the AUR until it is rebuilt. Installs and removals share one run, installs first. An install is refused while the package lists are newer than the system, as after an update that broke off. The update page names foreign packages the AUR does not know, as no update reaches them. It shows a Flatpak by the name Flatpak gives it, with its branch where two share that name, by its id where two share both.
 
-**esc**, **q** and **ctrl+c** ask to stop, in the details only **ctrl+c**. Yes sends ctrl+c, repeated as an interrupt after 5 s and as a hang-up after 10 s, never as terminate or kill, which pacman does not catch. Asked again while it stops, the question is whether to leave, and the run ends in the background. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it. In a terminal handed over, as for the mirror list or an AUR review, every key goes to the program, **tab** included.
+**esc**, **q** and **ctrl+c** ask to stop, in the details only **ctrl+c**. Yes sends ctrl+c, repeated as an interrupt after 5 s and as a hang-up after 10 s, never as terminate or kill, which pacman does not catch. A terminal handed over gets the interrupt and the hang-up at once. A run stopped this way ends as Stopped, not as failed. Asked again while it stops, the question is whether to leave, and the run ends in the background. A run that elevates holds off shutdown and sleep, a closed terminal does not stop it. In a terminal handed over, as for the mirror list or an AUR review, every key goes to the program, **tab** included.
 
 | Offer after a run | When |
 |---|---|
@@ -98,7 +98,7 @@ Asked once per session before the first elevated run and checked with `sudo --va
 
 ### Config Updates
 
-Only a file pacdiff lists at that moment is replaced, kept or merged. `/etc/passwd`, `group`, `shadow`, `gshadow` and `sudoers` are merged, never replaced. Replacing or merging a config update first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
+Only a file pacdiff lists at that moment is replaced, kept or merged. `/etc/passwd`, `group`, `shadow`, `gshadow` and `sudoers` are merged, never replaced. Replacing a config update, or writing a merge that changed it, first takes a snapper snapshot where snapper manages `/`. A merge is written beside the file and renamed over it. A sudoers file must pass `visudo`.
 
 ### Services
 

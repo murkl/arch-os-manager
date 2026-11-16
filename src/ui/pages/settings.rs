@@ -16,15 +16,6 @@ use crate::ui::list::{List, Picked, Row};
 use crate::ui::target::{SETTINGS, Target};
 use crate::ui::{Ctx, Does, Flow, Key, Loaded, Nav, Page, Style, Tone};
 
-/// What the system has to offer for a setting to apply: the entry opens the window, which
-/// speaks Wayland only.
-fn fact(target: Target) -> &'static str {
-    match target {
-        Target::Desktop => "wayland",
-        _ => "desktop",
-    }
-}
-
 pub struct SettingsPage {
     list: List<Target>,
     focus: Option<Target>,
@@ -46,7 +37,7 @@ impl SettingsPage {
 
     fn value(&self, target: Target, ctx: &Ctx) -> (String, Tone, bool) {
         if matches!(target, Target::Notifications | Target::Desktop)
-            && let Some(why) = ctx.features().and_then(|f| f.lacks(fact(target)))
+            && let Some(why) = target.lacks(ctx)
         {
             return (t(why).to_string(), Tone::Muted, true);
         }
@@ -215,7 +206,7 @@ impl Page for SettingsPage {
             ..area
         };
         let drawn = self.list.draw(room, buf, ctx);
-        if let Some(e) = error {
+        if let Some(e) = error.filter(|_| area.y + drawn + 1 < area.bottom()) {
             let width = area.width.saturating_sub(2);
             let e = cut(&e, width.into(), ctx.style.glyphs.ellipsis);
             put(
@@ -243,13 +234,7 @@ impl Page for SettingsPage {
             t @ (Target::Language | Target::Theme | Target::AurHelper | Target::Output) => {
                 Flow::Push(choice(t, ctx))
             }
-            Target::Notifications | Target::Desktop
-                if ctx
-                    .features()
-                    .is_some_and(|f| f.lacks(fact(target)).is_some()) =>
-            {
-                Flow::Stay
-            }
+            Target::Notifications | Target::Desktop if target.lacks(ctx).is_some() => Flow::Stay,
             Target::Notifications
                 if ctx.features().is_some() && !ctx.available(op::DESKTOP_NOTIFY) =>
             {
@@ -276,9 +261,7 @@ impl Page for SettingsPage {
             Target::Flatpak => {
                 let on = !ctx.settings.flatpak.unwrap_or(true);
                 ctx.settings.flatpak = crate::settings::switch(on);
-                if let Some(features) = ctx.features() {
-                    script::set_flatpak(features.flatpak(on));
-                }
+                script::configure(&ctx.settings, ctx.features());
                 ctx.reload();
                 ctx.save_settings();
                 Flow::Stay
@@ -286,7 +269,7 @@ impl Page for SettingsPage {
             Target::AurReview => {
                 let on = !ctx.settings.aur_review.unwrap_or(true);
                 ctx.settings.aur_review = crate::settings::switch(on);
-                script::set_aur_review(on);
+                script::configure(&ctx.settings, ctx.features());
                 ctx.save_settings();
                 Flow::Stay
             }
@@ -319,6 +302,8 @@ impl Page for SettingsPage {
 pub struct ChoicePage {
     target: Target,
     list: List<String>,
+    /// The value in use, which choosing again changes nothing about.
+    current: String,
     /// The theme as it was, for leaving a preview without choosing.
     before: Option<Style>,
 }
@@ -388,12 +373,15 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
     let rows = rows
         .into_iter()
         .map(|r| {
-            let lead = if r.id.as_deref() == Some(current.as_str()) {
-                crate::ui::icon::CHECK
-            } else {
-                ""
-            };
-            r.icon(lead, Tone::Accent)
+            // The console has no icons, so the value in use takes the mark there.
+            match r.id.as_deref() == Some(current.as_str()) {
+                true if ctx.style.glyphs.icons => r.icon(crate::ui::icon::CHECK, Tone::Accent),
+                true => Row {
+                    lead: crate::ui::list::Lead::Mark,
+                    ..r
+                },
+                false => r.icon("", Tone::Accent),
+            }
         })
         .collect();
     let mut list = List::new(rows);
@@ -402,12 +390,16 @@ pub fn choice(target: Target, ctx: &mut Ctx) -> Box<dyn Page> {
     Box::new(ChoicePage {
         target,
         list,
+        current,
         before,
     })
 }
 
 impl ChoicePage {
     fn apply(&self, id: &str, ctx: &mut Ctx) {
+        if id == self.current {
+            return;
+        }
         match self.target {
             Target::Language => {
                 ctx.settings.language = Some(id.to_string());
@@ -421,17 +413,13 @@ impl ChoicePage {
             }
             Target::Output => {
                 ctx.settings.output = (id != OUTPUT[0]).then(|| id.to_string());
-                script::set_terminal(ctx.settings.terminal());
             }
             _ => {
                 ctx.settings.aur_helper = (id != "auto").then(|| id.to_string());
-                let helper = ctx
-                    .features()
-                    .and_then(|f| f.aur_helper(ctx.settings.aur_helper.as_deref()));
-                script::set_aur(helper);
                 ctx.reload();
             }
         }
+        script::configure(&ctx.settings, ctx.features());
         ctx.save_settings();
     }
 
@@ -460,6 +448,10 @@ impl Page for ChoicePage {
 
     fn key(&mut self, key: Key, ctx: &mut Ctx) -> Flow {
         match self.list.key(key) {
+            // What is not installed is offered for installing.
+            Picked::Open(id) if self.list.selected().is_some_and(|r| r.dim) => {
+                Flow::Replace(Box::new(FeaturesPage::new(Some(id))))
+            }
             Picked::Open(id) => {
                 self.apply(&id, ctx);
                 Flow::Pop
@@ -658,6 +650,61 @@ mod tests {
         };
         assert!(row("paru").ends_with("not working"), "{shown}");
         assert!(row("yay").ends_with("not installed"), "{shown}");
+    }
+
+    /// A helper not installed is offered for installing, and the one in use stays.
+    #[test]
+    fn a_helper_not_installed_is_installed_first_and_the_value_in_use_reads_nothing_anew() {
+        use crate::ui::app::tests::{app, open, press, screen};
+        let (mut app, mut term) = app();
+        app.ctx.shared.features = Loaded::Ready(crate::data::features::Features::parse(
+            "paru\tok\t2\nyay\tmissing\n",
+        ));
+        let page = choice(Target::AurHelper, &mut app.ctx);
+        open(&mut app, page);
+        press(&mut app, &[Key::Enter]);
+        assert!(!app.ctx.busy(), "automatic chosen again");
+        let page = choice(Target::AurHelper, &mut app.ctx);
+        open(&mut app, page);
+        press(&mut app, &[Key::Down, Key::Down, Key::Enter]);
+        assert_eq!(app.ctx.settings.aur_helper, None);
+        let shown = screen(&mut app, &mut term);
+        assert!(shown.contains("Optional packages"), "{shown}");
+    }
+
+    /// What the system does not offer opens from nowhere, the search and the command line included.
+    #[test]
+    fn a_setting_the_system_lacks_opens_no_choice() {
+        let (mut app, _) = crate::ui::app::tests::app();
+        app.ctx.shared.features =
+            Loaded::Ready(crate::data::features::Features::parse("paru\tmissing\n"));
+        assert_eq!(Target::Notifications.open(&mut app.ctx).len(), 1);
+        script::set_aur(None);
+        let pages = Target::AurReview.open(&mut app.ctx);
+        assert_eq!(pages[0].title(), "Optional packages");
+    }
+
+    /// Without icons the value in use still stands out, and nothing is drawn under a page
+    /// too low for it.
+    #[test]
+    fn the_value_in_use_is_marked_on_the_console_too() {
+        use crate::ui::app::tests::{app, open, screen};
+        let (mut app, mut term) = app();
+        let colors = app.ctx.theme().colors;
+        app.ctx.style = Style::new(&colors, true);
+        let page = choice(Target::Output, &mut app.ctx);
+        open(&mut app, page);
+        let shown = screen(&mut app, &mut term);
+        let row = shown.lines().find(|l| l.contains("Compact"));
+        assert!(row.is_some_and(|r| r.contains('+')), "{shown}");
+        let mut buf = Buffer::empty(Rect::new(0, 0, 40, 9));
+        let area = Rect::new(0, 0, 40, 3);
+        crate::ui::draw::waiting(&mut buf, area, "Title", Some("step"), None, &app.ctx);
+        let below: String = (3..9)
+            .flat_map(|y| (0..40).map(move |x| (x, y)))
+            .map(|at| buf[at].symbol().to_string())
+            .collect();
+        assert_eq!(below.trim(), "");
     }
 
     /// Flatpak's row shows only where Flatpak is there. Its switch is stored and the updates read

@@ -22,8 +22,14 @@ pub enum Event {
     Exit(i32),
 }
 
+/// What waits to be typed at most. More is dropped: the program does not read.
+const INPUT: usize = 64;
+
 pub struct Session {
     master: Arc<OwnedFd>,
+    /// What is typed, written by a thread of its own: a terminal that is full holds a write
+    /// until the program reads, and the interface never waits for that.
+    input: std::sync::mpsc::SyncSender<Vec<u8>>,
 }
 
 impl Session {
@@ -67,9 +73,11 @@ impl Session {
             Mode::empty(),
         )
         .map_err(err)?;
-        let session = Session {
-            master: Arc::new(master),
-        };
+        let master = Arc::new(master);
+        let (input, typed) = std::sync::mpsc::sync_channel::<Vec<u8>>(INPUT);
+        let terminal = master.clone();
+        std::thread::spawn(move || typed.iter().for_each(|bytes| write_all(&terminal, &bytes)));
+        let session = Session { master, input };
         session.resize(rows, cols);
 
         let (events, events_w) = pipe().map_err(|e| e.to_string())?;
@@ -106,13 +114,9 @@ impl Session {
         Ok(session)
     }
 
-    pub fn write(&self, mut bytes: &[u8]) {
-        while !bytes.is_empty() {
-            match rustix::io::write(&*self.master, bytes) {
-                Ok(n) => bytes = &bytes[n..],
-                Err(rustix::io::Errno::INTR) => {}
-                Err(_) => return,
-            }
+    pub fn write(&self, bytes: &[u8]) {
+        if self.input.try_send(bytes.to_vec()).is_err() {
+            crate::warn!("{} bytes typed are dropped", bytes.len());
         }
     }
 
@@ -208,6 +212,16 @@ fn drain(events: &OwnedFd, pending: &mut Vec<u8>) -> bool {
 /// off: systemctl refuses a reboot while its caller's own lock blocks it. With the password held,
 /// sudo takes it from fd 4 and this program's renewal from fd 5, never from the terminal, where
 /// any program of the run could ask for it in sudo's words.
+fn write_all(terminal: &OwnedFd, mut bytes: &[u8]) {
+    while !bytes.is_empty() {
+        match rustix::io::write(terminal, bytes) {
+            Ok(n) => bytes = &bytes[n..],
+            Err(Errno::INTR) => {}
+            Err(_) => return,
+        }
+    }
+}
+
 fn run_command(op: Op, args: &[String]) -> Result<(std::process::Command, Vec<OwnedFd>), String> {
     let mut cmd = command(op, args)?;
     let mut given = Vec::new();
@@ -287,6 +301,19 @@ mod tests {
             .find(|(k, _)| *k == "SM_TERMINAL")
             .and_then(|(_, v)| v?.to_str());
         assert!(matches!(terminal, Some("on" | "off")), "{terminal:?}");
+    }
+
+    /// A program that does not read fills its terminal. Typing more never holds the interface.
+    #[test]
+    fn typing_at_a_program_that_does_not_read_never_waits() {
+        let mut cmd = std::process::Command::new("sleep");
+        cmd.arg("5");
+        let session = Session::spawn(cmd, (24, 80), |_| {}).unwrap();
+        let started = std::time::Instant::now();
+        for _ in 0..2 * INPUT {
+            session.write(&[b'x'; 1 << 16]);
+        }
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
     }
 
     /// An editor that reads ^C as a key of its own still ends: the hang-up reaches what runs in

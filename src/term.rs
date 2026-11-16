@@ -43,6 +43,7 @@ pub fn run(start: Option<Target>) -> std::io::Result<()> {
             }
         }
     });
+    crate::ui::end_on_signals(tx.clone(), Arc::new(|| {}));
     let mut app = App::new(tx, Arc::new(|| {}), console, start);
     let mut terminal = ratatui::init();
     mouse(true);

@@ -209,8 +209,26 @@ impl Target {
         let features = ctx.features()?;
         match self {
             Target::Flatpak => (!features.ok("flatpak")).then_some("flatpak"),
+            Target::AurReview => crate::script::aur()
+                .is_none()
+                .then_some(crate::settings::AUR_HELPERS[0]),
             _ => crate::script::missing(self.script()?, features),
         }
+    }
+
+    /// What the system has to offer for this setting to apply, none where it always does: the
+    /// entry opens the window, which speaks Wayland only.
+    fn fact(self) -> Option<&'static str> {
+        match self {
+            Target::Desktop => Some("wayland"),
+            Target::Notifications => Some("desktop"),
+            _ => None,
+        }
+    }
+
+    /// Why this setting does not apply to this system, untranslated, none when it does.
+    pub fn lacks(self, ctx: &Ctx) -> Option<&'static str> {
+        ctx.features()?.lacks(self.fact()?)
     }
 
     /// The pages to push, the settings page first for its own rows.
@@ -241,17 +259,15 @@ impl Target {
             | Target::Theme
             | Target::AurHelper
             | Target::Output
-            | Target::Notifications => {
+            | Target::Notifications
+                if self.lacks(ctx).is_none() =>
+            {
                 return vec![
                     Box::new(pages::settings::SettingsPage::new(Some(self))),
                     pages::settings::choice(self, ctx),
                 ];
             }
-            Target::Usage
-            | Target::Status
-            | Target::Desktop
-            | Target::Flatpak
-            | Target::AurReview => {
+            _ => {
                 return vec![Box::new(pages::settings::SettingsPage::new(Some(self)))];
             }
         };

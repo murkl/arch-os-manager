@@ -3,27 +3,48 @@
 
 # Each argument is package=command: a command that answers works, a function of
 # these scripts tells by itself. An argument @name asks for the fact of that
-# name.
+# name. All are asked at once, as some take a while to answer, and told in the
+# order given. pacman names the versions in one call.
 op_probe() {
-    local pair package argv version
+    local pair name version line n=0
+    local -a packages=()
+    local -A versions=()
+    scratch
     for pair in "$@"; do
-        if [[ "$pair" == @* ]]; then
-            if "fact_${pair#@}"; then printf '%s\tok\n' "$pair"; else printf '%s\tmissing\n' "$pair"; fi
-            continue
-        fi
-        package="${pair%%=*}"
-        read -ra argv <<<"${pair#*=}"
-        if declare -F "${argv[0]}" >/dev/null; then
-            if "${argv[@]}" >/dev/null; then printf '%s\tok\t\n' "$package"; else printf '%s\tmissing\n' "$package"; fi
-        elif ! command -v "${argv[0]}" >/dev/null; then
-            printf '%s\tmissing\n' "$package"
-        elif timeout 10 "${argv[@]}" </dev/null >/dev/null 2>&1; then
-            version="$(pacman -Q "$package" 2>/dev/null)" || version=""
-            printf '%s\tok\t%s\n' "$package" "${version#* }"
-        else
-            printf '%s\tbroken\n' "$package"
-        fi
+        probe "$pair" >"${work}/${n}" 3>&- &
+        n=$((n + 1))
+        if [[ "$pair" != @* ]]; then packages+=("${pair%%=*}"); fi
     done
+    if [ "${#packages[@]}" -gt 0 ]; then
+        while read -r name version; do versions[$name]="$version"; done < <(pacman -Q -- "${packages[@]}" 2>/dev/null)
+    fi
+    wait
+    for ((n = 0; n < $#; n++)); do
+        line="$(<"${work}/${n}")"
+        if [[ "$line" == *$'\tok\t+' ]]; then line="${line%+}${versions[${line%%$'\t'*}]-}"; fi
+        printf '%s\n' "$line"
+    done
+}
+
+# One of them: its line, and a `+` in place of the version of a command that
+# answered.
+probe() {
+    local pair="$1" package argv
+    if [[ "$pair" == @* ]]; then
+        if "fact_${pair#@}"; then printf '%s\tok\n' "$pair"; else printf '%s\tmissing\n' "$pair"; fi
+        return 0
+    fi
+    package="${pair%%=*}"
+    read -ra argv <<<"${pair#*=}"
+    if declare -F "${argv[0]}" >/dev/null; then
+        if "${argv[@]}" >/dev/null; then printf '%s\tok\t\n' "$package"; else printf '%s\tmissing\n' "$package"; fi
+    elif ! command -v "${argv[0]}" >/dev/null; then
+        printf '%s\tmissing\n' "$package"
+    elif timeout 10 "${argv[@]}" </dev/null >/dev/null 2>&1; then
+        printf '%s\tok\t+\n' "$package"
+    else
+        printf '%s\tbroken\n' "$package"
+    fi
 }
 
 # A desktop is installed: a display manager has a session to offer.
