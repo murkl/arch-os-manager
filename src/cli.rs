@@ -142,6 +142,13 @@ pub fn main() -> ExitCode {
             crate::paths::log().display()
         );
     }
+    // A panic ends the process at once: said in the log first, and what waits there written.
+    let before = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        crate::error!("{info}");
+        crate::log::finish(PANIC);
+        before(info);
+    }));
     // Found before an update can replace the file.
     if let Err(e) = crate::paths::program() {
         crate::warn!("no path of this program: {e}");
@@ -196,6 +203,9 @@ pub fn main() -> ExitCode {
     code
 }
 
+/// How long a panic waits for the log to be written.
+const PANIC: Duration = Duration::from_secs(2);
+
 /// How long the end waits for the settings and the state to be written.
 const WRITES: Duration = Duration::from_secs(10);
 
@@ -216,9 +226,7 @@ fn setup() -> Result<(Settings, Features), Failure> {
             .unwrap_or_else(Lang::detect),
     );
     let features = Features::load()?;
-    script::set_aur(features.aur_helper(settings.aur_helper.as_deref()));
-    script::set_aur_review(settings.aur_review.unwrap_or(true));
-    script::set_flatpak(features.flatpak(settings.flatpak.unwrap_or(true)));
+    script::configure(&settings, Some(&features));
     Ok((settings, features))
 }
 

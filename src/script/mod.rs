@@ -174,6 +174,20 @@ pub fn missing(op: Op, features: &crate::data::features::Features) -> Option<&'s
         .map(String::as_str)
 }
 
+/// What the settings mean for a script, and the optional packages once they are known. The one
+/// place that says so: the start, the probe and every switch in Settings call it.
+pub fn configure(
+    settings: &crate::settings::Settings,
+    features: Option<&crate::data::features::Features>,
+) {
+    set_terminal(settings.terminal());
+    set_aur_review(settings.aur_review.unwrap_or(true));
+    if let Some(features) = features {
+        set_aur(features.aur_helper(settings.aur_helper.as_deref()));
+        set_flatpak(features.flatpak(settings.flatpak.unwrap_or(true)));
+    }
+}
+
 static AUR: Mutex<String> = Mutex::new(String::new());
 
 /// The AUR helper scripts get as `$SM_AUR`, empty for none.
@@ -582,13 +596,13 @@ mod tests {
         let trapped = Failure::classify(
             op::PACKAGES_INSTALLED,
             Some(1),
-            Some("fail\t3\tpackages/packages.sh\t10\tsed 's/^/pkg/'"),
+            Some("fail\t3\tpackages/packages.sh\t15\tsed 's/^/pkg/'"),
             vec![],
         );
         assert_eq!(trapped.known, None);
         assert_eq!(
             trapped.detail,
-            "packages/packages.sh:10: pacman -Q | sed 's/^/pkg\\t/; s/ /\\t/' (exit 3)"
+            "packages/packages.sh:15: pacman -Q | sed 's/^/pkg\\t/; s/ /\\t/' (exit 3)"
         );
     }
 }

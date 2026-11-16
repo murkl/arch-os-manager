@@ -295,7 +295,7 @@ fn an_unexpected_failure_names_file_line_and_command() {
     let f: Vec<&str> = first.split('\t').collect();
     assert_eq!(
         f[..4],
-        ["fail", "3", "packages/packages.sh", "10"],
+        ["fail", "3", "packages/packages.sh", "15"],
         "{first}"
     );
 }
@@ -388,7 +388,7 @@ fn a_failure_in_a_helper_names_the_line_of_the_script() {
     let f: Vec<&str> = first.split('\t').collect();
     assert_eq!(
         f[..4],
-        ["fail", "3", "packages/packages.sh", "17"],
+        ["fail", "3", "packages/packages.sh", "23"],
         "{first}"
     );
 }
@@ -421,11 +421,16 @@ fn versions_come_from_the_cache_and_the_archive() {
         cache.display()
     );
     assert_eq!(o.out, want);
-    // Not in the archive is no error; out of reach is.
+    // Not in the archive is no error. Out of reach, the cache still counts.
     s.stub("curl", "exit 22");
     assert_eq!(s.run("packages", &["versions", "foo"], &[]).code, 0);
     s.stub("curl", "exit 6");
-    assert_eq!(s.run("packages", &["versions", "foo"], &[]).code, 12);
+    let o = s.run("packages", &["versions", "foo"], &[]);
+    let want = format!(
+        "cache\t{}/foo-1.0-1-x86_64.pkg.tar.zst\nfailed\tarchive\n",
+        cache.display()
+    );
+    assert_eq!((o.code, o.out), (0, want));
 }
 
 /// A held lock stays, a leftover goes, and the keyring package is updated before the system, the
@@ -1421,12 +1426,34 @@ fn the_cache_is_trimmed_by_paccache_as_planned() {
     let o = s.run("cleanup", &["run", "cache"], &[]);
     assert_eq!(o.code, 0, "{}", o.events);
     let trims: Vec<&str> = o.calls.lines().filter(|l| l.starts_with("sudo ")).collect();
+    let dir = format!("--cachedir={}", cache.display());
     assert_eq!(
         trims,
         [
-            "sudo paccache --remove --keep 3",
-            "sudo paccache --remove --uninstalled --keep 0"
+            format!("sudo paccache --remove {dir} --keep 3"),
+            format!("sudo paccache --remove {dir} --uninstalled --keep 0")
         ]
+    );
+    // pacman passes over a cache that is missing, so the plan and the run do too.
+    s.stub(
+        "pacman-conf",
+        &format!(
+            r#"case "$1" in CacheDir) echo '{}/'; echo /nowhere/pkg/ ;; DBPath) echo /var/lib/pacman/ ;; esac"#,
+            cache.display()
+        ),
+    );
+    s.stub(
+        "paccache",
+        &format!(
+            r#"case "$*" in *nowhere*) exit 1 ;; esac; echo '==> Candidate packages:'; echo '{package}'; echo"#
+        ),
+    );
+    let o = s.run("cleanup", &["plan"], &[]);
+    assert_eq!(
+        (o.code, o.out.matches("cache\t").count()),
+        (0, 1),
+        "{}",
+        o.events
     );
 }
 
@@ -1939,12 +1966,20 @@ fn a_configuration_update_is_compared_kept_or_merged_where_meld_saved() {
     assert!(o.out.contains("-a=1\n+a=2\n"), "{}", o.out);
     let gone = path(&etc.join("gone.conf.pacnew"));
     assert_eq!(s.run("pacnew", &["diff", &gone], &[]).code, 10);
+    // A configuration that is gone compares to nothing, and nothing merges into it.
+    let saved = etc.join("old.conf.pacsave");
+    std::fs::write(&saved, "b=1\n").unwrap();
+    let o = s.run("pacnew", &["diff", &path(&saved)], &[]);
+    assert!(o.code == 0 && o.out.contains("+b=1\n"), "{}", o.out);
+    assert_eq!(s.run("pacnew", &["merge", &path(&saved)], &[]).code, 10);
+    std::fs::remove_file(&saved).unwrap();
 
     // Meld closed without a change: nothing happens.
     s.stub("meld", "exit 0");
     let o = s.run("pacnew", &["merge", &path(&new)], &[]);
     assert_eq!(o.code, 12, "{}{}", o.events, o.calls);
     assert!(new.exists());
+    assert!(!o.calls.contains("snapper"), "no snapshot of nothing");
     // Saved on the left: that goes into the configuration, and the update is done.
     s.stub("meld", r#"echo merged >"$1""#);
     let o = s.run("pacnew", &["merge", &path(&new)], &[]);

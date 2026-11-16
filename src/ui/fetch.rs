@@ -14,9 +14,11 @@ type Job<T> = Arc<dyn Fn() -> Result<T, Failure> + Send + Sync>;
 pub struct Fetch<T> {
     pub value: Loaded<T>,
     generation: Option<u64>,
+    /// The generation of the value shown: a read that ends late never replaces a newer one.
+    taken: Option<u64>,
     job: Job<T>,
-    tx: Sender<Result<T, Failure>>,
-    rx: Receiver<Result<T, Failure>>,
+    tx: Sender<(u64, Result<T, Failure>)>,
+    rx: Receiver<(u64, Result<T, Failure>)>,
 }
 
 impl<T: Send + 'static> Fetch<T> {
@@ -25,6 +27,7 @@ impl<T: Send + 'static> Fetch<T> {
         Fetch {
             value: Loaded::Loading,
             generation: None,
+            taken: None,
             job: Arc::new(job),
             tx,
             rx,
@@ -37,16 +40,19 @@ impl<T: Send + 'static> Fetch<T> {
             return;
         }
         self.generation = Some(ctx.generation);
-        let (job, tx) = (self.job.clone(), self.tx.clone());
+        let (job, tx, generation) = (self.job.clone(), self.tx.clone(), ctx.generation);
         ctx.spawn(move || {
-            let _ = tx.send(job());
+            let _ = tx.send((generation, job()));
         });
     }
 
-    /// Takes what arrived, the newest where several did.
+    /// Takes what arrived, of the newest read where several did.
     pub fn receive(&mut self) {
-        while let Ok(result) = self.rx.try_recv() {
-            self.value = Loaded::from(result);
+        while let Ok((generation, result)) = self.rx.try_recv() {
+            if self.taken.is_none_or(|taken| generation >= taken) {
+                self.taken = Some(generation);
+                self.value = Loaded::from(result);
+            }
         }
     }
 }
@@ -109,6 +115,15 @@ pub fn settle(limit: Duration) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_read_that_ends_late_never_replaces_a_newer_one() {
+        let mut fetch = Fetch::new(|| Ok(0));
+        fetch.tx.send((2, Ok(2))).unwrap();
+        fetch.tx.send((1, Ok(1))).unwrap();
+        fetch.receive();
+        assert!(matches!(fetch.value, Loaded::Ready(2)));
+    }
 
     #[test]
     fn writes_run_in_order_and_the_end_waits_for_them() {

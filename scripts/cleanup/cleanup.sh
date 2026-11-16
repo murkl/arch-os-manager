@@ -4,7 +4,8 @@
 # What the clean-up removes, one line each: orphan, cache, aur, then what each container
 # engine there is says.
 op_plan() {
-    local orphans names dir caches list file size cache
+    local orphans names dir list file size cache
+    local -a paths=()
     # Packages installed as a dependency that nothing needs any more, with their size.
     orphans="$(pacman -Qdtq)" || allow 1
     if [ -n "$orphans" ]; then
@@ -14,18 +15,20 @@ op_plan() {
 
     # paccache's own choice: three versions of what is installed, none of what
     # is not. It lists each signature too, which goes with its package.
-    mapfile -t caches < <(pacman-conf CacheDir)
-    list="$(candidates --keep 3 && candidates --uninstalled --keep 0)"
-    while read -r file; do
-        if [ -z "$file" ] || [[ $file == *.sig ]]; then continue; fi
-        for cache in "${caches[@]}"; do
-            if [ -f "${cache%/}/$file" ]; then
-                size="$(stat -c %s "${cache%/}/$file")"
-                printf 'cache\t%s\t%s\n' "${cache%/}/$file" "$size"
-                break
-            fi
-        done
-    done < <(sort -u <<<"$list")
+    cache_dirs
+    if [ "${#caches[@]}" -gt 0 ]; then
+        list="$(candidates --keep 3 && candidates --uninstalled --keep 0)"
+        while read -r file; do
+            if [ -z "$file" ] || [[ $file == *.sig ]]; then continue; fi
+            for cache in "${caches[@]}"; do
+                if [ -f "${cache}/$file" ]; then
+                    paths+=("${cache}/$file")
+                    break
+                fi
+            done
+        done < <(sort -u <<<"$list")
+    fi
+    if [ "${#paths[@]}" -gt 0 ]; then stat -c $'cache\t%n\t%s' -- "${paths[@]}"; fi
 
     list="$(builds)"
     while read -r dir; do
@@ -87,13 +90,26 @@ tagged() {
 }
 
 candidates() {
-    paccache --dryrun --verbose --nocolor "$@" | sed -n '/^==> Candidate packages:/,/^$/{/^==>/d;/^$/d;p}'
+    paccache --dryrun --verbose --nocolor "${caches[@]/#/--cachedir=}" "$@" | sed -n '/^==> Candidate packages:/,/^$/{/^==>/d;/^$/d;p}'
+}
+
+# The package caches that exist, in the global `caches`, without a slash at
+# their end. pacman passes over one that is missing, paccache ends at it.
+cache_dirs() {
+    local dir
+    caches=()
+    while read -r dir; do
+        if [ -d "$dir" ]; then caches+=("${dir%/}"); fi
+    done < <(pacman-conf CacheDir)
 }
 
 # Build directories of AUR helpers for packages no longer installed, one per line.
 builds() {
     local base dir db cache="${XDG_CACHE_HOME:-$HOME/.cache}"
     local -A installed=()
+    if ! compgen -G "$cache/paru/clone/*/" >/dev/null && ! compgen -G "$cache/yay/*/" >/dev/null; then
+        return 0
+    fi
     while read -r base; do installed[$base]=1; done < <(pacman -Qq)
     # pacman-conf prints DBPath as written, with a slash at its end or without.
     db="$(pacman-conf DBPath)"
@@ -124,8 +140,11 @@ op_run() {
     # The plan's choice, each signature with its package.
     if [[ $taken == *" cache "* ]]; then
         step cache
-        sudo paccache --remove --keep 3
-        sudo paccache --remove --uninstalled --keep 0
+        cache_dirs
+        if [ "${#caches[@]}" -gt 0 ]; then
+            sudo paccache --remove "${caches[@]/#/--cachedir=}" --keep 3
+            sudo paccache --remove "${caches[@]/#/--cachedir=}" --uninstalled --keep 0
+        fi
     fi
 
     if [[ $taken == *" aur "* ]]; then

@@ -725,6 +725,9 @@ msgstr "Der Vorgang endet im Hintergrund."
 msgid "Stopping"
 msgstr "Wird abgebrochen"
 
+msgid "Stopped"
+msgstr "Abgebrochen"
+
 msgid "Stop the operation?"
 msgstr "Vorgang abbrechen?"
 
@@ -773,12 +776,8 @@ msgstr ""
 "GNOME-Dock zeigt noch den Arch OS Manager\n"
 "Im Dock manuell ersetzen.\n"
 
-msgid ""
-"Arch Linux Archive unreachable\n"
-"Showing cached versions.\n"
-msgstr ""
-"Arch Linux Archive nicht erreichbar\n"
-"Anzeige der Versionen aus dem Cache.\n"
+msgid "Arch Linux Archive unreachable"
+msgstr "Arch Linux Archive nicht erreichbar"
 
 msgid ""
 "Disk full\n"

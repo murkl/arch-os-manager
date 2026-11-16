@@ -9,7 +9,7 @@ use ratatui::layout::Rect;
 use super::run::{Job, start};
 use crate::data::packages::{Found, escape_regex, field, parse_info, parse_search};
 use crate::data::vercmp::vercmp;
-use crate::data::versions::{Version, parse as parse_versions};
+use crate::data::versions::{Version, parse as parse_versions, unreachable};
 use crate::data::{aur, date};
 use crate::i18n::{t, tf};
 use crate::script::{self, Failure, op, query};
@@ -51,6 +51,7 @@ impl PackagesPage {
     pub fn new() -> PackagesPage {
         let mut list = List::default();
         list.markable = true;
+        list.marks_stay = true;
         PackagesPage {
             input: Input::new(t("Search packages")),
             list,
@@ -100,7 +101,9 @@ impl PackagesPage {
             rows.push(Row::heading(t("Searching")));
             return rows;
         };
-        let is_installed = |n: &str| installed.iter().any(|p| p.name == n);
+        let names: std::collections::HashSet<&str> =
+            installed.iter().map(|p| p.name.as_str()).collect();
+        let is_installed = |n: &str| names.contains(n);
         rows.push(Row::heading(t("Repositories")));
         match &r.repo {
             Ok(found) => rows.extend(
@@ -120,10 +123,8 @@ impl PackagesPage {
             rows.push(Row::heading("AUR"));
             match aur {
                 Ok(found) => {
-                    let mut found: Vec<&aur::Package> =
-                        found.iter().filter(|p| !is_installed(&p.name)).collect();
-                    found.sort_by(|a, b| b.popularity.total_cmp(&a.popularity));
-                    rows.extend(found.into_iter().take(LIMIT).map(|p| {
+                    let found = found.iter().filter(|p| !is_installed(&p.name));
+                    rows.extend(found.take(LIMIT).map(|p| {
                         Row::new(Pick::Aur(p.name.clone()), p.name.clone())
                             .icon(icon::ARCH, Tone::Muted)
                             .detail(p.version.clone(), Tone::Muted)
@@ -221,8 +222,10 @@ impl Page for PackagesPage {
                     return self.open(pick);
                 }
             }
+            // Only another text is searched for, not a cursor moved in it.
             k => {
-                if self.input.key(k) {
+                let before = self.input.text.clone();
+                if self.input.key(k) && self.input.text != before {
                     self.due = Some(Instant::now() + PAUSE);
                 }
             }
@@ -231,7 +234,11 @@ impl Page for PackagesPage {
     }
 
     fn done(&mut self, _: &mut Ctx) -> Flow {
-        if let Some(r) = self.search.as_mut().and_then(Task::take) {
+        if let Some(mut r) = self.search.as_mut().and_then(Task::take) {
+            // Once, as it arrives: the page draws the most popular first.
+            if let Some(Ok(found)) = &mut r.aur {
+                found.sort_by(|a, b| b.popularity.total_cmp(&a.popularity));
+            }
             self.results = Some(r);
         }
         Flow::Stay
@@ -676,7 +683,8 @@ impl Page for MarkedPage {
 /// The versions a package can go back to, newest first.
 pub struct VersionsPage {
     name: String,
-    fetch: Fetch<Vec<Version>>,
+    /// The versions, and whether the archive could not be asked.
+    fetch: Fetch<(Vec<Version>, bool)>,
     list: List<String>,
     focused: bool,
 }
@@ -684,8 +692,9 @@ pub struct VersionsPage {
 impl VersionsPage {
     pub fn new(name: &str) -> VersionsPage {
         let n = name.to_string();
-        let fetch =
-            Fetch::new(move || query(op::PACKAGES_VERSIONS, &[&n]).map(|o| parse_versions(&o, &n)));
+        let fetch = Fetch::new(move || {
+            query(op::PACKAGES_VERSIONS, &[&n]).map(|o| (parse_versions(&o, &n), unreachable(&o)))
+        });
         VersionsPage {
             name: name.to_string(),
             fetch,
@@ -702,9 +711,10 @@ impl Page for VersionsPage {
 
     fn draw(&mut self, area: Rect, buf: &mut Buffer, ctx: &mut Ctx) {
         self.fetch.ensure(ctx);
-        let Some(versions) = loaded(&self.fetch.value, area, buf, ctx) else {
+        let Some((versions, offline)) = loaded(&self.fetch.value, area, buf, ctx) else {
             return;
         };
+        let offline = offline.then(|| t("Arch Linux Archive unreachable"));
         let current = ctx
             .shared
             .installed
@@ -714,7 +724,7 @@ impl Page for VersionsPage {
         if versions.is_empty() {
             crate::ui::detail::show(
                 vec![Block::Text(
-                    t("No other version available.").into(),
+                    offline.unwrap_or(t("No other version available.")).into(),
                     Tone::Muted,
                 )],
                 area,
@@ -740,6 +750,7 @@ impl Page for VersionsPage {
                 }
                 row
             })
+            .chain(offline.map(Row::heading))
             .collect();
         self.list.set(rows);
         // The one meant is the newest older than the installed one.
@@ -879,6 +890,16 @@ foreign	gone
     }
 
     #[test]
+    fn only_another_text_is_searched_for() {
+        let (mut app, _) = crate::ui::app::tests::app();
+        let mut page = PackagesPage::new();
+        let _ = page.key(Key::Char('f'), &mut app.ctx);
+        assert!(page.due.take().is_some());
+        let _ = page.key(Key::Left, &mut app.ctx);
+        assert!(page.due.is_none(), "the cursor moved in it");
+    }
+
+    #[test]
     fn the_search_takes_letters_where_the_cursor_stands() {
         use crate::ui::app::tests::{app, open, press, screen};
         let (mut app, mut term) = app();
@@ -981,12 +1002,13 @@ foreign	gone
             location: format!("/cache/foo-{v}"),
             cached,
         };
-        page.fetch.value = Loaded::Ready(vec![
+        let versions = vec![
             version("3.0-1", false),
             version("2.0-1", true),
             version("1.5-1", true),
             version("1.0-1", false),
-        ]);
+        ];
+        page.fetch.value = Loaded::Ready((versions, false));
         let area = Rect::new(0, 0, 60, 10);
         page.draw(area, &mut Buffer::empty(area), &mut app.ctx);
         assert_eq!(

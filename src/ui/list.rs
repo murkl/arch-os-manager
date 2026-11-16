@@ -229,6 +229,8 @@ pub struct List<I> {
     pub marked: BTreeSet<I>,
     /// The page marks rows, so the column for the mark stays, marked or not.
     pub markable: bool,
+    /// Marks outlast their rows, as on a page whose rows follow a search.
+    pub marks_stay: bool,
     /// The page names f in its keys. Elsewhere, as under a question, f is no filter.
     filterable: bool,
     /// The filter is there from the start, and esc clears it before it goes back.
@@ -245,6 +247,7 @@ impl<I> Default for List<I> {
             filter: None,
             marked: BTreeSet::new(),
             markable: false,
+            marks_stay: false,
             filterable: false,
             always: false,
             height: 0,
@@ -279,15 +282,20 @@ impl<I: Clone + Ord> List<I> {
     /// Replaces the rows. The cursor stays on its row, or where its row was when it is gone,
     /// so taking a row out does not send the cursor back to the top.
     pub fn set(&mut self, rows: Vec<Row<I>>) {
+        let query = self.query();
         let id = self.selected().and_then(|r| r.id.clone());
-        let at = self
-            .shown()
-            .iter()
-            .position(|&i| i == self.cursor)
-            .unwrap_or(0);
+        let at = match id {
+            Some(_) => (0..self.cursor).filter(|&i| self.passes(i, &query)).count(),
+            None => 0,
+        };
         self.rows = rows;
-        self.marked
-            .retain(|m| self.rows.iter().any(|r| r.id.as_ref() == Some(m)));
+        if !self.marks_stay && !self.marked.is_empty() {
+            let ids: BTreeSet<&I> = self.rows.iter().filter_map(|r| r.id.as_ref()).collect();
+            let gone = |m: &I| !ids.contains(m);
+            if self.marked.iter().any(gone) {
+                self.marked = self.marked.iter().filter(|m| !gone(m)).cloned().collect();
+            }
+        }
         if id.as_ref().is_some_and(|id| self.focus(id)) {
             return;
         }
@@ -299,10 +307,9 @@ impl<I: Clone + Ord> List<I> {
     }
 
     pub fn focus(&mut self, id: &I) -> bool {
-        match self
-            .shown()
-            .into_iter()
-            .find(|&i| self.rows[i].id.as_ref() == Some(id))
+        let query = self.query();
+        match (0..self.rows.len())
+            .find(|&i| self.rows[i].id.as_ref() == Some(id) && self.passes(i, &query))
         {
             Some(i) => {
                 self.cursor = i;
@@ -316,27 +323,35 @@ impl<I: Clone + Ord> List<I> {
         &self.rows
     }
 
-    /// Indices of the selectable rows the filter lets through.
-    fn shown(&self) -> Vec<usize> {
-        let query = self
-            .filter
+    /// What the filter looks for, empty without one.
+    fn query(&self) -> String {
+        self.filter
             .as_ref()
             .map(|f| f.text.to_lowercase())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
+
+    /// Whether a row can be selected and the filter lets it through, by any of its texts.
+    fn passes(&self, i: usize, query: &str) -> bool {
+        let Some(r) = self.rows.get(i).filter(|r| !r.heading) else {
+            return false;
+        };
+        query.is_empty()
+            || [&r.label, &r.detail, &r.note]
+                .iter()
+                .any(|text| text.to_lowercase().contains(query))
+    }
+
+    /// Indices of the selectable rows the filter lets through, in order.
+    fn shown(&self) -> Vec<usize> {
+        let query = self.query();
         (0..self.rows.len())
-            .filter(|&i| {
-                let r = &self.rows[i];
-                !r.heading
-                    && (query.is_empty()
-                        || r.label.to_lowercase().contains(&query)
-                        || r.detail.to_lowercase().contains(&query))
-            })
+            .filter(|&i| self.passes(i, &query))
             .collect()
     }
 
     pub fn selected(&self) -> Option<&Row<I>> {
-        self.shown()
-            .contains(&self.cursor)
+        self.passes(self.cursor, &self.query())
             .then(|| &self.rows[self.cursor])
     }
 
@@ -388,9 +403,8 @@ impl<I: Clone + Ord> List<I> {
                 if !filter.key(key) {
                     return Picked::Ignored;
                 }
-                let shown = self.shown();
-                if !shown.contains(&self.cursor) {
-                    self.cursor = shown.first().copied().unwrap_or(self.cursor);
+                if self.selected().is_none() {
+                    self.cursor = self.shown().first().copied().unwrap_or(self.cursor);
                 }
             }
         }
@@ -415,21 +429,22 @@ impl<I: Clone + Ord> List<I> {
         }
         let height = area.bottom().saturating_sub(y) as usize;
         self.height = height;
-        let shown = self.shown();
-        let query_active = self.filter.as_ref().is_some_and(|f| !f.text.is_empty());
+        let query = self.query();
+        let shown: Vec<bool> = (0..self.rows.len())
+            .map(|i| self.passes(i, &query))
+            .collect();
+        let query_active = !query.is_empty();
         // A heading stays while a filter is empty, and while one of its rows is let through.
         let under = |i: usize| {
             (i + 1..self.rows.len())
                 .take_while(|&j| !self.rows[j].heading)
-                .any(|j| shown.contains(&j))
+                .any(|j| shown[j])
         };
         let visible: Vec<usize> = (0..self.rows.len())
-            .filter(|&i| {
-                shown.contains(&i) || (self.rows[i].heading && (!query_active || under(i)))
-            })
+            .filter(|&i| shown[i] || (self.rows[i].heading && (!query_active || under(i))))
             .collect();
-        if shown.is_empty() {
-            if query_active {
+        if !shown.contains(&true) {
+            if query_active && y < area.bottom() {
                 put(
                     buf,
                     area.x,
@@ -600,6 +615,25 @@ mod tests {
             Row::new("3", "Dienste"),
         ]);
         l
+    }
+
+    #[test]
+    fn the_filter_reads_the_note_and_marks_stay_only_where_asked() {
+        let rows = || vec![Row::new("1", "sshd").note("System"), Row::new("2", "cups")];
+        let mut l = List::searchable();
+        l.set(rows());
+        for c in "system".chars() {
+            l.key(Key::Char(c));
+        }
+        assert_eq!(l.selected().and_then(|r| r.id), Some("1"));
+        l.toggle_mark();
+        l.set(vec![Row::new("2", "cups")]);
+        assert!(l.marked.is_empty(), "a mark goes with its row");
+        l.set(rows());
+        l.marks_stay = true;
+        l.toggle_mark();
+        l.set(vec![Row::new("2", "cups")]);
+        assert!(l.marked.contains("1"));
     }
 
     #[test]

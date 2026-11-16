@@ -26,49 +26,55 @@ aur_list() {
 op_list() {
     # checkupdates syncs a copy of the databases, so nothing half-synced is
     # left, and ends with 2 when nothing is pending. Two at once, as the timer
-    # and the interface may run, share that copy.
-    local status=0 repo apps
+    # and the interface may run, share that copy. The AUR and Flatpak are asked
+    # beside it and told after it, in this order.
+    local status=0 repo
+    scratch
+    touch "${work}/aur" "${work}/flatpak"
+    if [ -n "$SM_AUR" ]; then aur_list >"${work}/aur" 3>&- & fi
+    if [ "$SM_FLATPAK" = on ]; then flatpak_list >"${work}/flatpak" 3>&- & fi
     repo="$(flock --wait 100 "${TMPDIR:-/tmp}/checkup-db-${UID}.lock" checkupdates)" || status=$?
+    wait
     case "$status" in
     0) while read -r name old _ new; do printf 'repo\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo" ;;
     2) ;;
     *) exit 10 ;;
     esac
+    cat "${work}/aur" "${work}/flatpak"
+}
 
-    if [ -n "$SM_AUR" ]; then aur_list; fi
-
-    # A version is often missing or unchanged, a commit and a name never, and read
-    # collapses empty fields between tabs, so the version comes last. An app without a
-    # name of its own gets the end of its id from Flatpak, as Compat.i386 is i386. An
-    # id pending in two branches, as a runtime may be, carries its branch.
-    if [ "$SM_FLATPAK" = on ]; then
-        local installed app arch branch commit title version ref old new name
-        local -A versions commits titles pending_in
-        if ! installed="$(flatpak list --columns=application,arch,branch,active,name,version)" ||
-            ! apps="$(flatpak remote-ls --updates --columns=application,arch,branch,commit,version)"; then
-            printf 'failed\tflatpak\n'
-            return 0
-        fi
-        while IFS=$'\t' read -r app arch branch commit title version; do
-            versions["$app/$arch/$branch"]="$version"
-            commits["$app/$arch/$branch"]="$commit"
-            titles["$app/$arch/$branch"]="$title"
-        done <<<"$installed"
-        while IFS=$'\t' read -r app _; do
-            if [ -n "$app" ]; then pending_in["$app"]=$((${pending_in["$app"]:-0} + 1)); fi
-        done <<<"$apps"
-        while IFS=$'\t' read -r app arch branch commit version; do
-            if [ -z "$app" ]; then continue; fi
-            ref="$app/$arch/$branch"
-            old="${versions[$ref]-}" new="$version"
-            if [ -z "$old" ] || [ -z "$new" ] || [ "$old" = "$new" ]; then
-                old="${commits[$ref]-}" new="$commit"
-            fi
-            name="$app"
-            if [ "${pending_in[$app]}" -gt 1 ]; then name="${app}//${branch}"; fi
-            printf 'flatpak\t%s\t%s\t%s\t%s\t%s\n' "$name" "$old" "$new" "${titles[$ref]-}" "$branch"
-        done <<<"$apps"
+# What Flatpak would bring. A version is often missing or unchanged, a commit and
+# a name never, and read collapses empty fields between tabs, so the version comes
+# last. An app without a name of its own gets the end of its id from Flatpak, as
+# Compat.i386 is i386. An id pending in two branches, as a runtime may be, carries
+# its branch.
+flatpak_list() {
+    local installed apps app arch branch commit title version ref old new name
+    local -A versions commits titles pending_in
+    if ! installed="$(flatpak list --columns=application,arch,branch,active,name,version)" ||
+        ! apps="$(flatpak remote-ls --updates --columns=application,arch,branch,commit,version)"; then
+        printf 'failed\tflatpak\n'
+        return 0
     fi
+    while IFS=$'\t' read -r app arch branch commit title version; do
+        versions["$app/$arch/$branch"]="$version"
+        commits["$app/$arch/$branch"]="$commit"
+        titles["$app/$arch/$branch"]="$title"
+    done <<<"$installed"
+    while IFS=$'\t' read -r app _; do
+        if [ -n "$app" ]; then pending_in["$app"]=$((${pending_in["$app"]:-0} + 1)); fi
+    done <<<"$apps"
+    while IFS=$'\t' read -r app arch branch commit version; do
+        if [ -z "$app" ]; then continue; fi
+        ref="$app/$arch/$branch"
+        old="${versions[$ref]-}" new="$version"
+        if [ -z "$old" ] || [ -z "$new" ] || [ "$old" = "$new" ]; then
+            old="${commits[$ref]-}" new="$commit"
+        fi
+        name="$app"
+        if [ "${pending_in[$app]}" -gt 1 ]; then name="${app}//${branch}"; fi
+        printf 'flatpak\t%s\t%s\t%s\t%s\t%s\n' "$name" "$old" "$new" "${titles[$ref]-}" "$branch"
+    done <<<"$apps"
 }
 
 # Waits the seconds given at most while an upgrade of this user runs, as the

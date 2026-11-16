@@ -417,35 +417,22 @@ pub fn waiting(
 ) -> u16 {
     let s = &ctx.style;
     let top = area.y + area.height.saturating_sub(8) / 2;
+    // Short of room the lower lines go, never onto what is under the area.
+    let fits = |y: u16| y < area.bottom();
     center(buf, area, top, s.spinner(), s.bold(Tone::Accent), "");
-    center(
-        buf,
-        area,
-        top + 2,
-        title,
-        s.bold(Tone::Normal),
-        s.glyphs.ellipsis,
-    );
-    if let Some(step) = step {
-        center(
-            buf,
-            area,
-            top + 3,
-            step,
-            s.tone(Tone::Muted),
-            s.glyphs.ellipsis,
-        );
+    if fits(top + 2) {
+        let bold = s.bold(Tone::Normal);
+        center(buf, area, top + 2, title, bold, s.glyphs.ellipsis);
+    }
+    if let Some(step) = step.filter(|_| fits(top + 3)) {
+        let muted = s.tone(Tone::Muted);
+        center(buf, area, top + 3, step, muted, s.glyphs.ellipsis);
     }
     let w = area.width.min(BAR);
-    bar(
-        buf,
-        area.x + (area.width - w) / 2,
-        top + 5,
-        w,
-        fraction,
-        Tone::Accent,
-        ctx,
-    );
+    if fits(top + 5) {
+        let x = area.x + (area.width - w) / 2;
+        bar(buf, x, top + 5, w, fraction, Tone::Accent, ctx);
+    }
     top + 6
 }
 

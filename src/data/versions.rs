@@ -32,6 +32,11 @@ pub fn parse(out: &str, name: &str) -> Vec<Version> {
     all
 }
 
+/// Whether the archive could not be asked, so only the cache is listed.
+pub fn unreachable(out: &str) -> bool {
+    out.lines().any(|l| l == "failed\tarchive")
+}
+
 /// `name-1:2.3-4-x86_64.pkg.tar.zst` as `1:2.3-4`, and nothing for another package's file.
 fn version_of(file: &str, name: &str) -> Option<String> {
     let rest = file.strip_prefix(name)?.strip_prefix('-')?;
@@ -56,6 +61,10 @@ mod tests {
         let versions: Vec<&str> = v.iter().map(|x| x.version.as_str()).collect();
         assert_eq!(versions, ["1:1.18.4-1", "1:1.16.1-1", "1.12.0-1"]);
         assert!(v[0].cached);
+        assert!(!unreachable(out));
+        let offline =
+            "cache\t/var/cache/pacman/pkg/flatpak-1:1.18.4-1-x86_64.pkg.tar.zst\nfailed\tarchive\n";
+        assert!(unreachable(offline) && parse(offline, "flatpak").len() == 1);
     }
 
     /// As the archive names them: a `+` comes as `%2B`, in the version and in the name.

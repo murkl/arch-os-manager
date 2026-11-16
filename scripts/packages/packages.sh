@@ -6,10 +6,16 @@ rpc=https://aur.archlinux.org/rpc/
 
 # Three lists, joined by the runtime: every package with its version, the
 # explicit ones and the foreign ones. pacman ends with 1 when a list is empty.
+# The foreign ones take longest and are asked beside the others.
 op_installed() {
+    local foreign
+    scratch
+    pacman -Qqm >"${work}/foreign" 3>&- &
+    foreign=$!
     pacman -Q | sed 's/^/pkg\t/; s/ /\t/'
     pacman -Qqe | sed 's/^/explicit\t/' || allow 1
-    pacman -Qqm | sed 's/^/foreign\t/' || allow 1
+    wait "$foreign" || allow 1
+    sed 's/^/foreign\t/' "${work}/foreign"
 }
 
 # A regular expression, escaped by the caller. pacman ends with 1 when nothing matches.
@@ -44,7 +50,8 @@ op_info() {
 }
 
 # Every version of a package at hand: the files in the package cache, then the
-# Arch Linux Archive, which keeps every build of the official repositories.
+# Arch Linux Archive, which keeps every build of the official repositories. Out
+# of reach, the archive is named as failed and the cache still counts.
 op_versions() {
     local name="$1" dir file url page status=0
     while read -r dir; do
@@ -59,7 +66,10 @@ op_versions() {
     case "$status" in
     0) ;;
     22) return 0 ;;
-    *) exit 12 ;;
+    *)
+        printf 'failed\tarchive\n'
+        return 0
+        ;;
     esac
     grep -o 'href="[^"]*\.pkg\.tar\.[a-z]*"' <<<"$page" | while read -r href; do
         href="${href#href=\"}"
